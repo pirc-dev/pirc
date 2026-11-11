@@ -1,0 +1,24 @@
+name: Bug
+description: Something in PiRC does not work as it should.
+body:
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Versions
+      description: "`pirc-relay version`, the extension's (the tag installed), the app's (Settings, Licences) or `pirc-web version`, and `pi --version`."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Where it runs
+      description: The relay's system, the client (which app, phone or browser), and anything in front of the relay such as a proxy.
+  - type: textarea
+    attributes:
+      label: Logs
+      description: The relay's (`journalctl -u pirc-relay`) or pi's, around the time. Remove anything private first.
+      render: text

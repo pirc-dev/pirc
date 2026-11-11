@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem
+    url: https://github.com/pirc-dev/pirc/blob/master/SECURITY.md
+    about: Report it privately by email, not in an issue.
+  - name: The apps' subscription or the stores
+    url: https://pirc.dev/support/
+    about: Billing and store questions go to support, not here.
