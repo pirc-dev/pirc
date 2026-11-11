@@ -2412,6 +2412,29 @@ Each step ends with something that can be seen working.
        TestFlight and Play's testing tracks, and pirc.dev, redesigned and
        live the same day, is updated once the source is public.
 
+       Done 2026-11-11, but for making both repositories public: the
+       tree checked again (no secret but the restricted Firebase key, no
+       installation's details); the private history, its branches and
+       those of every checkout archived, and the archive found in the
+       backup; the opening commit `c81c310` (the tree of `d4ea366`, no
+       parent, the owner's) tagged `v0.3.0`, not `v0.2.0`, which `NOTICE`
+       already holds as a dependency's version and which the
+       deployment's comparison with the version masked would then have
+       seen as a change everywhere; the private repository's master
+       restarted from it, its other branches and the `v0.1.x` tags
+       removed, each checkout moved onto it; the private repository
+       refusing a master or tag whose history does not start at that
+       commit alone, a master that does not move forward, a moved or
+       deleted tag, and replace refs, and copying master and the tags to
+       GitHub after each push (the publisher's deployment, not this
+       repository); GitHub's `pirc-dev/pirc` and `pirc-dev/pirc-extension`
+       made private, the latter starting from the extension's 0.3.0
+       release as its one commit, the same tree as the release in the
+       old extension repository, which the owner's machines keep
+       following until they move; release 0.3.0 cut and its downloads
+       published on GitHub, checked against their checksums once
+       downloaded.
+
 ## 13. Review log
 
 **2026-10-20.** The design and plan were reviewed independently by Claude
