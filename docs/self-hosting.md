@@ -13,8 +13,8 @@ could read them. Run it yourself, on a machine you trust.
 
 Each release is on GitHub, at
 `https://github.com/pirc-dev/pirc/releases`: the relay for Linux and
-macOS, on amd64 (x86-64) and arm64, and the web app, each a `.tar.gz`,
-and `SHA256SUMS`. Download the ones you need and `SHA256SUMS` into one
+macOS, on amd64 (x86-64) and arm64, the web app and the extension, each a
+`.tar.gz`, and `SHA256SUMS`. Download the ones you need and `SHA256SUMS` into one
 directory, check them, and unpack:
 
 ```sh
@@ -33,21 +33,23 @@ The relay's archive holds the binary, `LICENSE` (the relay is under the
 AGPL-3.0), `NOTICE`, the licences of the code built into it
 (`third_party/`) and the service files (`service/`). The web app's,
 `pirc-web-X.Y.Z.tar.gz`, is the same for any platform and needs Node
-(below). The extension is installed with pi from its own repository
-(below).
+(below). The extension is installed with pi from its own repository, or
+from its archive (below).
 
 ### Building from source
 
 Instead of downloading, build any part from this repository, at a
-release tag or any later commit. You need Go and Node 24 with corepack.
+release tag or any later commit, in a clone made with git (the version
+comes from its tags, so GitHub's "Source code" archives do not build).
+You need Go and Node 24 with corepack.
 
 ```sh
 corepack pnpm install --frozen-lockfile
 sh/generate.sh
-sh/build.sh relay out/relay
+sh/build.sh relay dist/relay
 ```
 
-This writes the relay for this machine into `out/relay/`, as the
+This writes the relay for this machine into `dist/relay/`, as the
 download has it (set `GOOS` and `GOARCH` for another).
 `sh/build.sh web|extension <dir>` builds the others the same way.
 `sh/check.sh` runs every test first; it needs pi and tmux for the
@@ -66,14 +68,19 @@ install -m 644 service/env.example /etc/pirc-relay/env
 install -m 644 service/pirc-relay.service /etc/systemd/system/
 ```
 
-Edit `/etc/pirc-relay/env` (next section), then:
+Before starting it, edit `/etc/pirc-relay/env` and choose how it does
+TLS (the next two sections): by default it wants a certificate, and will
+not start without one. Then:
 
 ```sh
 systemctl daemon-reload
 systemctl enable --now pirc-relay
 systemctl status pirc-relay
-curl http://<listen-address>/healthz   # or https://; prints OK
+curl https://<name>:<port>/healthz   # prints OK; http:// if plaintext
 ```
+
+With a private CA, give curl its certificate (`--cacert <ca.pem>`), and
+use the name the relay's certificate is for, not its address.
 
 The relay logs to the journal (`journalctl -u pirc-relay`). Its one
 durable file, the registry, is `/var/lib/pirc-relay/registry.json`.
@@ -124,7 +131,8 @@ the unit retries every five seconds until it can listen.
 Choose one:
 
 - **Certificate files.** Install `service/tls.conf` as
-  `/etc/systemd/system/pirc-relay.service.d/tls.conf`, and set its two
+  `/etc/systemd/system/pirc-relay.service.d/tls.conf` (make the directory
+  first, `install -d /etc/systemd/system/pirc-relay.service.d`), and set its two
   `LoadCredential=` paths to your certificate (the full chain) and key.
   systemd reads them as root and gives the relay private copies, so the key
   can stay readable by root only. Leave `PIRC_RELAY_PLAINTEXT` false. The
@@ -165,8 +173,9 @@ Choose one:
 that connects. pi and the web app's server run on Node, which reads extra
 certificate authorities from `NODE_EXTRA_CA_CERTS`: set it to your CA's
 PEM file in the environment pi starts in on every host, and in the web
-app's environment file. A phone must trust the certificate in its own
-settings.
+app's environment file. Keep that file outside `/root` and `/home`, such
+as in `/etc`: the web app's unit cannot see those directories. A phone
+must trust the certificate in its own settings.
 
 ## The relay on macOS (launchd)
 
@@ -193,6 +202,32 @@ As a daemon it runs from boot whether or not anyone is logged in. Its log
 is `/usr/local/var/log/pirc-relay.log`. After changing the plist, run
 `sudo launchctl bootout system/dev.pirc.relay` and bootstrap it again.
 
+## The extension
+
+The extension is published as a pi package in its own repository,
+`https://github.com/pirc-dev/pirc-extension`. Its default branch follows
+this repository: it gets a new build whenever a change here changes the
+extension. Releases are tags there. pi installs it with `git` and `npm`,
+so a host needs both. Install it pinned to a release:
+
+```sh
+pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
+```
+
+It loads into every interactive pi session started from then on; enrol
+the host once, as below. To upgrade, install the newer tag the same way: `pi update`
+keeps a pinned install where it is. Installed without a tag, it follows
+the default branch, and `pi update git:github.com/pirc-dev/pirc-extension`
+moves it to the latest build. Pinned or not, keep the relay at least as
+new as the extension. `pi remove git:github.com/pirc-dev/pirc-extension`
+uninstalls it.
+
+Without git, each release's downloads include the package,
+`pirc-extension-X.Y.Z.tar.gz`: `pi install <unpacked directory>` installs
+from it directly, and pi loads it from there without copying it, so keep
+the directory. To upgrade, unpack the new release's beside it,
+`pi install` that, and `pi remove` the old directory.
+
 ## Hosts and clients
 
 Each host and client registers once with a one-time token, and is known
@@ -200,7 +235,9 @@ from then on by its key. Run the registry commands **as the relay's
 user**, with its data directory: files they create are readable by that
 user only, so a command run as root would lock the relay out. A command
 refuses a data directory that belongs to another user, and says whose it
-is. On Linux, with the unit above:
+is. On macOS, with the plist above, the same alias is
+`sudo -u <user> PIRC_RELAY_DATA_DIR=/usr/local/var/pirc-relay pirc-relay`.
+On Linux, with the unit above:
 
 ```sh
 alias pirc-relay='sudo -u pirc-relay PIRC_RELAY_DATA_DIR=/var/lib/pirc-relay $(grep -s ^PIRC_RELAY_URL= /etc/pirc-relay/env) pirc-relay'
@@ -245,6 +282,18 @@ when the token expires on stderr. Set `PIRC_RELAY_URL` in
 `/etc/pirc-relay/env`, where the alias above reads it (`serve` does not
 use it), to leave `--url` out.
 
+### A host
+
+With the extension installed (above), in pi: `/pirc enrol <relay-url>`,
+then approve the host on the relay. Check that the key `pending` shows is the one `/pirc status` shows on
+the host before approving: the label is whatever the host claims, and anyone
+who can reach the relay can ask. With a token from `add-host`,
+`/pirc enrol <relay-url> <token>` needs no approval. The URL is
+`wss://<address>:<port>` (or `ws://` for a plaintext relay); the path
+`/v1alpha1` is added if you leave it out. `/pirc status` shows the
+connection. The host's key and settings are in `~/.config/pirc/`
+(`host.key`, `host.json`).
+
 ### The first phone
 
 PiRC's app joins a relay with a code from another client, the web app's
@@ -259,25 +308,17 @@ for longer). Scan the code with the app, or paste the link into it. The
 code is drawn dark on light whatever the terminal's colours; make the
 window wide enough that its lines do not wrap.
 
-On the host, in pi: `/pirc enrol <relay-url>`, then approve the host on the
-relay. Check that the key `pending` shows is the one `/pirc status` shows on
-the host before approving: the label is whatever the host claims, and anyone
-who can reach the relay can ask. With a token from `add-host`,
-`/pirc enrol <relay-url> <token>` needs no approval. The URL is
-`wss://<address>:<port>` (or `ws://` for a plaintext relay); the path
-`/v1alpha1` is added if you leave it out. `/pirc status` shows the
-connection. The host's key and settings are in `~/.config/pirc/`
-(`host.key`, `host.json`).
-
 ## The web app
 
 The web app is a server of its own, an ordinary client of the relay with
 its own key, which serves the page and signs browsers in with passkeys
 (`docs/web.md`). Whoever signs in to it can drive every session, so serve
 it on a private network if you can. It needs HTTPS, which passkeys and
-notifications require, and Node 22 or later at `/usr/local/bin/node`
-(Node from nodejs.org, since distributions often ship older; elsewhere,
-override `ExecStart` in a drop-in and change the alias below). On Linux,
+notifications require (but for a browser on the same machine, which may
+use `http://localhost`), and Node 22 or later at `/usr/local/bin/node`
+(Node from nodejs.org, since distributions often ship older; on a minimal
+Ubuntu it also needs `apt install libatomic1`; elsewhere, override
+`ExecStart` in a drop-in and change the alias below). On Linux,
 as root, in the unpacked web app:
 
 ```sh
@@ -296,7 +337,8 @@ same machine). Passkeys are tied to the host name, so choose one that can
 follow the server if it moves. For TLS, choose one, as for the relay:
 
 - **Certificate files**: install `service/tls.conf` as
-  `/etc/systemd/system/pirc-web.service.d/tls.conf` and set its two
+  `/etc/systemd/system/pirc-web.service.d/tls.conf` (make the directory
+  first) and set its two
   `LoadCredential=` paths. The web app reads them when it starts, so
   restart it after every renewal.
 - **A proxy that terminates TLS**, in front of the web app on loopback,
@@ -321,31 +363,6 @@ PiRC's app, and hosts asking to join can be approved there. Its one
 durable directory is `/var/lib/pirc-web`; its relay key there,
 `client.key`, is the account's access, so back it up as a secret.
 
-## The extension
-
-The extension is published as a pi package in its own repository,
-`https://github.com/pirc-dev/pirc-extension`. Its default branch follows
-this repository: it gets a new build whenever a change here changes the
-extension. Releases are tags there. pi installs it with `git` and `npm`,
-so a host needs both. Install it pinned to a release:
-
-```sh
-pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
-```
-
-It loads into every interactive pi session from then on; enrol the host
-once as above. To upgrade, install the newer tag the same way: `pi update`
-keeps a pinned install where it is. Installed without a tag, it follows
-the default branch, and `pi update git:github.com/pirc-dev/pirc-extension`
-moves it to the latest build. Pinned or not, keep the relay at least as
-new as the extension. `pi remove git:github.com/pirc-dev/pirc-extension`
-uninstalls it.
-
-Without git, each release's downloads include the package,
-`pirc-extension-X.Y.Z.tar.gz`: `pi install <unpacked directory>` installs
-from it directly, and pi loads it from there without copying it, so keep
-the directory.
-
 ## Upgrading
 
 While the protocol is `v1alpha1`, upgrade the relay, the extension and the
@@ -355,7 +372,7 @@ refused with `VERSION_UNSUPPORTED`, and `/pirc status` says so.
 
 To upgrade the relay, download the new release (or build it again),
 replace the binary and restart it
-(`systemctl restart pirc-relay`, or `launchctl kickstart -k
+(`systemctl restart pirc-relay`, or `sudo launchctl kickstart -k
 system/dev.pirc.relay`). Hosts and clients reconnect on their own, and
 sessions come back with them. `pirc-relay version` shows what is
 installed.
@@ -385,6 +402,9 @@ mode (`0600`, the relay's user), and start it. A running relay notices a
 changed registry by its time and size, so a restored copy might go
 unnoticed until a restart. A restore brings back every key in the copy,
 including any removed since it was taken: remove them again.
+
+The web app's is its directory, `/var/lib/pirc-web`: its relay key
+(`client.key`, a secret) and the passkeys. Stop it to copy or restore it.
 
 Hosts keep their own key in `~/.config/pirc/host.key`. A host that loses
 it enrols again with a new token, and its old key should be removed.

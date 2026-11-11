@@ -25,7 +25,7 @@ it when a decision is made or changed.
   language's types are generated from it; never hand-write a second copy.
 - **Reuse is deliberate.** Code adapted from another project is recorded under
   "Reuse and attribution" in `docs/design.md`, keeps that project's copyright
-  notice, and is listed in `NOTICE` once there is one. Prefer writing our own
+  notice, and is listed in `NOTICE`. Prefer writing our own
   where the saving is small.
 - **pi's API is the constraint.** Before designing a feature around pi, check
   what pi's extension API actually offers in the installed version; the

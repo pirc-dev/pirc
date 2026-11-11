@@ -49,19 +49,16 @@ last item, was done on 2026-10-31.
 
 ## Later
 
-1. **PiRC's mobile app** (`design.md`, section 12, step 13): written new,
-   iOS and Android; the adapter it replaces was retired 2026-11-07. Its
-   notifications are decided: a push that carries nothing, through a
-   gateway at pirc.dev.
-   Flutter; a core first (joining, the list and the chat, prompt, stop,
-   questions, notifications), in the Native look; decided 2026-11-02.
-2. **Hosted relay** (step 14): several tenants, end-to-end encryption,
+1. **Hosted relay** (step 14): several tenants, end-to-end encryption,
    device-signed registration.
-3. **Open** (step 15): licence, public repository, pirc.dev, store
+2. **Open** (step 15): licence, public repository, pirc.dev, store
    listings; planned 2026-11-07, for self-hosters first, ahead of the
    hosted relay.
 
 ## Done
+
+- PiRC's mobile app, for iOS and Android, in Flutter, with notifications
+  through a push that carries nothing (`design.md`, section 12, step 13).
 
 - A self-hoster's first phone joins without another client:
   `pirc-relay add-client --url <relay-url>` prints the `pirc://join` link

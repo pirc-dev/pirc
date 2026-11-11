@@ -31,6 +31,8 @@
     <string></string>
     <key>PIRC_RELAY_TLS_KEY</key>
     <string></string>
+    <key>PIRC_RELAY_PUSH_GATEWAY</key>
+    <string>https://push.pirc.dev</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

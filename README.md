@@ -5,6 +5,7 @@ sessions. Run pi on your machines as you do now, and follow and drive those
 sessions from your phone or a browser: read the conversation as it streams,
 send prompts and photos, answer pi's questions, stop a turn, start a new
 session, and get a notification when a session finishes or needs you.
+The website is [pirc.dev](https://pirc.dev).
 
 PiRC attaches to pi; it does not run pi for you. Run pi in tmux or herdr
 and PiRC also shows where each session runs and can open new ones beside
@@ -41,7 +42,9 @@ WireGuard or Tailscale.
    [`docs/self-hosting.md`](docs/self-hosting.md) says.
 2. **The extension**, on every machine that runs pi:
    `pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z`, with the
-   latest release's tag. Then, on the relay,
+   latest release's tag; pi needs `git` and `npm` for it. Then, on the
+   relay, as the relay's user (the guide's `pirc-relay` alias, so that the
+   token goes into the registry the relay reads),
    `pirc-relay add-host --url <relay-url> --label <name>` prints the
    `/pirc enrol` line to run in that pi. (A machine can also ask to join
    with `/pirc enrol <relay-url>` alone, and be approved on the relay or
@@ -117,7 +120,7 @@ Copyright Justino Ltd. Three licences, by part:
   (`web/`).
 - **GPL-3.0 only**: the mobile app (`app/`).
 
-Each of those directories has its licence as `LICENSE`. `NOTICE` lists the
+Each AGPL and GPL directory has its licence as `LICENSE`. `NOTICE` lists the
 third-party code that releases carry, whose licences are in
 `third_party/`. The name PiRC and its icon are covered by
 [`TRADEMARKS.md`](TRADEMARKS.md), not by the licences.

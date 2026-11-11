@@ -4,11 +4,13 @@ The [pi](https://github.com/earendil-works/pi) extension of
 [PiRC](https://pirc.dev): it puts every interactive pi session on a PiRC
 relay, so that you can follow and drive it from a phone or another
 client. You need a relay of your own; PiRC's self-hosting guide covers
-running one.
+running one,
+[`docs/self-hosting.md`](https://github.com/pirc-dev/pirc/blob/master/docs/self-hosting.md).
 
 This repository holds releases only: the extension built into one file
 (`pirc.js`); `loader.js`, which loads it; and `pi-parts.js`, which hands it
-the parts of pi it draws images with. Its source is in PiRC's repository.
+the parts of pi it draws images with. Its source is in PiRC's repository,
+[pirc-dev/pirc](https://github.com/pirc-dev/pirc), where issues go too.
 
 ## Install
 
@@ -16,14 +18,14 @@ pi installs it from this repository with `git` and `npm`. Pin it to a
 release:
 
 ```sh
-pi install git:<this repository's host and path>@vX.Y.Z
+pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 ```
 
 To upgrade, upgrade your relay first, then install the newer tag the same
 way. `pi update` keeps a pinned install where it is. Installing without a
-tag follows this repository's default branch, and `pi update --extensions`
-then moves it whenever a release is published, possibly ahead of your
-relay.
+tag follows this repository's default branch, and
+`pi update git:github.com/pirc-dev/pirc-extension` then moves it to the
+latest build, possibly ahead of your relay.
 
 ## Enrol
 

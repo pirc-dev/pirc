@@ -7,8 +7,8 @@ is in `docs/self-hosting.md`.
 
 ## 1. Shape
 
-Two parts in `web/`, built from any commit with `sh/build.sh web` (not
-released) and deployed on their own; a deployment can follow the
+Two parts in `web/`, released with the relay (`pirc-web-X.Y.Z.tar.gz`) or
+built from any commit with `sh/build.sh web`, and deployed on their own; a deployment can follow the
 repository's main branch (docs/design.md, section 12, step 9):
 
 - **The server**, a backend for the browser (BFF): a Node service that holds
@@ -209,9 +209,7 @@ not in `web/`, since they belong to neither client.
   for what can be done, set in Geist and Geist Mono. Each was live alone
   for a while; the owner liked both. Triage's inbox of cards on top
   ("Waiting for you") did not prove useful and is gone: both looks list
-  sessions by host and group. The designs as first built are kept on the
-  branches `design-quiet` and `design-triage` (and the one before them on
-  `design-before-quiet`). Native makes the app feel shipped with the
+  sessions by host and group. Native makes the app feel shipped with the
   phone: the system's grouped grey with white cards, a round tinted badge
   for each status where a messaging app puts a face, its blue, and the
   system's own font (San Francisco on Apple's, Roboto on Android), so it
