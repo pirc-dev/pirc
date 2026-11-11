@@ -89,7 +89,8 @@ Needs Node 24 (with corepack) and Go 1.24; Flutter for the mobile app.
   tests (the relay, an interactive pi in tmux with the
   extension and a scripted fake model, and a test client; then the web
   app's server, used as a browser uses it), which need `pi` and `tmux`.
-  There is no CI yet, so run it before pushing.
+  Run it before pushing; GitHub runs it on every push too, with the
+  mobile app's checks on macOS.
 - `sh/generate.sh` regenerates the protocol's code from `proto/`; the
   output is not committed.
 

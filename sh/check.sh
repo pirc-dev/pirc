@@ -1,5 +1,6 @@
 #!/bin/bash
-# Every local check, in order. There is no CI yet; run this before pushing.
+# Every check, in order; run this before pushing. GitHub runs it too
+# (.github/workflows/check.yml).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -59,10 +60,11 @@ else
 fi
 
 step "notification extension: generate, swift test"
-if command -v swift >/dev/null; then
+# It uses CryptoKit, which only Apple's platforms have.
+if [ "$(uname)" = Darwin ] && command -v swift >/dev/null; then
   sh/notices.sh
 else
-  echo "skipped: needs swift on PATH"
+  echo "skipped: needs swift on macOS"
 fi
 
 step "end to end: relay, pi with the extension, a client; the web app"

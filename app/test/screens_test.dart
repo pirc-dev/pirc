@@ -52,8 +52,10 @@ const font = 'Roboto';
 // Code and tool output: SF Mono, the web page's ui-monospace on Apple's,
 // from macOS, where the goldens are drawn.
 const mono = 'Mono';
-const goldensSkip = 'skipped: golden images are drawn on macOS';
-final drawsGoldens = Platform.isMacOS;
+// Not in CI either: GitHub's Macs draw them differently (2026-11-11, macOS
+// 15 runners: about 3% of each image's pixels).
+const goldensSkip = 'skipped: golden images are drawn on macOS, outside CI';
+final drawsGoldens = Platform.isMacOS && Platform.environment['CI'] != 'true';
 
 // Roboto from Flutter's own cache, and the fonts the app bundles
 // (CupertinoIcons), so that text and icons draw as they will.

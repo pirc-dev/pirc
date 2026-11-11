@@ -12,7 +12,7 @@ Needs Flutter on `PATH`; `sh/check.sh` skips the app without it.
 
 The screens are checked by golden images (`test/goldens`), drawn from a
 model fed real relay frames, with the Roboto in Flutter's cache. They are
-drawn on macOS and skipped elsewhere, saying so; after a change to a
+drawn on macOS and skipped elsewhere, and in CI, saying so; after a change to a
 screen, `flutter test --update-goldens` draws them again, and the images
 are looked at before they are kept.
 
