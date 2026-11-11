@@ -2326,6 +2326,22 @@ Each step ends with something that can be seen working.
        Geocoding API from elsewhere, not enabled in the project), the extension's address in the
        README and `docs/self-hosting.md` once it has moved, and the walk
        from nothing on a clean machine.
+       Done 2026-11-11: the walk, on a fresh Ubuntu 24.04 from the v0.3.0
+       downloads, the relay with a private CA's certificate, two hosts
+       (approved, and with a token), the web app and a phone's link, and
+       a stranger's read of the repository; the guide was put in the order
+       it is followed and corrected. Found then and left for a release:
+       `pirc-web enrol` reports an untrusted certificate as no answer from
+       the relay; the registry commands, run without the relay's data
+       directory, show an empty registry rather than saying which one they
+       read; the relay logs that it listens before loading its
+       certificate; a wrong token is reported as an unregistered key; the
+       release archives carry the builder's owner and group-writable modes.
+       Checks on GitHub (2026-11-11), since a visitor should see the
+       project's state and outside changes may come: `sh/check.sh` on
+       Linux with pi and tmux, so the end-to-end tests too, and the mobile
+       app and the iOS notification extension on macOS, without the golden
+       images, which GitHub's Macs draw about 3% differently.
     6. **pirc.dev**: what PiRC is, how to self-host, support, a privacy
        policy (both stores ask for its address; it covers the push token
        sent to `push.pirc.dev` and to Apple and Google), and downloads of
