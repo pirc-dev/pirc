@@ -1,8 +1,8 @@
 // The screens, drawn from a model fed real relay frames, in light and dark,
 // compared with saved images (test/goldens). The images are drawn on macOS
 // with the Roboto Flutter ships; elsewhere text draws differently, so they
-// are skipped there, saying so. flutter test --update-goldens draws them
-// again.
+// are skipped there, and in CI, saying so. flutter test --update-goldens
+// draws them again.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

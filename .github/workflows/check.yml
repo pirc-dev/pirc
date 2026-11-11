@@ -1,13 +1,17 @@
 # sh/check.sh on every push and pull request: on Linux everything but the
-# mobile app, end-to-end tests included; on macOS the mobile app, its golden
-# images and the iOS notification extension, which need Apple's frameworks
-# (the images are skipped there: GitHub's Macs draw them differently).
+# mobile app, end-to-end tests included; on macOS the mobile app (without its
+# golden images: GitHub's Macs draw them differently) and the iOS
+# notification extension, which need Apple's frameworks.
 name: check
 
 on:
   push:
-    branches: ['**']
+    branches: [master]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -15,6 +19,7 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,12 +33,14 @@ jobs:
           node-version: 24
       - name: pi and tmux, for the end-to-end tests
         run: |
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends tmux
-          npm install -g @earendil-works/pi-coding-agent@1.0.0
+          npm install -g "@earendil-works/pi-coding-agent@$(node -p "require('./extension/package.json').devDependencies['@earendil-works/pi-coding-agent']")"
       - run: sh/check.sh
 
   macos:
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

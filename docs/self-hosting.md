@@ -11,11 +11,10 @@ could read them. Run it yourself, on a machine you trust.
 
 ## Downloading
 
-Each release is on GitHub, at
-`https://github.com/pirc-dev/pirc/releases`: the relay for Linux and
-macOS, on amd64 (x86-64) and arm64, the web app and the extension, each a
-`.tar.gz`, and `SHA256SUMS`. Download the ones you need and `SHA256SUMS` into one
-directory, check them, and unpack:
+Each release is on GitHub, at `https://github.com/pirc-dev/pirc/releases`:
+the relay for Linux and macOS, on amd64 (x86-64) and arm64, the web app
+and the extension, each a `.tar.gz`, and `SHA256SUMS`. Download the ones
+you need and `SHA256SUMS` into one directory, check them, and unpack:
 
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS      # on macOS: shasum -a 256 -c --ignore-missing SHA256SUMS
@@ -80,7 +79,9 @@ curl https://<name>:<port>/healthz   # prints OK; http:// if plaintext
 ```
 
 With a private CA, give curl its certificate (`--cacert <ca.pem>`), and
-use the name the relay's certificate is for, not its address.
+use the name the relay's certificate is for, not its address. Behind a
+proxy, check the relay's own listen address: the proxy passes only
+`/v1alpha1`.
 
 The relay logs to the journal (`journalctl -u pirc-relay`). Its one
 durable file, the registry, is `/var/lib/pirc-relay/registry.json`.
@@ -113,13 +114,13 @@ a certificate and key unless plaintext is set.
 
 `PIRC_RELAY_PUSH_GATEWAY` is the push gateway through which the relay
 wakes phones registered for notifications (`docs/design.md`, section 12,
-step 13). Without one, phones are not woken, which the relay says once
-as it starts. The relay must be able to reach it over HTTPS. PiRC's
-own is `https://push.pirc.dev`, open to every relay (`docs/gateway.md`),
-and the only one that can wake PiRC's apps from the App Store and Google
-Play: `service/env.example` sets it, and an older `/etc/pirc-relay/env`
-needs the line added. A push passes no content, but the
-gateway learns which relay's address woke which phone, and when.
+step 13). Without one, phones are not woken, which the relay says once as
+it starts. The relay must be able to reach it over HTTPS. PiRC's own is
+`https://push.pirc.dev`, open to every relay (`docs/gateway.md`), and the
+only one that can wake PiRC's apps from the App Store and Google Play:
+`service/env.example` and the macOS plist set it, and an older
+`/etc/pirc-relay/env` or plist needs it added. A push passes no content,
+but the gateway learns which relay's address woke which phone, and when.
 
 Listen on an address your hosts and clients can reach, and no wider than
 you need: a private network's address, or loopback behind a proxy, rather
@@ -132,14 +133,14 @@ Choose one:
 
 - **Certificate files.** Install `service/tls.conf` as
   `/etc/systemd/system/pirc-relay.service.d/tls.conf` (make the directory
-  first, `install -d /etc/systemd/system/pirc-relay.service.d`), and set its two
-  `LoadCredential=` paths to your certificate (the full chain) and key.
-  systemd reads them as root and gives the relay private copies, so the key
-  can stay readable by root only. Leave `PIRC_RELAY_PLAINTEXT` false. The
-  relay reads the certificate when it starts, so **restart it after every
-  renewal**, for example with certbot's
-  `--deploy-hook "systemctl restart pirc-relay"`. Hosts and clients
-  reconnect on their own within about half a minute.
+  first, `install -d /etc/systemd/system/pirc-relay.service.d`), and set
+  its two `LoadCredential=` paths to your certificate (the full chain) and
+  key. systemd reads them as root and gives the relay private copies, so
+  the key can stay readable by root only. Leave `PIRC_RELAY_PLAINTEXT`
+  false. The relay reads the certificate when it starts, so **restart it
+  after every renewal**, for example with certbot's
+  `--deploy-hook "systemctl restart pirc-relay"`. Hosts and clients reconnect on their
+  own within about half a minute.
 - **A proxy that terminates TLS**, such as nginx or Caddy, in front of a
   relay listening on loopback with `PIRC_RELAY_PLAINTEXT=true`. The proxy
   must pass WebSocket upgrades on `/v1alpha1`. Hosts and clients ping
@@ -173,8 +174,8 @@ Choose one:
 that connects. pi and the web app's server run on Node, which reads extra
 certificate authorities from `NODE_EXTRA_CA_CERTS`: set it to your CA's
 PEM file in the environment pi starts in on every host, and in the web
-app's environment file. Keep that file outside `/root` and `/home`, such
-as in `/etc`: the web app's unit cannot see those directories. A phone
+app's environment file. Keep the CA's file outside `/root` and `/home`,
+such as in `/etc`: the web app's unit cannot see those directories. A phone
 must trust the certificate in its own settings.
 
 ## The relay on macOS (launchd)
@@ -214,13 +215,13 @@ so a host needs both. Install it pinned to a release:
 pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 ```
 
-It loads into every interactive pi session started from then on; enrol
-the host once, as below. To upgrade, install the newer tag the same way: `pi update`
-keeps a pinned install where it is. Installed without a tag, it follows
-the default branch, and `pi update git:github.com/pirc-dev/pirc-extension`
-moves it to the latest build. Pinned or not, keep the relay at least as
-new as the extension. `pi remove git:github.com/pirc-dev/pirc-extension`
-uninstalls it.
+It loads into every interactive pi session started from then on; enrol the
+host once, as below. To upgrade, install the newer tag the same way:
+`pi update` keeps a pinned install where it is. Installed without a tag,
+it follows the default branch, and
+`pi update git:github.com/pirc-dev/pirc-extension` moves it to the latest
+build. Pinned or not, keep the relay at least as new as the extension.
+`pi remove git:github.com/pirc-dev/pirc-extension` uninstalls it.
 
 Without git, each release's downloads include the package,
 `pirc-extension-X.Y.Z.tar.gz`: `pi install <unpacked directory>` installs
@@ -235,9 +236,7 @@ from then on by its key. Run the registry commands **as the relay's
 user**, with its data directory: files they create are readable by that
 user only, so a command run as root would lock the relay out. A command
 refuses a data directory that belongs to another user, and says whose it
-is. On macOS, with the plist above, the same alias is
-`sudo -u <user> PIRC_RELAY_DATA_DIR=/usr/local/var/pirc-relay pirc-relay`.
-On Linux, with the unit above:
+is. On Linux, with the unit above:
 
 ```sh
 alias pirc-relay='sudo -u pirc-relay PIRC_RELAY_DATA_DIR=/var/lib/pirc-relay $(grep -s ^PIRC_RELAY_URL= /etc/pirc-relay/env) pirc-relay'
@@ -252,6 +251,13 @@ pirc-relay tokens                      # live tokens, neither used up nor expire
 pirc-relay revoke reviewers            # ends the tokens with that label; the apps they let in stay until removed
 pirc-relay remove <key-prefix>         # disconnects it within a second; also in the web app
 pirc-relay label <key-prefix> <name>   # renames a host or a client
+```
+
+On macOS, with the plist above, the alias is this, and `add-host` and
+`add-client` there take `--url`:
+
+```sh
+alias pirc-relay='sudo -u <user> PIRC_RELAY_DATA_DIR=/usr/local/var/pirc-relay pirc-relay'
 ```
 
 `approve`, `reject`, `remove` and `label` take the key, or at least its first 16
@@ -285,13 +291,13 @@ use it), to leave `--url` out.
 ### A host
 
 With the extension installed (above), in pi: `/pirc enrol <relay-url>`,
-then approve the host on the relay. Check that the key `pending` shows is the one `/pirc status` shows on
-the host before approving: the label is whatever the host claims, and anyone
-who can reach the relay can ask. With a token from `add-host`,
-`/pirc enrol <relay-url> <token>` needs no approval. The URL is
-`wss://<address>:<port>` (or `ws://` for a plaintext relay); the path
-`/v1alpha1` is added if you leave it out. `/pirc status` shows the
-connection. The host's key and settings are in `~/.config/pirc/`
+then approve the host on the relay. Check that the key `pending` shows is
+the one `/pirc status` shows on the host before approving: the label is
+whatever the host claims, and anyone who can reach the relay can ask. With
+a token from `add-host`, `/pirc enrol <relay-url> <token>` needs no
+approval. The URL is `wss://<address>:<port>` (or `ws://` for a plaintext
+relay); the path `/v1alpha1` is added if you leave it out. `/pirc status`
+shows the connection. The host's key and settings are in `~/.config/pirc/`
 (`host.key`, `host.json`).
 
 ### The first phone
@@ -338,8 +344,7 @@ follow the server if it moves. For TLS, choose one, as for the relay:
 
 - **Certificate files**: install `service/tls.conf` as
   `/etc/systemd/system/pirc-web.service.d/tls.conf` (make the directory
-  first) and set its two
-  `LoadCredential=` paths. The web app reads them when it starts, so
+  first) and set its two `LoadCredential=` paths. The web app reads them when it starts, so
   restart it after every renewal.
 - **A proxy that terminates TLS**, in front of the web app on loopback,
   with `PIRC_WEB_PLAINTEXT=true`.
@@ -361,7 +366,7 @@ that syncs works on your other devices too. `pirc-web list` and
 `pirc-web revoke` manage them. From the web app, "Add an app" invites
 PiRC's app, and hosts asking to join can be approved there. Its one
 durable directory is `/var/lib/pirc-web`; its relay key there,
-`client.key`, is the account's access, so back it up as a secret.
+`client.key`, is the account's access (Backup, below).
 
 ## Upgrading
 
@@ -403,7 +408,7 @@ changed registry by its time and size, so a restored copy might go
 unnoticed until a restart. A restore brings back every key in the copy,
 including any removed since it was taken: remove them again.
 
-The web app's is its directory, `/var/lib/pirc-web`: its relay key
+The web app's state is its directory, `/var/lib/pirc-web`: its relay key
 (`client.key`, a secret) and the passkeys. Stop it to copy or restore it.
 
 Hosts keep their own key in `~/.config/pirc/host.key`. A host that loses

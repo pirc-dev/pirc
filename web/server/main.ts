@@ -160,7 +160,7 @@ async function main(): Promise<void> {
     case "serve":
       return serveCmd(dir, store, v);
     default:
-      die("usage: pirc-web enrol|serve|pair|list|revoke|version (see docs/self-hosting.md)");
+      die("usage: pirc-web enrol|serve|pair|list|revoke|version (see https://github.com/pirc-dev/pirc/blob/master/docs/self-hosting.md)");
   }
 }
 

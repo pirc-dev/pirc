@@ -8,8 +8,9 @@ is in `docs/self-hosting.md`.
 ## 1. Shape
 
 Two parts in `web/`, released with the relay (`pirc-web-X.Y.Z.tar.gz`) or
-built from any commit with `sh/build.sh web`, and deployed on their own; a deployment can follow the
-repository's main branch (docs/design.md, section 12, step 9):
+built from any commit with `sh/build.sh web`, and deployed on their own; a
+deployment can follow the repository's main branch (docs/design.md,
+section 12, step 9):
 
 - **The server**, a backend for the browser (BFF): a Node service that holds
   one connection to the relay as an ordinary client, with its own key. It
