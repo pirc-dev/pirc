@@ -1,6 +1,7 @@
 # sh/check.sh on every push and pull request: on Linux everything but the
 # mobile app, end-to-end tests included; on macOS the mobile app, its golden
-# images and the iOS notification extension, which need Apple's frameworks.
+# images and the iOS notification extension, which need Apple's frameworks
+# (the images are skipped there: GitHub's Macs draw them differently).
 name: check
 
 on:
@@ -38,10 +39,15 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: relay/go.mod
+          cache-dependency-path: relay/go.sum
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.9
           channel: stable
       - run: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --silent
+      - run: sh/generate.sh # the notification extension's tests run a relay
       - run: sh/app.sh
       - run: sh/notices.sh
