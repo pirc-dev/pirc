@@ -1,0 +1,64 @@
+// Types shared by the relay protocol (relay.proto) and the session protocol
+// (session.proto).
+syntax = "proto3";
+
+package pirc.v1alpha1;
+
+// One pi session as it runs in one pi process: the relay's unit of routing
+// and presence (docs/design.md, section 4).
+message SessionRef {
+  // The host's Ed25519 public key, 32 bytes.
+  bytes host_key = 1;
+  // pi's session ID (a UUIDv7, as text). Stable across resume. At most
+  // 128 bytes.
+  string session_id = 2;
+  // Random per pi process, made when the extension's module is first
+  // evaluated; survives session changes within the process. At most 128
+  // bytes.
+  string instance_id = 3;
+}
+
+// Why something failed. Shared by the relay's errors and the session
+// protocol's errors, so a client handles both the same way.
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  // The peer has not completed login, or its key is not registered.
+  ERROR_CODE_UNAUTHENTICATED = 1;
+  // Logged in, but not allowed to do this (e.g. a client announcing a session).
+  ERROR_CODE_PERMISSION_DENIED = 2;
+  // The peer's protocol version is outside what the other side supports.
+  ERROR_CODE_VERSION_UNSUPPORTED = 3;
+  // Malformed or contradictory request.
+  ERROR_CODE_INVALID = 4;
+  // The frame exceeds the negotiated maximum size.
+  ERROR_CODE_TOO_LARGE = 5;
+  // No such session, or not online.
+  ERROR_CODE_SESSION_NOT_FOUND = 6;
+  // The session ended or its process was replaced before the request finished.
+  ERROR_CODE_SESSION_GONE = 7;
+  // The request cannot run now (e.g. the session is mid-replacement).
+  ERROR_CODE_BUSY = 8;
+  // No confirming event arrived in time.
+  ERROR_CODE_TIMEOUT = 9;
+  // The registration token is unknown, used or expired.
+  ERROR_CODE_TOKEN_INVALID = 10;
+  // Too many requests, or more of something than the other side holds
+  // (e.g. sessions on one connection).
+  ERROR_CODE_RATE_LIMITED = 11;
+  // A bug on the side that reports it.
+  ERROR_CODE_INTERNAL = 12;
+  // pi refused or failed the operation; the message says why.
+  ERROR_CODE_PI_FAILED = 13;
+  // The key is not registered and waits for the relay operator to approve
+  // it: a host that logged in without a registration token (docs/design.md,
+  // 5.3). Retry later; the login succeeds once it is approved.
+  ERROR_CODE_APPROVAL_PENDING = 14;
+}
+
+message Error {
+  ErrorCode code = 1;
+  // For people, not for matching on.
+  string message = 2;
+  // The request this answers, if any.
+  string request_id = 3;
+}

@@ -1,0 +1,725 @@
+{
+ "about": "how a chat groups and shows its items (core/chat.ts); a run is a list of parts, each an item's ID or folded tools' IDs",
+ "cases": [
+  {
+   "fn": "runs",
+   "about": "tool calls in a row are one run; two or more that finished well fold",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 0,
+      "text": "u",
+      "images": []
+     },
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "c",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "r",
+      "turnId": "",
+      "at": 0,
+      "blocks": [
+       {
+        "kind": "text",
+        "text": "done"
+       }
+      ],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "u"
+     }
+    ],
+    [
+     {
+      "tools": [
+       "a",
+       "b",
+       "c"
+      ]
+     }
+    ],
+    [
+     {
+      "item": "r"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "one alone does not fold",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "a"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "a failed or running call stays in sight, splitting the folds around it",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "x",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": true
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "c",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "d",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "tool",
+      "id": "y",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}"
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "tools": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "item": "x"
+     },
+     {
+      "tools": [
+       "c",
+       "d"
+      ]
+     },
+     {
+      "item": "y"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "pi's empty messages between calls do not break a run",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "e",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": false
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "tools": [
+       "a",
+       "b"
+      ]
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "a message with text does",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "t",
+      "turnId": "",
+      "at": 0,
+      "blocks": [
+       {
+        "kind": "text",
+        "text": "thinking aloud"
+       }
+      ],
+      "streaming": false
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "a"
+     }
+    ],
+    [
+     {
+      "item": "t"
+     }
+    ],
+    [
+     {
+      "item": "b"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "a stopped one shows",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "s",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": false,
+      "stop": "aborted"
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "a"
+     }
+    ],
+    [
+     {
+      "item": "s"
+     }
+    ],
+    [
+     {
+      "item": "b"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "a failed one shows",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "f",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": false,
+      "stop": "error",
+      "error": "overloaded"
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "a"
+     }
+    ],
+    [
+     {
+      "item": "f"
+     }
+    ],
+    [
+     {
+      "item": "b"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "one being written shows",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     },
+     {
+      "kind": "assistant",
+      "id": "w",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": true
+     },
+     {
+      "kind": "tool",
+      "id": "b",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "a"
+     }
+    ],
+    [
+     {
+      "item": "w"
+     }
+    ],
+    [
+     {
+      "item": "b"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "runs",
+   "about": "an empty message before any tool is its own run",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "e",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": false
+     },
+     {
+      "kind": "tool",
+      "id": "a",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": [
+    [
+     {
+      "item": "e"
+     }
+    ],
+    [
+     {
+      "item": "a"
+     }
+    ]
+   ]
+  },
+  {
+   "fn": "signature",
+   "about": "nothing",
+   "args": [
+    null
+   ],
+   "is": ""
+  },
+  {
+   "fn": "signature",
+   "about": "a reply, by its text's length",
+   "args": [
+    {
+     "kind": "assistant",
+     "id": "r",
+     "turnId": "",
+     "at": 0,
+     "blocks": [
+      {
+       "kind": "text",
+       "text": "ab"
+      }
+     ],
+     "streaming": false
+    }
+   ],
+   "is": "r:2:false"
+  },
+  {
+   "fn": "signature",
+   "about": "a reply being written",
+   "args": [
+    {
+     "kind": "assistant",
+     "id": "r",
+     "turnId": "",
+     "at": 0,
+     "blocks": [
+      {
+       "kind": "text",
+       "text": "a"
+      }
+     ],
+     "streaming": true
+    }
+   ],
+   "is": "r:1:true"
+  },
+  {
+   "fn": "signature",
+   "about": "a tool running",
+   "args": [
+    {
+     "kind": "tool",
+     "id": "t",
+     "turnId": "",
+     "at": 0,
+     "name": "bash",
+     "args": "{}"
+    }
+   ],
+   "is": "t:false"
+  },
+  {
+   "fn": "signature",
+   "about": "a tool done",
+   "args": [
+    {
+     "kind": "tool",
+     "id": "t",
+     "turnId": "",
+     "at": 0,
+     "name": "bash",
+     "args": "{}",
+     "result": {
+      "text": "",
+      "isError": false
+     }
+    }
+   ],
+   "is": "t:true"
+  },
+  {
+   "fn": "signature",
+   "about": "a user message, by its ID",
+   "args": [
+    {
+     "kind": "user",
+     "id": "u",
+     "turnId": "",
+     "at": 0,
+     "text": "u",
+     "images": []
+    }
+   ],
+   "is": "u"
+  },
+  {
+   "fn": "took",
+   "about": "under ten seconds, to a tenth",
+   "args": [
+    412
+   ],
+   "is": "0.4s"
+  },
+  {
+   "fn": "took",
+   "about": "just under ten",
+   "args": [
+    9950
+   ],
+   "is": "9.9s"
+  },
+  {
+   "fn": "took",
+   "about": "seconds",
+   "args": [
+    12400
+   ],
+   "is": "12s"
+  },
+  {
+   "fn": "took",
+   "about": "minutes and seconds",
+   "args": [
+    125000
+   ],
+   "is": "2m 05s"
+  },
+  {
+   "fn": "took",
+   "about": "a clock gone back",
+   "args": [
+    -5
+   ],
+   "is": "0.0s"
+  },
+  {
+   "fn": "diffLines",
+   "about": "a diff's changes and context, not its file headers",
+   "args": [
+    "Index: f\n===\n--- a/f\n+++ b/f\n@@ -1,2 +1,2 @@\n keep\n-old\n+new"
+   ],
+   "is": [
+    {
+     "kind": "hunk",
+     "text": "@@ -1,2 +1,2 @@"
+    },
+    {
+     "kind": "same",
+     "text": " keep"
+    },
+    {
+     "kind": "del",
+     "text": "-old"
+    },
+    {
+     "kind": "add",
+     "text": "+new"
+    }
+   ]
+  },
+  {
+   "fn": "diffLines",
+   "about": "git's header",
+   "args": [
+    "diff --git a/f b/f\n--- a/f\n+++ b/f\n@@ -1 +1 @@\n-a\n+b"
+   ],
+   "is": [
+    {
+     "kind": "hunk",
+     "text": "@@ -1 +1 @@"
+    },
+    {
+     "kind": "del",
+     "text": "-a"
+    },
+    {
+     "kind": "add",
+     "text": "+b"
+    }
+   ]
+  }
+ ]
+}

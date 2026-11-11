@@ -1,0 +1,382 @@
+// The relay protocol: every frame on a WebSocket between the relay and a
+// host's pi process or a client. One Frame per binary WebSocket message.
+//
+// The relay reads these frames, but never the `payload` bytes inside
+// Routed and SessionAnnounce: those are session.proto messages, exchanged
+// end to end between a session and its clients (docs/design.md, 5.1).
+syntax = "proto3";
+
+package pirc.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "pirc/v1alpha1/common.proto";
+
+// The version of this protocol. Bumped for incompatible changes only;
+// compatible additions keep it.
+enum ProtocolVersion {
+  PROTOCOL_VERSION_UNSPECIFIED = 0;
+  PROTOCOL_VERSION_V1ALPHA1 = 1;
+}
+
+message Frame {
+  oneof body {
+    // Login, in order: Hello (peer), Challenge (relay), Auth (peer),
+    // Welcome (relay). Nothing else may be sent before Welcome.
+    Hello hello = 1;
+    Challenge challenge = 2;
+    Auth auth = 3;
+    Welcome welcome = 4;
+
+    // Host to relay: sessions of this connection.
+    SessionAnnounce session_announce = 10;
+    SessionEnd session_end = 11;
+
+    // Client to relay: what to receive.
+    SubscribeSessions subscribe_sessions = 20;
+    Attach attach = 21;
+    Detach detach = 22;
+
+    // Client to relay: the hosts awaiting approval, and deciding on them
+    // (docs/design.md, 5.3).
+    WatchPendingHosts watch_pending_hosts = 23;
+    ApproveHost approve_host = 24;
+    RejectHost reject_host = 25;
+
+    // Client to relay: the registered devices, renaming or removing one,
+    // and a token for a new one (docs/design.md, 5.3).
+    WatchKeys watch_keys = 26;
+    RenameKey rename_key = 27;
+    RemoveKey remove_key = 28;
+    IssueToken issue_token = 29;
+
+    // Relay to client: the session list and its changes.
+    SessionList session_list = 30;
+    SessionUpdated session_updated = 31;
+    SessionEnded session_ended = 32;
+
+    // Relay to client: the hosts awaiting approval, and a decision made.
+    PendingHosts pending_hosts = 33;
+    HostDecided host_decided = 34;
+
+    // Relay to client: the registered devices, and a change made.
+    Keys keys = 35;
+    KeyChanged key_changed = 36;
+    TokenIssued token_issued = 37;
+
+    // Between a session and clients, through the relay.
+    Routed routed = 40;
+
+    // Client to relay: being woken through the push gateway, and relay to
+    // client, the change made (docs/design.md, section 12, step 13).
+    RegisterPush register_push = 60;
+    UnregisterPush unregister_push = 61;
+    PushChanged push_changed = 62;
+    // Client to relay: the read-only key a woken phone logs in with.
+    RegisterReadKey register_read_key = 63;
+
+    // Either direction. Any Error during login closes the connection;
+    // after login it stays open. A message that is not a binary, decodable
+    // Frame is answered with INVALID and closes the connection; one larger
+    // than max_frame_bytes closes it with WebSocket status 1009. A
+    // connection whose key is removed from the registry closes with 1008
+    // and the reason "key revoked": a peer should not ask again.
+    Error error = 50;
+  }
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  // A pi process, connecting with its host's key.
+  ROLE_HOST = 1;
+  // An app or a CLI, with its own key.
+  ROLE_CLIENT = 2;
+}
+
+message Hello {
+  ProtocolVersion protocol_version = 1;
+  Role role = 2;
+  // The peer's Ed25519 public key, 32 bytes.
+  bytes public_key = 3;
+  // A one-time registration token, the first time a key connects
+  // (docs/design.md, 5.3 and 5.4). The key is registered once Auth proves
+  // the peer holds it. A host may leave it empty: once Auth proves it holds
+  // the key, the relay records the key for its operator or a client to
+  // approve (WatchPendingHosts) and answers APPROVAL_PENDING until then.
+  string registration_token = 4;
+  // For the relay operator's key list: a host name, or a device label.
+  // Used only at registration, and only when the token has no label of its
+  // own; shown when a host awaits approval. At most 128 bytes.
+  string label = 5;
+  // Software and version, for diagnostics ("pirc-extension/0.1.0"). At
+  // most 128 bytes.
+  string software = 6;
+}
+
+message Challenge {
+  // 32 random bytes.
+  bytes nonce = 1;
+}
+
+message Auth {
+  // Ed25519 signature over the bytes "pirc-auth-v1alpha1\0" followed by
+  // the nonce.
+  bytes signature = 1;
+}
+
+message Welcome {
+  ProtocolVersion protocol_version = 1;
+  // Largest Frame the relay accepts or sends, encoded. A frame the relay
+  // would have to send larger (a Routed with the sender's key added, a
+  // SessionUpdated) is refused with TOO_LARGE instead.
+  uint32 max_frame_bytes = 2;
+  // Software and version of the relay.
+  string software = 3;
+  // Logged in with a client's read-only key (RegisterReadKey): only
+  // SubscribeSessions is taken.
+  bool read_only = 4;
+}
+
+// Host to relay: a session is live on this connection, or its
+// announcement changed. Sent again whenever the announcement changes.
+// A connection may have up to 32 sessions live; more are refused with
+// RATE_LIMITED.
+message SessionAnnounce {
+  // host_key must be the connection's own key.
+  SessionRef session = 1;
+  // An encoded session.proto SessionAnnouncement. The relay stores the
+  // latest one and replays it to clients without reading it. At most
+  // 64 KiB by default; a larger one is refused with TOO_LARGE.
+  bytes payload = 2;
+  // Set by the host when the notice in this payload is one it has not yet
+  // sent with push set, as after a turn that ended while it was offline:
+  // the relay wakes the clients registered for push that are not
+  // connected (docs/design.md, section 12, step 13). Never passed on to
+  // clients.
+  bool push = 3;
+}
+
+// Host to relay: the session is no longer live on this connection
+// (replaced by another session in the same process, or the process exits).
+message SessionEnd {
+  SessionRef session = 1;
+}
+
+// Client to relay: send me SessionList now and SessionUpdated /
+// SessionEnded from now on.
+message SubscribeSessions {}
+
+// Client to relay: send me this session's broadcast frames.
+message Attach {
+  SessionRef session = 1;
+}
+
+message Detach {
+  SessionRef session = 1;
+}
+
+message SessionEntry {
+  SessionRef session = 1;
+  // The label the host's key is registered under.
+  string host_label = 2;
+  // The latest announcement payload, opaque to the relay.
+  bytes payload = 3;
+  google.protobuf.Timestamp announced_at = 4;
+}
+
+// Relay to client: every live session. A session is live while its pi
+// process is connected and has announced it. A long list comes in several
+// frames, each within max_frame_bytes: every one but the last has `more`
+// set, and together they are the list.
+message SessionList {
+  repeated SessionEntry sessions = 1;
+  bool more = 2;
+}
+
+message SessionUpdated {
+  SessionEntry entry = 1;
+}
+
+message SessionEnded {
+  SessionRef session = 1;
+}
+
+// A session.proto message between a session and its clients.
+//
+// Client to relay: `session` names the target; the relay delivers it to
+// that session's connection and sets `client_key` to the sender's key.
+// Host to relay: `session` must be one of the connection's sessions;
+// an empty `client_key` broadcasts to every client attached to the
+// session, a set one (32 bytes) delivers to that client's connections
+// only, and to none if it is not connected.
+message Routed {
+  SessionRef session = 1;
+  bytes client_key = 2;
+  // An encoded session.proto SessionMessage. Never read by the relay.
+  bytes payload = 3;
+}
+
+// Client to relay: send me PendingHosts now and whenever it changes. Any
+// registered client may watch, approve and reject (docs/design.md, 5.3).
+message WatchPendingHosts {}
+
+// A host key that logged in without a token and waits for approval.
+message PendingHost {
+  // Ed25519, 32 bytes: what the person compares with the key the host
+  // shows (/pirc status).
+  bytes public_key = 1;
+  // As the host gave them in Hello, which proves nothing, and the address
+  // it connected from.
+  string label = 2;
+  string software = 3;
+  string remote = 4;
+  google.protobuf.Timestamp first_seen = 5;
+}
+
+// Relay to client: every host awaiting approval, oldest first; sent on
+// WatchPendingHosts, then again whenever the list changes (a host asks,
+// is approved or rejected, or its request expires). At most 16.
+message PendingHosts {
+  repeated PendingHost hosts = 1;
+}
+
+// Client to relay: register this waiting host. Answered by HostDecided,
+// or Error with the request_id: INVALID when no host with that key is
+// waiting.
+message ApproveHost {
+  string request_id = 1;
+  bytes public_key = 2;
+  // The label to register it under; empty keeps the one it asked with.
+  // At most 128 bytes.
+  string label = 3;
+}
+
+// Client to relay: drop this host's request. It asks again the next time
+// it connects. Answered as ApproveHost is.
+message RejectHost {
+  string request_id = 1;
+  bytes public_key = 2;
+}
+
+// Relay to client: the approval or rejection is done; PendingHosts follows.
+message HostDecided {
+  string request_id = 1;
+}
+
+// Client to relay: send me Keys now and whenever it changes. Any
+// registered client may watch, rename, remove and invite (docs/design.md,
+// 5.3).
+message WatchKeys {}
+
+// A registered device: a host or a client.
+message RegisteredKey {
+  // Ed25519, 32 bytes.
+  bytes public_key = 1;
+  Role role = 2;
+  // The label it is registered under, which clients show for a host's
+  // sessions (SessionEntry.host_label).
+  string label = 3;
+  google.protobuf.Timestamp added_at = 4;
+  // Whether a connection with this key is logged in.
+  bool online = 5;
+  // Whether this client is registered for push (RegisterPush). The handle
+  // itself is sent to no client.
+  bool push = 6;
+  // Whether this client has a read-only key (RegisterReadKey), which is not
+  // listed apart and is not counted in online.
+  bool read_key = 7;
+}
+
+// Relay to client: every registered key, by role, then label; sent on WatchKeys, then again whenever it changes (a key is
+// added, renamed or removed, or one comes online or goes offline).
+message Keys {
+  repeated RegisteredKey keys = 1;
+}
+
+// Client to relay: register this key under a new label. Answered by
+// KeyChanged, or Error with the request_id: INVALID when no key is
+// registered with it, or the label is empty or too long. A renamed host's
+// live sessions are sent again (SessionUpdated) under the new label.
+message RenameKey {
+  string request_id = 1;
+  bytes public_key = 2;
+  // At most 128 bytes.
+  string label = 3;
+}
+
+// Client to relay: remove this key from the registry, as pirc-relay
+// remove does. Its connections close at once, with WebSocket status 1008
+// and the reason "key revoked", and a host's sessions end. Answered by
+// KeyChanged, or Error with the request_id: INVALID when no key is
+// registered with it, PERMISSION_DENIED when it is the key that asks.
+message RemoveKey {
+  string request_id = 1;
+  bytes public_key = 2;
+}
+
+// Relay to client: the change is done. A client watching the keys has
+// been sent them, changed, before this.
+message KeyChanged {
+  string request_id = 1;
+}
+
+// Client to relay: a one-time registration token for a new key of role,
+// as pirc-relay add-host and add-client make. Answered by TokenIssued, or
+// Error with the request_id: INVALID when the role is unspecified, the
+// label too long or the lifetime out of bounds.
+message IssueToken {
+  string request_id = 1;
+  Role role = 2;
+  // The label the key is registered under; at most 128 bytes. Empty: the
+  // one it gives when it logs in with the token.
+  string label = 3;
+  // How long the token stays valid: unset is 15 minutes, at most 24 hours.
+  google.protobuf.Duration lifetime = 4;
+}
+
+// Relay to client: the token, sent only here; the relay keeps its hash.
+message TokenIssued {
+  string request_id = 1;
+  string token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// Client to relay: wake me through the push gateway when a session raises
+// a notice to push for and I am not connected. One registration per client
+// key, kept in the registry and deleted with the key: registering again
+// replaces it, as the app does whenever Apple or Google changes its push
+// token. Answered by PushChanged, or Error with the request_id: INVALID for
+// an empty handle or one over 1 KiB; PERMISSION_DENIED from a host.
+message RegisterPush {
+  string request_id = 1;
+  // The gateway's handle for the phone's push token, opaque to the relay.
+  string handle = 2;
+}
+
+// Client to relay: stop waking me. Answered by PushChanged, also when
+// nothing was registered.
+message UnregisterPush {
+  string request_id = 1;
+}
+
+// Relay to client: the registration is changed. A client watching the keys
+// has been sent them, changed, before this.
+message PushChanged {
+  string request_id = 1;
+}
+
+// Client to relay, under its own key: register public_key as its read-only
+// key, which a phone woken by a push logs in with from the lock screen
+// (docs/design.md, section 12, step 13). Logged in with it, a connection
+// may only send SubscribeSessions, to read the session list and its
+// changes; anything else is refused with PERMISSION_DENIED. One per client:
+// registering another replaces it, and the old one's connections close as
+// revoked. It is deleted with the client. Answered by KeyChanged, or Error
+// with the request_id: INVALID when the key is not 32 bytes or is any
+// registered key, or another client's read-only key; PERMISSION_DENIED
+// from a host or from a read-only key. A key registered so cannot be
+// enrolled or approved as a key of its own.
+message RegisterReadKey {
+  string request_id = 1;
+  bytes public_key = 2;
+}

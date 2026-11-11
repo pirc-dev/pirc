@@ -1,0 +1,730 @@
+{
+ "about": "a chat already had is caught up from its last saved item: an answer from that entry is appended, dropping what was not saved; one that is not (more followed it, or it left the branch) replaces the chat",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.2.0"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "3",
+       "items": [
+        {
+         "turnId": "u1",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "one"
+         },
+         "entryId": "u1"
+        },
+        {
+         "entryId": "a1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:00:05Z",
+         "assistantMessage": {
+          "messageId": "a1",
+          "content": [
+           {
+            "text": "first reply"
+           }
+          ],
+          "stopReason": "STOP_REASON_STOP"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1792922400000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "a1",
+        "turnId": "u1",
+        "at": 1792922405000,
+        "entryId": "a1",
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "first reply"
+         }
+        ],
+        "streaming": false,
+        "stop": "stop"
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "last": {
+       "who": "assistant",
+       "text": "first reply",
+       "at": 1792922405000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "4",
+       "at": "2026-10-25T10:01:00Z",
+       "item": {
+        "turnId": "",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "not saved yet",
+         "requestId": "r1"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "r-r1",
+      "turnId": "",
+      "at": 1792922400000,
+      "text": "not saved yet",
+      "images": [],
+      "requestId": "r1"
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "last": {
+       "who": "user",
+       "text": "not saved yet",
+       "at": 1792922400000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "state": "offline"
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "offline"
+     }
+    }
+   ]
+  },
+  {
+   "state": "connecting"
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "connecting"
+     }
+    }
+   ]
+  },
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.2.0"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-2",
+        "limit": 200,
+        "afterEntryId": "a1"
+       },
+       "requestId": "id-2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-2",
+       "seq": "8",
+       "items": [
+        {
+         "turnId": "u2",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "two"
+         },
+         "entryId": "u2"
+        },
+        {
+         "entryId": "a2",
+         "turnId": "u2",
+         "at": "2026-10-25T10:00:05Z",
+         "assistantMessage": {
+          "messageId": "a2",
+          "content": [
+           {
+            "text": "second reply"
+           }
+          ],
+          "stopReason": "STOP_REASON_STOP"
+         }
+        }
+       ],
+       "fromEntry": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1792922400000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "a1",
+        "turnId": "u1",
+        "at": 1792922405000,
+        "entryId": "a1",
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "first reply"
+         }
+        ],
+        "streaming": false,
+        "stop": "stop"
+       },
+       {
+        "kind": "user",
+        "id": "e-u2",
+        "turnId": "u2",
+        "at": 1792922400000,
+        "entryId": "u2",
+        "text": "two",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "a2",
+        "turnId": "u2",
+        "at": 1792922405000,
+        "entryId": "a2",
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "second reply"
+         }
+        ],
+        "streaming": false,
+        "stop": "stop"
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "last": {
+       "who": "assistant",
+       "text": "second reply",
+       "at": 1792922405000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1792922400000,
+       "entryId": "u1",
+       "text": "one",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a1",
+       "turnId": "u1",
+       "at": 1792922405000,
+       "entryId": "a1",
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "first reply"
+        }
+       ],
+       "streaming": false,
+       "stop": "stop"
+      },
+      {
+       "kind": "user",
+       "id": "e-u2",
+       "turnId": "u2",
+       "at": 1792922400000,
+       "entryId": "u2",
+       "text": "two",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a2",
+       "turnId": "u2",
+       "at": 1792922405000,
+       "entryId": "a2",
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "second reply"
+        }
+       ],
+       "streaming": false,
+       "stop": "stop"
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "10",
+       "at": "2026-10-25T10:01:00Z",
+       "item": {
+        "turnId": "u3",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "three"
+        },
+        "entryId": "u3"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-3",
+        "limit": 200,
+        "afterEntryId": "a2"
+       },
+       "requestId": "id-3"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-3",
+       "seq": "12",
+       "items": [
+        {
+         "turnId": "u3",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "three"
+         },
+         "entryId": "u3"
+        },
+        {
+         "entryId": "a3",
+         "turnId": "u3",
+         "at": "2026-10-25T10:00:05Z",
+         "assistantMessage": {
+          "messageId": "a3",
+          "content": [
+           {
+            "text": "third reply"
+           }
+          ],
+          "stopReason": "STOP_REASON_STOP"
+         }
+        }
+       ],
+       "truncated": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u3",
+        "turnId": "u3",
+        "at": 1792922400000,
+        "entryId": "u3",
+        "text": "three",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "a3",
+        "turnId": "u3",
+        "at": 1792922405000,
+        "entryId": "a3",
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "third reply"
+         }
+        ],
+        "streaming": false,
+        "stop": "stop"
+       }
+      ],
+      "truncated": true,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "last": {
+       "who": "assistant",
+       "text": "third reply",
+       "at": 1792922405000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u3",
+       "turnId": "u3",
+       "at": 1792922400000,
+       "entryId": "u3",
+       "text": "three",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a3",
+       "turnId": "u3",
+       "at": 1792922405000,
+       "entryId": "a3",
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "third reply"
+        }
+       ],
+       "streaming": false,
+       "stop": "stop"
+      }
+     ],
+     "truncated": true,
+     "loading": false
+    }
+   }
+  }
+ ]
+}

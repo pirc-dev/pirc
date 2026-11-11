@@ -1,0 +1,1025 @@
+{
+ "about": "a chat changed by events, and its latest message as the list shows it (core/view.ts)",
+ "cases": [
+  {
+   "fn": "lastOf",
+   "about": "an empty chat has none",
+   "args": [
+    []
+   ],
+   "is": null
+  },
+  {
+   "fn": "lastOf",
+   "about": "the user's first line with text, plain",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "\n  fix the **build**\nplease",
+      "images": []
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "fix the build",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a message of one image alone says so",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "",
+      "images": [
+       {
+        "mimeType": "image/png"
+       }
+      ]
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "An image",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "of several images, how many",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "",
+      "images": [
+       {
+        "mimeType": "image/png"
+       },
+       {
+        "mimeType": "image/png"
+       }
+      ]
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "2 images",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "text with images is the text",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "look",
+      "images": [
+       {
+        "mimeType": "image/png"
+       }
+      ]
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "look",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a finished reply's last text block, heading and code marks dropped",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "## Done: `make` passes"
+       }
+      ],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "Done: make passes",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a list marker is dropped",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "- one"
+       }
+      ],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "one",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a quote",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "> quoted __thing__"
+       }
+      ],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "quoted thing",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a numbered item",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "12. twelfth"
+       }
+      ],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "twelfth",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a reply being written is not yet the latest",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "partial"
+       }
+      ],
+      "streaming": true
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "hi",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a tool call after a reply leaves the reply latest",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "Looking."
+       }
+      ],
+      "streaming": false
+     },
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 5,
+      "name": "bash",
+      "args": "{}"
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "Looking.",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a failed reply with no text gives its error",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": ""
+       }
+      ],
+      "streaming": false,
+      "stop": "error",
+      "error": "overloaded"
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "⚠ overloaded",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a failed reply with no message",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": ""
+       }
+      ],
+      "streaming": false,
+      "stop": "error"
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "⚠ the model failed",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "a stopped reply with no text",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": ""
+       }
+      ],
+      "streaming": false,
+      "stop": "aborted"
+     }
+    ]
+   ],
+   "is": {
+    "who": "assistant",
+    "text": "Stopped.",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "long text is cut to 160 UTF-16 units, the last an ellipsis",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "images": []
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+    "at": 5
+   }
+  },
+  {
+   "fn": "lastOf",
+   "about": "text of exactly 160 is kept whole",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "images": []
+     }
+    ]
+   ],
+   "is": {
+    "who": "user",
+    "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+    "at": 5
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a new item is appended",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "u",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatItem",
+     "id": "s",
+     "item": {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "ok"
+       }
+      ],
+      "streaming": false
+     }
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "ok"
+       }
+      ],
+      "streaming": false
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "an item with a known ID replaces it in place",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "u",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a",
+       "turnId": "",
+       "at": 5,
+       "blocks": [
+        {
+         "kind": "thinking",
+         "text": "hmm"
+        },
+        {
+         "kind": "text",
+         "text": "ok"
+        }
+       ],
+       "streaming": true
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatItem",
+     "id": "s",
+     "item": {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "edited",
+      "images": []
+     }
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "edited",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "a",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "ok"
+       }
+      ],
+      "streaming": true
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a delta for an unknown item makes a streaming reply",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "u",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatDelta",
+     "id": "s",
+     "itemId": "m",
+     "turnId": "t1",
+     "at": 9,
+     "block": 0,
+     "kind": "text",
+     "text": "He"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     },
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "t1",
+      "at": 9,
+      "blocks": [
+       {
+        "kind": "text",
+        "text": "He"
+       }
+      ],
+      "streaming": true
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a delta appends to its block",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "assistant",
+       "id": "m",
+       "turnId": "t1",
+       "at": 9,
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "He"
+        }
+       ],
+       "streaming": true
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatDelta",
+     "id": "s",
+     "itemId": "m",
+     "turnId": "t1",
+     "at": 9,
+     "block": 0,
+     "kind": "text",
+     "text": "llo"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "t1",
+      "at": 9,
+      "blocks": [
+       {
+        "kind": "text",
+        "text": "Hello"
+       }
+      ],
+      "streaming": true
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a delta past the last block adds empty blocks up to it",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "assistant",
+       "id": "m",
+       "turnId": "t1",
+       "at": 9,
+       "blocks": [
+        {
+         "kind": "thinking",
+         "text": "x"
+        }
+       ],
+       "streaming": true
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatDelta",
+     "id": "s",
+     "itemId": "m",
+     "turnId": "t1",
+     "at": 9,
+     "block": 2,
+     "kind": "text",
+     "text": "z"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "t1",
+      "at": 9,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "x"
+       },
+       {
+        "kind": "text",
+        "text": ""
+       },
+       {
+        "kind": "text",
+        "text": "z"
+       }
+      ],
+      "streaming": true
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a delta on a finished reply marks it streaming again",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "assistant",
+       "id": "m",
+       "turnId": "",
+       "at": 5,
+       "blocks": [
+        {
+         "kind": "thinking",
+         "text": "hmm"
+        },
+        {
+         "kind": "text",
+         "text": "done"
+        }
+       ],
+       "streaming": false
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatDelta",
+     "id": "s",
+     "itemId": "m",
+     "turnId": "",
+     "at": 5,
+     "block": 1,
+     "kind": "text",
+     "text": "!"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "",
+      "at": 5,
+      "blocks": [
+       {
+        "kind": "thinking",
+        "text": "hmm"
+       },
+       {
+        "kind": "text",
+        "text": "done!"
+       }
+      ],
+      "streaming": true
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "tool progress replaces the tool's earlier progress",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "tool",
+       "id": "t",
+       "turnId": "",
+       "at": 5,
+       "name": "bash",
+       "args": "{}",
+       "progress": "old"
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "toolProgress",
+     "id": "s",
+     "itemId": "t",
+     "text": "new"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 5,
+      "name": "bash",
+      "args": "{}",
+      "progress": "new"
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "progress for an item that is not a tool changes nothing",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "t",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "toolProgress",
+     "id": "s",
+     "itemId": "t",
+     "text": "new"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "user",
+      "id": "t",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "a reset replaces the chat",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "u",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "chatReset",
+     "id": "s",
+     "chat": {
+      "items": [],
+      "truncated": true,
+      "loading": true
+     }
+    }
+   ],
+   "is": {
+    "items": [],
+    "truncated": true,
+    "loading": true
+   }
+  },
+  {
+   "fn": "applyToChat",
+   "about": "an event for the list leaves the chat as it was",
+   "args": [
+    {
+     "items": [
+      {
+       "kind": "user",
+       "id": "u",
+       "turnId": "",
+       "at": 5,
+       "text": "hi",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    },
+    {
+     "type": "sessionGone",
+     "id": "s"
+    }
+   ],
+   "is": {
+    "items": [
+     {
+      "kind": "user",
+      "id": "u",
+      "turnId": "",
+      "at": 5,
+      "text": "hi",
+      "images": []
+     }
+    ],
+    "truncated": false,
+    "loading": false
+   }
+  }
+ ]
+}

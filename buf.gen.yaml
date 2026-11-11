@@ -1,0 +1,15 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: pirc.dev/relay/internal/pb
+plugins:
+  - local: sh/protoc-gen-go
+    out: relay/internal/pb
+    opt: paths=source_relative
+  - local: node_modules/.bin/protoc-gen-es
+    out: protocol/gen
+    opt:
+      - target=ts
+      - import_extension=ts

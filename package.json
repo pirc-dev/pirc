@@ -1,0 +1,14 @@
+{
+  "name": "pirc",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "devDependencies": {
+    "@bufbuild/buf": "1.74.0",
+    "@bufbuild/protobuf": "2.16.0",
+    "@bufbuild/protoc-gen-es": "2.16.0",
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

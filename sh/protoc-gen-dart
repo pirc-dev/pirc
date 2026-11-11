@@ -1,0 +1,4 @@
+#!/bin/bash
+# protoc-gen-dart at the version pinned in app/pubspec.lock, for
+# buf.gen.dart.yaml.
+cd "$(dirname "$0")/../app" && exec dart run protoc_plugin "$@"

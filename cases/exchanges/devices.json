@@ -1,0 +1,97 @@
+{
+ "about": "the relay's keys, as devices: a host online, and clients, one woken through the push gateway",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "keys": {
+     "keys": [
+      {
+       "publicKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "role": "ROLE_HOST",
+       "label": "laptop",
+       "addedAt": "2026-10-20T10:00:00Z",
+       "online": true
+      },
+      {
+       "publicKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+       "role": "ROLE_CLIENT",
+       "label": "phone",
+       "addedAt": "2026-11-03T21:15:15Z",
+       "push": true,
+       "readKey": true
+      },
+      {
+       "publicKey": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+       "role": "ROLE_CLIENT",
+       "label": "web",
+       "addedAt": "2026-10-25T10:08:07Z",
+       "online": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "devices",
+     "devices": [
+      {
+       "key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+       "role": "host",
+       "label": "laptop",
+       "addedAt": 1792490400000,
+       "online": true,
+       "self": false,
+       "push": false
+      },
+      {
+       "key": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+       "role": "client",
+       "label": "phone",
+       "addedAt": 1793740515000,
+       "online": false,
+       "self": false,
+       "push": true
+      },
+      {
+       "key": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+       "role": "client",
+       "label": "web",
+       "addedAt": 1792922887000,
+       "online": true,
+       "self": false,
+       "push": false
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

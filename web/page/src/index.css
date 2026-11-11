@@ -1,0 +1,422 @@
+@import "tailwindcss";
+
+/* Four looks of one page (look.ts, docs/web.md section 5), chosen by
+   data-look on the root element. Quiet, the default: type and hairlines,
+   colour kept for status. Triage: cards on grey, one blue accent for what
+   can be done. Native: the phone's own system, grouped cards and round
+   status badges in the system font. Cockpit: a terminal's pane in
+   Catppuccin, monospace for names. Each is one palette, light and dark by
+   the system's setting, given to Tailwind as colours (bg-paper, text-ink2,
+   text-done…) and fonts (font-read for the agent's replies, font-ui,
+   font-mono); the names are shared, so most classes need no thought for
+   the look. Triage and Native share the card shape (data-shape="cards"),
+   Quiet and Cockpit the page's: a class prefixed "cards:" applies to both
+   card looks, and "triage:", "native:" or "cockpit:" to one look only,
+   after "cards:" where both apply. */
+@custom-variant cards (&:where([data-shape="cards"], [data-shape="cards"] *));
+@custom-variant triage (&:where([data-look="triage"], [data-look="triage"] *));
+@custom-variant native (&:where([data-look="native"], [data-look="native"] *));
+@custom-variant cockpit (&:where([data-look="cockpit"], [data-look="cockpit"] *));
+
+:root {
+  --paper: #fbfbf9;
+  --ink: #1b1c20;
+  --ink2: #5a5d66;
+  --ink3: #8a8d95;
+  --rule: #e2e2dd;
+  --wash: #f1f1ed;
+  --wash2: #e8e8e3;
+  --scrim: rgb(20 20 24 / 0.28);
+  --sheet: #fbfbf9;
+  /* The card looks'; in Quiet, what stands in for them. */
+  --card: var(--paper);
+  --sheet-card: var(--card);
+  --link: var(--accent);
+  --accent: var(--ink);
+  --on-accent: var(--paper);
+  --accent-soft: var(--wash);
+  --shadow: none;
+  /* Status: herdr's, darkened to read on paper (4.5:1). */
+  --done: #0f766e;
+  --work: #b45309;
+  --idle: #15803d;
+  --block: #b91c1c;
+  --work-wash: rgb(180 83 9 / 0.09);
+  --block-wash: rgb(185 28 28 / 0.08);
+  --done-wash: rgb(15 118 110 / 0.09);
+  --idle-wash: rgb(21 128 61 / 0.08);
+  --read: "Literata Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --ui: "Atkinson Hyperlegible Next Variable", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #16171a;
+    --ink: #e9e7e2;
+    --ink2: #a3a5ac;
+    --ink3: #74767e;
+    --rule: #2a2c31;
+    --wash: #1f2125;
+    --wash2: #2a2c31;
+    --scrim: rgb(0 0 0 / 0.55);
+    --sheet: #1f2125;
+    --done: #5eead4;
+    --work: #fcd34d;
+    --idle: #86efac;
+    --block: #fca5a5;
+    --work-wash: rgb(252 211 77 / 0.08);
+    --block-wash: rgb(252 165 165 / 0.09);
+    --done-wash: rgb(94 234 212 / 0.08);
+    --idle-wash: rgb(134 239 172 / 0.08);
+    color-scheme: dark;
+  }
+}
+
+/* Triage: ink2 and ink3 are its "sub" and "dim", rule its "line", wash
+   its "raise", wash2 its "line2". One sans for reading and the interface. */
+:root[data-look="triage"] {
+  --paper: #f5f6f8;
+  --card: #ffffff;
+  --wash: #eef0f4;
+  --rule: #e1e4ea;
+  --wash2: #cfd3db;
+  --ink: #14161b;
+  --ink2: #555b69;
+  --ink3: #6a7080;
+  --accent: #2f55d4;
+  --on-accent: #ffffff;
+  --accent-soft: #e6ecfd;
+  --sheet: var(--paper);
+  --block: #c0262d;
+  --done: #0f766e;
+  --work: #b45309;
+  --idle: #15803d;
+  --block-wash: #fdecec;
+  --done-wash: #e3f4f1;
+  --work-wash: #fdf1e3;
+  --scrim: rgb(10 12 16 / 0.45);
+  --shadow: 0 1px 2px rgb(20 22 27 / 0.06), 0 2px 8px rgb(20 22 27 / 0.05);
+  --read: "Geist Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui: var(--read);
+  --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="triage"] {
+    --paper: #111317;
+    --card: #1a1d23;
+    --wash: #23272f;
+    --rule: #272b33;
+    --wash2: #353a44;
+    --ink: #eef0f4;
+    --ink2: #a9afbc;
+    --ink3: #8c92a0;
+    --accent: #8ea8ff;
+    --on-accent: #0d1020;
+    --accent-soft: #1f2744;
+    --block: #ff8a8f;
+    --done: #5eead4;
+    --work: #fbbf24;
+    --idle: #86efac;
+    --block-wash: #3a1c20;
+    --done-wash: #12302d;
+    --work-wash: #33270f;
+    --scrim: rgb(0 0 0 / 0.55);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* Native: the system's grouped background and white cards, its blue, and
+   its own font (San Francisco on Apple's, Roboto on Android), so nothing
+   is downloaded. Sheets are a step lighter than the page in dark. */
+:root[data-look="native"] {
+  --paper: #f2f2f7;
+  --card: #ffffff;
+  --sheet-card: #ffffff;
+  --wash: rgb(118 118 128 / 0.12);
+  --wash2: rgb(118 118 128 / 0.2);
+  --rule: rgb(60 60 67 / 0.17);
+  --ink: #121216;
+  --ink2: #62626c;
+  --ink3: #8a8a94;
+  --accent: #1f62e0;
+  --on-accent: #ffffff;
+  --accent-soft: rgb(31 98 224 / 0.12);
+  --sheet: #f2f2f7;
+  --block: #c2261d;
+  --done: #0d6b63;
+  --work: #9c4806;
+  --idle: #13702f;
+  --block-wash: rgb(194 38 29 / 0.11);
+  --done-wash: rgb(15 118 110 / 0.12);
+  --work-wash: rgb(180 83 9 / 0.12);
+  --idle-wash: rgb(21 128 61 / 0.1);
+  --scrim: rgb(10 10 20 / 0.32);
+  --shadow: none;
+  --read: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ui: var(--read);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="native"] {
+    --paper: #000000;
+    --card: #1c1c1e;
+    --sheet-card: #2c2c2e;
+    --wash: rgb(118 118 128 / 0.24);
+    --wash2: rgb(118 118 128 / 0.34);
+    --rule: rgb(84 84 88 / 0.55);
+    --ink: #f5f5f7;
+    --ink2: #a4a4ad;
+    --ink3: #7c7c85;
+    --accent: #5e9bff;
+    --on-accent: #06122b;
+    --accent-soft: rgb(94 155 255 / 0.18);
+    --sheet: #1c1c1e;
+    --block: #fca5a5;
+    --done: #5eead4;
+    --work: #fcd34d;
+    --idle: #86efac;
+    --block-wash: rgb(252 165 165 / 0.15);
+    --done-wash: rgb(94 234 212 / 0.14);
+    --work-wash: rgb(252 211 77 / 0.14);
+    --idle-wash: rgb(134 239 172 / 0.12);
+    --scrim: rgb(0 0 0 / 0.55);
+  }
+}
+
+/* Cockpit: Catppuccin, Latte in light and Mocha in dark, as the terminal
+   beside it; card is its "mantle", wash its "surface0", wash2 "surface1".
+   IBM Plex Sans for prose, JetBrains Mono for names. Status colours are
+   darkened in Latte to read on its base (4.5:1). */
+:root[data-look="cockpit"] {
+  --paper: #eff1f5;
+  --card: #e6e9ef;
+  --wash: #d5d9e2;
+  --wash2: #bcc0cc;
+  --rule: #ccd0da;
+  --ink: #4c4f69;
+  --ink2: #5c5f77;
+  --ink3: #636679;
+  --accent: #7c2fe0;
+  --on-accent: #ffffff;
+  --accent-soft: rgb(124 47 224 / 0.16);
+  --link: #1e57c8;
+  --sheet: #eff1f5;
+  --block: #b4173a;
+  --done: #0f766e;
+  --work: #984507;
+  --idle: #126c2d;
+  --block-wash: rgb(180 23 58 / 0.12);
+  --done-wash: rgb(15 118 110 / 0.12);
+  --work-wash: rgb(180 83 9 / 0.14);
+  --idle-wash: rgb(21 128 61 / 0.1);
+  --scrim: rgb(17 17 27 / 0.4);
+  --read: "IBM Plex Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ui: var(--read);
+  --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-look="cockpit"] {
+    --paper: #1e1e2e;
+    --card: #181825;
+    --wash: #313244;
+    --wash2: #45475a;
+    --rule: #2f3043;
+    --ink: #cdd6f4;
+    --ink2: #a6adc8;
+    --ink3: #9399b2;
+    --accent: #cba6f7;
+    --on-accent: #11111b;
+    --accent-soft: rgb(203 166 247 / 0.2);
+    --link: #89b4fa;
+    --sheet: #1e1e2e;
+    --block: #f38ba8;
+    --done: #94e2d5;
+    --work: #f9e2af;
+    --idle: #a6e3a1;
+    --block-wash: rgb(243 139 168 / 0.14);
+    --done-wash: rgb(148 226 213 / 0.12);
+    --work-wash: rgb(249 226 175 / 0.14);
+    --idle-wash: rgb(166 227 161 / 0.1);
+    --scrim: rgb(17 17 27 / 0.55);
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-rule: var(--rule);
+  --color-wash: var(--wash);
+  --color-wash2: var(--wash2);
+  --color-scrim: var(--scrim);
+  --color-sheet: var(--sheet);
+  --color-done: var(--done);
+  --color-work: var(--work);
+  --color-idle: var(--idle);
+  --color-block: var(--block);
+  --color-work-wash: var(--work-wash);
+  --color-block-wash: var(--block-wash);
+  --color-done-wash: var(--done-wash);
+  --color-idle-wash: var(--idle-wash);
+  --color-sheet-card: var(--sheet-card);
+  --color-link: var(--link);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --shadow-card: var(--shadow);
+  --font-read: var(--read);
+  --font-ui: var(--ui);
+  --font-mono: var(--mono);
+}
+
+@layer base {
+  html, body { background: var(--paper); color: var(--ink); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+  /* Code reads character by character: no "=>" or "===" drawn as one sign. */
+  code, pre, kbd, .font-mono { font-variant-ligatures: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  :is([data-shape="cards"], [data-look="cockpit"]) button:not(:disabled) { cursor: pointer; }
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* The agent's replies: set for reading, in a serif at a comfortable size
+   and measure; headings, lists and tables follow a book's conventions. */
+@layer components {
+  .prose-chat { font-family: var(--read); font-size: 17px; line-height: 1.62; font-optical-sizing: auto; overflow-wrap: anywhere; }
+  .prose-chat > * + * { margin-top: 12px; }
+  .prose-chat > :is(h1, h2, h3, h4) + * { margin-top: 8px; }
+  .prose-chat > * + :is(h1, h2, h3, h4) { margin-top: 20px; }
+  .prose-chat :is(h1, h2, h3, h4) { font-weight: 600; line-height: 1.3; }
+  .prose-chat h1 { font-size: 22px; }
+  .prose-chat h2 { font-size: 20px; }
+  .prose-chat :is(h3, h4) { font-size: 18px; }
+  .prose-chat ul { list-style: disc; padding-left: 1.1em; }
+  .prose-chat ol { list-style: decimal; padding-left: 1.3em; }
+  .prose-chat li + li { margin-top: 4px; }
+  .prose-chat li::marker { color: var(--ink3); }
+  .prose-chat strong { font-weight: 600; }
+  .prose-chat a { text-decoration: underline; text-decoration-color: var(--ink3); text-underline-offset: 3px; }
+  .prose-chat hr { border-color: var(--rule); }
+  .prose-chat blockquote { border-left: 1px solid var(--rule); padding-left: 14px; color: var(--ink2); font-style: italic; }
+  .prose-chat :not(pre) > code { font-family: var(--mono); font-size: 0.8em; background: var(--wash); border-radius: 4px; padding: 1px 5px; }
+  /* Code blocks run edge to edge, in the chat's 20px margin. */
+  .prose-chat .code { margin-inline: -20px; background: var(--wash); }
+  .prose-chat .code pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; padding: 6px 20px 12px; overflow-x: auto; white-space: pre; overflow-wrap: normal; }
+  .prose-chat .code pre:first-child { padding-top: 12px; }
+
+  /* Code's syntax (Markdown.tsx, highlight.js's classes). Quiet keeps to
+     greys, by weight and shade, as its mock-up; the other looks take their
+     palette's colours, which follow light and dark. */
+  .prose-chat .code :is(.hljs-comment, .hljs-quote) { color: var(--ink3); font-style: italic; }
+  .prose-chat .code :is(.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type, .hljs-doctag) { color: var(--ink); font-weight: 600; }
+  .prose-chat .code :is(.hljs-string, .hljs-regexp, .hljs-symbol, .hljs-char, .hljs-addition) { color: var(--ink2); }
+  .prose-chat .code :is(.hljs-number, .hljs-literal, .hljs-title, .hljs-section, .hljs-attr, .hljs-attribute, .hljs-name, .hljs-meta, .hljs-variable, .hljs-template-variable) { color: var(--ink); }
+  .prose-chat .code .hljs-deletion { color: var(--block); }
+  :root:not([data-look="quiet"]) .prose-chat .code :is(.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type, .hljs-doctag) { color: var(--accent); font-weight: inherit; }
+  :root:not([data-look="quiet"]) .prose-chat .code :is(.hljs-string, .hljs-regexp, .hljs-symbol, .hljs-char, .hljs-addition) { color: var(--done); }
+  :root:not([data-look="quiet"]) .prose-chat .code :is(.hljs-number, .hljs-literal) { color: var(--work); }
+  :root:not([data-look="quiet"]) .prose-chat .code :is(.hljs-title, .hljs-section, .hljs-name, .hljs-attr, .hljs-attribute) { color: var(--link); }
+  :root:not([data-look="quiet"]) .prose-chat .code :is(.hljs-meta, .hljs-variable, .hljs-template-variable) { color: var(--ink2); }
+
+  /* Tables (Table.tsx): ruled like a book's, whole words, a readable width
+     per column, and sideways scrolling, with a shadow on the side that
+     hides more. */
+  .prose-chat .table-box {
+    --shade: rgb(0 0 0 / 0.16);
+    overflow-x: auto; overflow-wrap: normal; font-family: var(--ui); font-size: 14px; line-height: 1.45;
+    background:
+      linear-gradient(to right, var(--paper) 30%, transparent) left / 2rem 100% no-repeat local,
+      linear-gradient(to left, var(--paper) 30%, transparent) right / 2rem 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, var(--shade), transparent) left / 0.75rem 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, var(--shade), transparent) right / 0.75rem 100% no-repeat scroll;
+  }
+  .prose-chat table { border-collapse: separate; border-spacing: 0; border-block: 1.5px solid var(--ink); }
+  .prose-chat th, .prose-chat td { padding: 7px 14px 7px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
+  .prose-chat tr:last-child td { border-bottom: 0; }
+  .prose-chat th { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); border-bottom-color: var(--ink3); }
+  .prose-chat td { font-variant-numeric: tabular-nums; }
+  .prose-chat .cell { width: max-content; max-width: 16em; overflow-wrap: break-word; }
+  /* The first column is narrower whether pinned or not: pinning must not
+     change the width it is decided by. */
+  .prose-chat tr > :first-child .cell { max-width: 10em; }
+  /* A table wider than the screen keeps its first column in view. */
+  .prose-chat .pinned tr > :first-child { position: sticky; left: 0; z-index: 1; background: var(--paper); padding-left: 0; box-shadow: inset -1px 0 0 var(--rule); }
+  .prose-chat .pinned tr > :first-child .cell { padding-right: 4px; }
+  @media (prefers-color-scheme: dark) {
+    .prose-chat .table-box { --shade: rgb(255 255 255 / 0.14); }
+  }
+
+  /* While a reply streams, a thin cursor follows its last word; after a
+     code block or a table, it waits under it (Chat.tsx). */
+  .cursor { display: inline-block; width: 2px; height: 1.1em; background: var(--ink); animation: blink 1s steps(2) infinite; }
+  .cursor.after-text { display: none; }
+  .prose-chat.writing:has(> :last-child:is(.code, div, table, hr, blockquote)) ~ .cursor { display: inline-block; }
+  .prose-chat.writing > :is(p, h1, h2, h3, h4):last-child::after,
+  .prose-chat.writing > :is(ul, ol):last-child > li:last-child::after {
+    content: ""; display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; vertical-align: -3px;
+    background: var(--ink); animation: blink 1s steps(2) infinite;
+  }
+
+  /* The notice line under a chat's header: one paragraph, figures in ink. */
+  .notice p + p { margin-top: 2px; }
+  .notice strong { color: var(--ink); font-weight: 600; }
+
+  /* The card looks' replies: the interface's sans, a little smaller; code
+     and tables on cards rather than edge to edge and ruled like a book's. */
+  [data-shape="cards"] .prose-chat { font-size: 15.5px; line-height: 1.6; }
+  [data-shape="cards"] .prose-chat > * + * { margin-top: 0.6em; }
+  [data-shape="cards"] .prose-chat :is(h1, h2, h3, h4) { font-weight: 650; letter-spacing: -0.01em; }
+  [data-shape="cards"] .prose-chat h1 { font-size: 1.3em; }
+  [data-shape="cards"] .prose-chat h2 { font-size: 1.15em; }
+  [data-shape="cards"] .prose-chat :is(h3, h4) { font-size: 1.065em; }
+  [data-shape="cards"] .prose-chat a { color: var(--accent); text-decoration-color: currentColor; text-underline-offset: 2px; }
+  [data-shape="cards"] .prose-chat blockquote { border-left-width: 2px; border-color: var(--wash2); font-style: normal; }
+  [data-shape="cards"] .prose-chat .code { margin-inline: 0; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
+  [data-shape="cards"] .prose-chat .code pre { font-size: 13px; padding: 4px 12px 10px; }
+  [data-shape="cards"] .prose-chat .code pre:first-child { padding-top: 10px; }
+  [data-shape="cards"] .prose-chat .table-box { border: 1px solid var(--rule); border-radius: 12px; --paper: var(--card); background-color: var(--card); }
+  [data-shape="cards"] .prose-chat table { border-block: 0; min-width: 100%; }
+  [data-shape="cards"] .prose-chat :is(th, td) { padding: 7px 10px; }
+  [data-shape="cards"] .prose-chat th { background: var(--wash); text-transform: none; letter-spacing: 0; font-size: 12.5px; border-bottom-color: var(--rule); }
+  [data-shape="cards"] .prose-chat tr > :first-child { font-weight: 600; }
+  [data-shape="cards"] .prose-chat .pinned tr > :first-child { padding-left: 10px; }
+  [data-shape="cards"] .prose-chat .pinned th:first-child { background: var(--wash); }
+  [data-shape="cards"] .cursor,
+  [data-shape="cards"] .prose-chat.writing > :is(p, h1, h2, h3, h4):last-child::after,
+  [data-shape="cards"] .prose-chat.writing > :is(ul, ol):last-child > li:last-child::after { width: 9px; border-radius: 2px; background: var(--accent); }
+
+  /* Native's: the system's size for reading, links in its blue without a
+     line, code on the grouped grey. */
+  [data-look="native"] .prose-chat { font-size: 16px; line-height: 1.5; }
+  [data-look="native"] .prose-chat a { text-decoration: none; }
+  [data-look="native"] .prose-chat .code { background: var(--paper); border-width: 0.5px; }
+
+  /* Cockpit's: prose in Plex, headings as small mono labels in the accent,
+     code and tables in bordered mantle boxes as in a terminal. */
+  [data-look="cockpit"] .prose-chat { font-size: 15px; line-height: 1.6; }
+  [data-look="cockpit"] .prose-chat > * + * { margin-top: 0.55em; }
+  [data-look="cockpit"] .prose-chat > * + :is(h1, h2, h3, h4) { margin-top: 16px; }
+  [data-look="cockpit"] .prose-chat :is(h1, h2, h3, h4) { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  [data-look="cockpit"] .prose-chat a { color: var(--link); text-decoration-color: currentColor; text-underline-offset: 2px; }
+  [data-look="cockpit"] .prose-chat blockquote { font-style: normal; border-left-width: 2px; border-color: var(--wash2); }
+  [data-look="cockpit"] .prose-chat :not(pre) > code { font-size: 13px; background: var(--card); border: 1px solid var(--rule); padding: 0 4px; }
+  [data-look="cockpit"] .prose-chat .code { margin-inline: 0; background: var(--card); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  [data-look="cockpit"] .prose-chat .code pre { padding: 4px 12px 10px; }
+  [data-look="cockpit"] .prose-chat .code pre:first-child { padding-top: 10px; }
+  [data-look="cockpit"] .prose-chat .table-box { border: 1px solid var(--rule); border-radius: 8px; font-size: 13.5px; }
+  [data-look="cockpit"] .prose-chat table { border-block: 0; min-width: 100%; }
+  [data-look="cockpit"] .prose-chat :is(th, td) { padding: 6px 10px; border-right: 1px solid var(--rule); }
+  [data-look="cockpit"] .prose-chat :is(th, td):last-child { border-right: 0; }
+  [data-look="cockpit"] .prose-chat th { background: var(--card); font-family: var(--mono); font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; border-bottom-color: var(--rule); }
+  [data-look="cockpit"] .prose-chat tr > :first-child { font-family: var(--mono); }
+  [data-look="cockpit"] .prose-chat .pinned tr > :first-child { padding-left: 10px; }
+  [data-look="cockpit"] .prose-chat .pinned th:first-child { background: var(--card); }
+  [data-look="cockpit"] .cursor,
+  [data-look="cockpit"] .prose-chat.writing > :is(p, h1, h2, h3, h4):last-child::after,
+  [data-look="cockpit"] .prose-chat.writing > :is(ul, ol):last-child > li:last-child::after { width: 8px; }
+}

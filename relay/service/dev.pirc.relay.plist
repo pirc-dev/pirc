@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The PiRC relay as a launchd daemon on macOS (docs/self-hosting.md): it
+  runs from boot, whether or not anyone is logged in. Install as
+  /Library/LaunchDaemons/dev.pirc.relay.plist, owned by root, after setting
+  UserName to the account that runs it and owns the data directory, and the
+  settings below. Load with
+    sudo launchctl bootstrap system /Library/LaunchDaemons/dev.pirc.relay.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.pirc.relay</string>
+  <key>UserName</key>
+  <string>CHANGE-ME</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/pirc-relay</string>
+    <string>serve</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PIRC_RELAY_DATA_DIR</key>
+    <string>/usr/local/var/pirc-relay</string>
+    <key>PIRC_RELAY_LISTEN</key>
+    <string>127.0.0.1:8443</string>
+    <key>PIRC_RELAY_PLAINTEXT</key>
+    <string>false</string>
+    <key>PIRC_RELAY_TLS_CERT</key>
+    <string></string>
+    <key>PIRC_RELAY_TLS_KEY</key>
+    <string></string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- Retry no faster than this, e.g. while the listen address is not up. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/pirc-relay.log</string>
+</dict>
+</plist>

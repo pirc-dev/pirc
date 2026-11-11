@@ -1,0 +1,24 @@
+# The app's own platform code, as a plugin so that every Flutter engine has
+# it, the background one that handles Android's pushes included: the key
+# store and the prefs (lib/keys/key_store.dart, lib/app/app.dart).
+name: pirc_platform
+description: PiRC's key store and prefs on iOS and Android.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.13.7
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.pirc.platform
+        pluginClass: PircPlatformPlugin
+      ios:
+        pluginClass: PircPlatformPlugin

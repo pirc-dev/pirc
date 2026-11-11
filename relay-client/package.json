@@ -1,0 +1,17 @@
+{
+  "name": "@pirc/relay-client",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./service": "./service.ts"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@pirc/protocol": "workspace:*",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}

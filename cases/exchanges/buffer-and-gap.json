@@ -1,0 +1,679 @@
+{
+ "about": "events that arrive before history wait for it; those it already covers are dropped; a gap fetches history again",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "name": "",
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.1.3"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "3",
+       "at": "2026-10-25T10:00:00Z",
+       "item": {
+        "entryId": "u3",
+        "turnId": "u3",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "covered by history"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "5",
+       "at": "2026-10-25T10:00:00Z",
+       "item": {
+        "entryId": "u5",
+        "turnId": "u5",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "after history"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "4",
+       "items": [
+        {
+         "entryId": "u1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "one"
+         }
+        },
+        {
+         "entryId": "u3",
+         "turnId": "u3",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "covered by history"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1792922400000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u3",
+        "turnId": "u3",
+        "at": 1792922400000,
+        "entryId": "u3",
+        "text": "covered by history",
+        "images": []
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "covered by history",
+       "at": 1792922400000
+      }
+     }
+    },
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "e-u5",
+      "turnId": "u5",
+      "at": 1792922400000,
+      "entryId": "u5",
+      "text": "after history",
+      "images": []
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "after history",
+       "at": 1792922400000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1792922400000,
+       "entryId": "u1",
+       "text": "one",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u3",
+       "turnId": "u3",
+       "at": 1792922400000,
+       "entryId": "u3",
+       "text": "covered by history",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u5",
+       "turnId": "u5",
+       "at": 1792922400000,
+       "entryId": "u5",
+       "text": "after history",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "6",
+       "at": "2026-10-25T10:00:00Z",
+       "item": {
+        "entryId": "u6",
+        "turnId": "u6",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "next"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "e-u6",
+      "turnId": "u6",
+      "at": 1792922400000,
+      "entryId": "u6",
+      "text": "next",
+      "images": []
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "next",
+       "at": 1792922400000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "9",
+       "at": "2026-10-25T10:00:00Z",
+       "item": {
+        "entryId": "u9",
+        "turnId": "u9",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "after a gap"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-2",
+        "limit": 200,
+        "afterEntryId": "u6"
+       },
+       "requestId": "id-2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "10",
+       "at": "2026-10-25T10:00:00Z",
+       "item": {
+        "entryId": "u10",
+        "turnId": "u10",
+        "at": "2026-10-25T10:00:00Z",
+        "userMessage": {
+         "text": "while fetching"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-2",
+       "seq": "9",
+       "items": [
+        {
+         "entryId": "u1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "one"
+         }
+        },
+        {
+         "entryId": "u3",
+         "turnId": "u3",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "covered by history"
+         }
+        },
+        {
+         "entryId": "u5",
+         "turnId": "u5",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "after history"
+         }
+        },
+        {
+         "entryId": "u6",
+         "turnId": "u6",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "next"
+         }
+        },
+        {
+         "entryId": "u9",
+         "turnId": "u9",
+         "at": "2026-10-25T10:00:00Z",
+         "userMessage": {
+          "text": "after a gap"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1792922400000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u3",
+        "turnId": "u3",
+        "at": 1792922400000,
+        "entryId": "u3",
+        "text": "covered by history",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u5",
+        "turnId": "u5",
+        "at": 1792922400000,
+        "entryId": "u5",
+        "text": "after history",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u6",
+        "turnId": "u6",
+        "at": 1792922400000,
+        "entryId": "u6",
+        "text": "next",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u9",
+        "turnId": "u9",
+        "at": 1792922400000,
+        "entryId": "u9",
+        "text": "after a gap",
+        "images": []
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "after a gap",
+       "at": 1792922400000
+      }
+     }
+    },
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "e-u10",
+      "turnId": "u10",
+      "at": 1792922400000,
+      "entryId": "u10",
+      "text": "while fetching",
+      "images": []
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "while fetching",
+       "at": 1792922400000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1792922400000,
+       "entryId": "u1",
+       "text": "one",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u3",
+       "turnId": "u3",
+       "at": 1792922400000,
+       "entryId": "u3",
+       "text": "covered by history",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u5",
+       "turnId": "u5",
+       "at": 1792922400000,
+       "entryId": "u5",
+       "text": "after history",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u6",
+       "turnId": "u6",
+       "at": 1792922400000,
+       "entryId": "u6",
+       "text": "next",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u9",
+       "turnId": "u9",
+       "at": 1792922400000,
+       "entryId": "u9",
+       "text": "after a gap",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u10",
+       "turnId": "u10",
+       "at": 1792922400000,
+       "entryId": "u10",
+       "text": "while fetching",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  }
+ ]
+}

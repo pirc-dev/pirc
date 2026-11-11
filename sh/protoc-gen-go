@@ -1,0 +1,3 @@
+#!/bin/bash
+# protoc-gen-go at the version pinned in relay/go.mod, for buf.gen.yaml.
+cd "$(dirname "$0")/../relay" && exec go tool protoc-gen-go "$@"

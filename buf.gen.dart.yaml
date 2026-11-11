@@ -1,0 +1,6 @@
+# The mobile app's Dart types, generated apart from buf.gen.yaml so that
+# sh/generate.sh, and the deploy, need no Dart (sh/app.sh runs it).
+version: v2
+plugins:
+  - local: sh/protoc-gen-dart
+    out: app/lib/gen

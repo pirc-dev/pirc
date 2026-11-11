@@ -1,0 +1,340 @@
+{
+ "about": "fuzzy matching for pickers (core/fuzzy.ts); positions index UTF-16 units of the text as given",
+ "cases": [
+  {
+   "fn": "fuzzy",
+   "about": "every word must match, in any order, ignoring case",
+   "args": [
+    "opus router",
+    "Claude Opus 4.1 openrouter/anthropic/claude-opus-4.1"
+   ],
+   "is": {
+    "score": 347.3,
+    "positions": [
+     7,
+     8,
+     9,
+     10,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "words in another order",
+   "args": [
+    "router opus",
+    "Claude Opus 4.1 openrouter/anthropic/claude-opus-4.1"
+   ],
+   "is": {
+    "score": 347.3,
+    "positions": [
+     7,
+     8,
+     9,
+     10,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "a word that does not match fails the whole",
+   "args": [
+    "opus gemini",
+    "Claude Opus 4.1 anthropic/claude-opus-4-1"
+   ],
+   "is": null
+  },
+  {
+   "fn": "fuzzy",
+   "about": "letters in order with gaps",
+   "args": [
+    "son45",
+    "anthropic/claude-sonnet-4-5"
+   ],
+   "is": {
+    "score": 29,
+    "positions": [
+     17,
+     18,
+     19,
+     24,
+     26
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "letters in order, a short one",
+   "args": [
+    "gpt5",
+    "openai/gpt-5"
+   ],
+   "is": {
+    "score": 25,
+    "positions": [
+     7,
+     8,
+     9,
+     11
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "letters out of order",
+   "args": [
+    "54tpg",
+    "openai/gpt-5"
+   ],
+   "is": null
+  },
+  {
+   "fn": "fuzzy",
+   "about": "scattered letters do not match",
+   "args": [
+    "son45",
+    "vendor11/model-45-instruct openrouter/vendor11/model-45-instruct"
+   ],
+   "is": null
+  },
+  {
+   "fn": "fuzzy",
+   "about": "each letter follows the last or starts a word",
+   "args": [
+    "cs45",
+    "claude-sonnet-4-5"
+   ],
+   "is": {
+    "score": 19,
+    "positions": [
+     0,
+     7,
+     14,
+     16
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "positions are the matched characters",
+   "args": [
+    "pus",
+    "opus"
+   ],
+   "is": {
+    "score": 129.9,
+    "positions": [
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "an empty query matches with no positions",
+   "args": [
+    "",
+    "opus"
+   ],
+   "is": {
+    "score": 0,
+    "positions": []
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "past letters whose lowercase is longer, and a surrogate pair",
+   "args": [
+    "relay",
+    "İstanbul 🙂 relay"
+   ],
+   "is": {
+    "score": 198.8,
+    "positions": [
+     12,
+     13,
+     14,
+     15,
+     16
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "a letter whose lowercase is longer, in the query",
+   "args": [
+    "İst",
+    "İstanbul 🙂 relay"
+   ],
+   "is": {
+    "score": 180,
+    "positions": [
+     0,
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "Greek's final sigma matches as any sigma",
+   "args": [
+    "λογος",
+    "ΛΟΓΟΣ"
+   ],
+   "is": {
+    "score": 200,
+    "positions": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  {
+   "fn": "fuzzy",
+   "about": "and the other way",
+   "args": [
+    "ΛΟΓΟΣ",
+    "ο λογος"
+   ],
+   "is": {
+    "score": 199.8,
+    "positions": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   }
+  },
+  {
+   "fn": "rank",
+   "about": "whole words and word starts rank above scattered letters",
+   "args": [
+    "mini",
+    [
+     "anthropic/claude-haiku-4-5",
+     "openai/gpt-4o-mini",
+     "google/gemini-2.5-pro",
+     "openai/o4-mini"
+    ]
+   ],
+   "is": [
+    {
+     "item": "openai/o4-mini",
+     "match": {
+      "score": 189,
+      "positions": [
+       10,
+       11,
+       12,
+       13
+      ]
+     }
+    },
+    {
+     "item": "openai/gpt-4o-mini",
+     "match": {
+      "score": 188.6,
+      "positions": [
+       14,
+       15,
+       16,
+       17
+      ]
+     }
+    },
+    {
+     "item": "google/gemini-2.5-pro",
+     "match": {
+      "score": 139.1,
+      "positions": [
+       9,
+       10,
+       11,
+       12
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "fn": "rank",
+   "about": "a word start first",
+   "args": [
+    "gem",
+    [
+     "anthropic/claude-haiku-4-5",
+     "openai/gpt-4o-mini",
+     "google/gemini-2.5-pro",
+     "openai/o4-mini"
+    ]
+   ],
+   "is": [
+    {
+     "item": "google/gemini-2.5-pro",
+     "match": {
+      "score": 179.3,
+      "positions": [
+       7,
+       8,
+       9
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "fn": "rank",
+   "about": "an empty query keeps every item in order",
+   "args": [
+    " ",
+    [
+     "b",
+     "a",
+     "c"
+    ]
+   ],
+   "is": [
+    {
+     "item": "b",
+     "match": {
+      "score": 0,
+      "positions": []
+     }
+    },
+    {
+     "item": "a",
+     "match": {
+      "score": 0,
+      "positions": []
+     }
+    },
+    {
+     "item": "c",
+     "match": {
+      "score": 0,
+      "positions": []
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,686 @@
+{
+ "about": "messages sent from a client before pi shows them (core/pending.ts)",
+ "cases": [
+  {
+   "fn": "userIds",
+   "about": "the user messages' IDs",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "a",
+      "images": []
+     },
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}"
+     },
+     {
+      "kind": "user",
+      "id": "e-2",
+      "turnId": "",
+      "at": 0,
+      "text": "b",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    "e-1",
+    "e-2"
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "the earlier message is not its copy",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "again",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     },
+     {
+      "key": 1,
+      "requestId": "r1",
+      "text": "again",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     },
+     {
+      "key": 2,
+      "requestId": "r2",
+      "text": "with images",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "again",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "a sent message goes when pi's copy appears, each copy claimed once, a copy with a note after the text",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "again",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     },
+     {
+      "key": 1,
+      "requestId": "r1",
+      "text": "again",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     },
+     {
+      "key": 2,
+      "requestId": "r2",
+      "text": "with images",
+      "state": "sending",
+      "before": [
+       "e-1"
+      ]
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "again",
+      "images": []
+     },
+     {
+      "kind": "user",
+      "id": "e-2",
+      "turnId": "",
+      "at": 0,
+      "text": "again",
+      "images": []
+     },
+     {
+      "kind": "user",
+      "id": "e-3",
+      "turnId": "",
+      "at": 0,
+      "text": "with images\n[note]",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    1
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "a copy with a request ID is claimed by that request alone, whatever its text",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "",
+      "state": "sending",
+      "before": []
+     },
+     {
+      "key": 1,
+      "requestId": "r1",
+      "text": "same",
+      "state": "sending",
+      "before": []
+     },
+     {
+      "key": 2,
+      "requestId": "r2",
+      "text": "same",
+      "state": "sending",
+      "before": []
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "[image resized]",
+      "images": [],
+      "requestId": "r0"
+     },
+     {
+      "kind": "user",
+      "id": "e-2",
+      "turnId": "",
+      "at": 0,
+      "text": "same",
+      "images": [],
+      "requestId": "r2"
+     }
+    ]
+   ],
+   "is": [
+    1
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "another request's copy is not its copy",
+   "args": [
+    [
+     {
+      "key": 3,
+      "requestId": "r3",
+      "text": "same",
+      "state": "sending",
+      "before": []
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "[image resized]",
+      "images": [],
+      "requestId": "r0"
+     },
+     {
+      "kind": "user",
+      "id": "e-2",
+      "turnId": "",
+      "at": 0,
+      "text": "same",
+      "images": [],
+      "requestId": "r2"
+     }
+    ]
+   ],
+   "is": [
+    3
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "an exact copy is claimed before one it only starts",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "fix",
+      "state": "sending",
+      "before": []
+     },
+     {
+      "key": 1,
+      "requestId": "r1",
+      "text": "fix the test",
+      "state": "sending",
+      "before": []
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "fix the test",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    0
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "nothing to claim",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "fix",
+      "state": "sending",
+      "before": []
+     },
+     {
+      "key": 1,
+      "requestId": "r1",
+      "text": "fix the test",
+      "state": "sending",
+      "before": []
+     }
+    ],
+    []
+   ],
+   "is": [
+    0,
+    1
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "a refused one stays, the reader's to retry or dismiss",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "hello",
+      "state": "failed",
+      "before": [],
+      "error": "busy"
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "hello",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    0
+   ]
+  },
+  {
+   "fn": "settle",
+   "about": "one with no answer may have reached pi",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "hello",
+      "state": "failed",
+      "before": [],
+      "error": "no answer",
+      "unsure": true
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "hello",
+      "images": []
+     }
+    ]
+   ],
+   "is": []
+  },
+  {
+   "fn": "settle",
+   "about": "an empty message is not claimed by a prefix",
+   "args": [
+    [
+     {
+      "key": 0,
+      "requestId": "r0",
+      "text": "",
+      "state": "sending",
+      "before": []
+     }
+    ],
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "anything",
+      "images": []
+     }
+    ]
+   ],
+   "is": [
+    0
+   ]
+  },
+  {
+   "fn": "answered",
+   "about": "refused",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "hello",
+     "state": "sending",
+     "before": []
+    },
+    false,
+    "busy",
+    false
+   ],
+   "is": {
+    "key": 0,
+    "requestId": "r0",
+    "text": "hello",
+    "state": "failed",
+    "before": [],
+    "error": "busy"
+   }
+  },
+  {
+   "fn": "answered",
+   "about": "no answer",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "hello",
+     "state": "sending",
+     "before": []
+    },
+    false,
+    "no answer",
+    true
+   ],
+   "is": {
+    "key": 0,
+    "requestId": "r0",
+    "text": "hello",
+    "state": "failed",
+    "before": [],
+    "error": "no answer",
+    "unsure": true
+   }
+  },
+  {
+   "fn": "answered",
+   "about": "a command goes",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "/pirc status",
+     "state": "sending",
+     "before": []
+    },
+    true,
+    null,
+    false
+   ],
+   "is": null
+  },
+  {
+   "fn": "answered",
+   "about": "a prompt is sent, and waits for its copy",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "hello",
+     "state": "sending",
+     "before": []
+    },
+    true,
+    null,
+    false
+   ],
+   "is": {
+    "key": 0,
+    "requestId": "r0",
+    "text": "hello",
+    "state": "sent",
+    "before": []
+   }
+  },
+  {
+   "fn": "answered",
+   "about": "a follow-up is queued",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "hello",
+     "state": "sending",
+     "before": [],
+     "delivery": "followUp"
+    },
+    true,
+    null,
+    false
+   ],
+   "is": {
+    "key": 0,
+    "requestId": "r0",
+    "text": "hello",
+    "state": "queued",
+    "before": [],
+    "delivery": "followUp"
+   }
+  },
+  {
+   "fn": "answered",
+   "about": "a steer is queued",
+   "args": [
+    {
+     "key": 0,
+     "requestId": "r0",
+     "text": "hello",
+     "state": "sending",
+     "before": [],
+     "delivery": "steer"
+    },
+    true,
+    null,
+    false
+   ],
+   "is": {
+    "key": 0,
+    "requestId": "r0",
+    "text": "hello",
+    "state": "queued",
+    "before": [],
+    "delivery": "steer"
+   }
+  },
+  {
+   "fn": "quiet",
+   "about": "an empty chat",
+   "args": [
+    []
+   ],
+   "is": true
+  },
+  {
+   "fn": "quiet",
+   "about": "a user message last",
+   "args": [
+    [
+     {
+      "kind": "user",
+      "id": "e-1",
+      "turnId": "",
+      "at": 0,
+      "text": "hi",
+      "images": []
+     }
+    ]
+   ],
+   "is": true
+  },
+  {
+   "fn": "quiet",
+   "about": "a reply being written",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": true
+     }
+    ]
+   ],
+   "is": false
+  },
+  {
+   "fn": "quiet",
+   "about": "a finished reply",
+   "args": [
+    [
+     {
+      "kind": "assistant",
+      "id": "m",
+      "turnId": "",
+      "at": 0,
+      "blocks": [],
+      "streaming": false
+     }
+    ]
+   ],
+   "is": true
+  },
+  {
+   "fn": "quiet",
+   "about": "a tool running",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}"
+     }
+    ]
+   ],
+   "is": false
+  },
+  {
+   "fn": "quiet",
+   "about": "a tool done",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": true
+  },
+  {
+   "fn": "quiet",
+   "about": "one of two parallel tools still runs",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}"
+     },
+     {
+      "kind": "tool",
+      "id": "t2",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": false
+  },
+  {
+   "fn": "quiet",
+   "about": "an earlier turn's unfinished tool is not running",
+   "args": [
+    [
+     {
+      "kind": "tool",
+      "id": "t",
+      "turnId": "old",
+      "at": 0,
+      "name": "bash",
+      "args": "{}"
+     },
+     {
+      "kind": "tool",
+      "id": "t2",
+      "turnId": "",
+      "at": 0,
+      "name": "bash",
+      "args": "{}",
+      "result": {
+       "text": "",
+       "isError": false
+      }
+     }
+    ]
+   ],
+   "is": true
+  }
+ ]
+}

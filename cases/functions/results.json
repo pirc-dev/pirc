@@ -1,0 +1,302 @@
+{
+ "about": "a request's answer as a result (core/results.ts)",
+ "cases": [
+  {
+   "fn": "outcome",
+   "about": "accepted",
+   "args": [
+    {
+     "requestId": "id-1",
+     "accepted": {
+      "requestId": "id-1"
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "accepted"
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "an error, by its code's name",
+   "args": [
+    {
+     "requestId": "id-1",
+     "error": {
+      "code": "ERROR_CODE_SESSION_GONE",
+      "message": "gone",
+      "requestId": "id-1"
+     }
+    }
+   ],
+   "is": {
+    "ok": false,
+    "code": "SESSION_GONE",
+    "message": "gone"
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "the models, with the current one",
+   "args": [
+    {
+     "models": {
+      "requestId": "id-2",
+      "models": [
+       {
+        "model": {
+         "provider": "anthropic",
+         "id": "claude-opus-4-1",
+         "name": "Claude Opus 4.1"
+        },
+        "reasoning": true,
+        "contextWindow": "200000",
+        "images": true
+       },
+       {
+        "reasoning": false
+       }
+      ],
+      "current": {
+       "model": {
+        "provider": "anthropic",
+        "id": "claude-opus-4-1",
+        "name": "Claude Opus 4.1"
+       },
+       "reasoning": true,
+       "contextWindow": "200000",
+       "images": true
+      }
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "models",
+     "models": [
+      {
+       "model": {
+        "provider": "anthropic",
+        "id": "claude-opus-4-1",
+        "name": "Claude Opus 4.1"
+       },
+       "reasoning": true,
+       "contextWindow": 200000,
+       "images": true
+      }
+     ],
+     "current": {
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-opus-4-1",
+       "name": "Claude Opus 4.1"
+      },
+      "reasoning": true,
+      "contextWindow": 200000,
+      "images": true
+     }
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "no models and none current",
+   "args": [
+    {
+     "models": {
+      "requestId": "id-2"
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "models",
+     "models": []
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "the stats",
+   "args": [
+    {
+     "stats": {
+      "requestId": "id-3",
+      "total": {
+       "inputTokens": "1200",
+       "outputTokens": "340",
+       "cacheReadTokens": "50000",
+       "cacheWriteTokens": "7",
+       "cost": 0.125
+      },
+      "contextTokens": "61000",
+      "contextWindow": "200000"
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "stats",
+     "cost": 0.125,
+     "input": 1200,
+     "output": 340,
+     "cacheRead": 50000,
+     "cacheWrite": 7,
+     "contextTokens": 61000,
+     "contextWindow": 200000
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "stats with nothing yet",
+   "args": [
+    {
+     "stats": {
+      "requestId": "id-3"
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "stats",
+     "cost": 0,
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "contextWindow": 0
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "past sessions, times in ms",
+   "args": [
+    {
+     "pastSessions": {
+      "requestId": "id-4",
+      "sessions": [
+       {
+        "path": "/s/a.jsonl",
+        "sessionId": "a",
+        "cwd": "/w",
+        "name": "n",
+        "firstPrompt": "hi",
+        "createdAt": "2026-11-03T10:00:00Z",
+        "modifiedAt": "2026-11-03T10:00:00.250Z",
+        "messageCount": 4
+       },
+       {
+        "path": "/s/b.jsonl"
+       }
+      ],
+      "truncated": true
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "pastSessions",
+     "sessions": [
+      {
+       "path": "/s/a.jsonl",
+       "sessionId": "a",
+       "cwd": "/w",
+       "name": "n",
+       "firstPrompt": "hi",
+       "created": 1793700000000,
+       "modified": 1793700000250,
+       "messages": 4
+      },
+      {
+       "path": "/s/b.jsonl",
+       "sessionId": "",
+       "cwd": "",
+       "name": "",
+       "firstPrompt": "",
+       "created": 0,
+       "modified": 0,
+       "messages": 0
+      }
+     ],
+     "truncated": true
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "the tree",
+   "args": [
+    {
+     "tree": {
+      "requestId": "id-5",
+      "branches": [
+       {
+        "leafId": "l1",
+        "current": true,
+        "prompt": "p",
+        "last": "x",
+        "modifiedAt": "2026-11-03T10:00:00.250Z",
+        "messageCount": 9
+       },
+       {
+        "leafId": "l2"
+       }
+      ]
+     }
+    }
+   ],
+   "is": {
+    "ok": true,
+    "result": {
+     "kind": "tree",
+     "branches": [
+      {
+       "leafId": "l1",
+       "current": true,
+       "prompt": "p",
+       "last": "x",
+       "modified": 1793700000250,
+       "messages": 9
+      },
+      {
+       "leafId": "l2",
+       "current": false,
+       "prompt": "",
+       "last": "",
+       "modified": 0,
+       "messages": 0
+      }
+     ],
+     "truncated": false
+    }
+   }
+  },
+  {
+   "fn": "outcome",
+   "about": "anything else is unexpected",
+   "args": [
+    {
+     "requestId": "id-6",
+     "commands": {
+      "requestId": "id-6"
+     }
+    }
+   ],
+   "is": {
+    "ok": false,
+    "code": "INVALID",
+    "message": "unexpected answer: commands"
+   }
+  }
+ ]
+}

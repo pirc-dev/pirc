@@ -1,0 +1,422 @@
+{
+ "about": "which sessions to notify: the last number shown for each, and the sessions now (core/notices.ts)",
+ "cases": [
+  {
+   "fn": "news",
+   "about": "a session seen for the first time is not news, even with a notice",
+   "args": [
+    {},
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 5,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "b",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [],
+    "shown": {
+     "a": 5,
+     "b": 0
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "a notice past the last shown is news",
+   "args": [
+    {
+     "a": 5,
+     "b": 0
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 9,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "b",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [
+     "a"
+    ],
+    "shown": {
+     "a": 9,
+     "b": 0
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "the same notice again is not",
+   "args": [
+    {
+     "a": 9
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 9,
+       "kind": "finished",
+       "text": ""
+      }
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [],
+    "shown": {
+     "a": 9
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "a session's first notice, after it was seen with none",
+   "args": [
+    {
+     "b": 0
+    },
+    [
+     {
+      "id": "b",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 3,
+       "kind": "question",
+       "text": "Proceed?"
+      }
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [
+     "b"
+    ],
+    "shown": {
+     "b": 3
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "several sessions with news: each",
+   "args": [
+    {
+     "a": 1,
+     "b": 2,
+     "c": 3
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 4,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "b",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 2,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "c",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 8,
+       "kind": "failed",
+       "text": ""
+      }
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [
+     "a",
+     "c"
+    ],
+    "shown": {
+     "a": 4,
+     "b": 2,
+     "c": 8
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "a session no longer listed is forgotten",
+   "args": [
+    {
+     "a": 5,
+     "gone": 7
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 5,
+       "kind": "finished",
+       "text": ""
+      }
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [],
+    "shown": {
+     "a": 5
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "a lower number than shown is not news, and the higher is kept",
+   "args": [
+    {
+     "a": 9
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 4,
+       "kind": "finished",
+       "text": ""
+      }
+     }
+    ],
+    null
+   ],
+   "is": {
+    "notify": [],
+    "shown": {
+     "a": 9
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "with since: one first seen with a notice after it is news",
+   "args": [
+    {},
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 1500,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "b",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 900,
+       "kind": "finished",
+       "text": ""
+      }
+     },
+     {
+      "id": "c",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ],
+    1000
+   ],
+   "is": {
+    "notify": [
+     "a"
+    ],
+    "shown": {
+     "a": 1500,
+     "b": 900,
+     "c": 0
+    }
+   }
+  },
+  {
+   "fn": "news",
+   "about": "with since: one already seen keeps its own number",
+   "args": [
+    {
+     "a": 1200
+    },
+    [
+     {
+      "id": "a",
+      "sessionId": "s",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "release",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "notice": {
+       "number": 1100,
+       "kind": "finished",
+       "text": ""
+      }
+     }
+    ],
+    1000
+   ],
+   "is": {
+    "notify": [],
+    "shown": {
+     "a": 1200
+    }
+   }
+  }
+ ]
+}

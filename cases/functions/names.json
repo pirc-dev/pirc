@@ -1,0 +1,415 @@
+{
+ "about": "what a session is called (core/names.ts)",
+ "cases": [
+  {
+   "fn": "folder",
+   "about": "the last part of the path",
+   "args": [
+    "/home/me/src/pirc"
+   ],
+   "is": "pirc"
+  },
+  {
+   "fn": "folder",
+   "about": "a trailing slash is ignored",
+   "args": [
+    "/home/me/src/pirc/"
+   ],
+   "is": "pirc"
+  },
+  {
+   "fn": "folder",
+   "about": "the root is itself",
+   "args": [
+    "/"
+   ],
+   "is": "/"
+  },
+  {
+   "fn": "folder",
+   "about": "no folder is pi",
+   "args": [
+    ""
+   ],
+   "is": "pi"
+  },
+  {
+   "fn": "title",
+   "about": "pi's name first",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "h",
+     "hostname": "h",
+     "name": "  release  ",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "first": "fix the build"
+    }
+   ],
+   "is": "release"
+  },
+  {
+   "fn": "title",
+   "about": "a blank name falls to the first message",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "h",
+     "hostname": "h",
+     "name": "   ",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "first": "fix the build"
+    }
+   ],
+   "is": "fix the build"
+  },
+  {
+   "fn": "title",
+   "about": "with neither, the folder",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "h",
+     "hostname": "h",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": ""
+    }
+   ],
+   "is": "pirc"
+  },
+  {
+   "fn": "windowOf",
+   "about": "the display string first",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "display": "work:2",
+      "window": "api"
+     }
+    }
+   ],
+   "is": "work:2"
+  },
+  {
+   "fn": "windowOf",
+   "about": "else the window",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "window": "api"
+     }
+    }
+   ],
+   "is": "api"
+  },
+  {
+   "fn": "windowOf",
+   "about": "an empty one is none",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "window": ""
+     }
+    }
+   ],
+   "is": null
+  },
+  {
+   "fn": "windowOf",
+   "about": "no place, none",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": ""
+    }
+   ],
+   "is": null
+  },
+  {
+   "fn": "details",
+   "about": "the folder and the model's name",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "model": {
+      "provider": "anthropic",
+      "id": "claude-opus-4-1",
+      "name": "Claude Opus 4.1"
+     }
+    }
+   ],
+   "is": "/home/me/src/pirc · Claude Opus 4.1"
+  },
+  {
+   "fn": "details",
+   "about": "the model's ID when it has no name",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "model": {
+      "provider": "anthropic",
+      "id": "claude-opus-4-1",
+      "name": ""
+     }
+    }
+   ],
+   "is": "/home/me/src/pirc · claude-opus-4-1"
+  },
+  {
+   "fn": "details",
+   "about": "no model, the folder alone",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": ""
+    }
+   ],
+   "is": "/home/me/src/pirc"
+  },
+  {
+   "fn": "where",
+   "about": "the host's label, group and window",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "group": "work",
+      "window": "api"
+     }
+    }
+   ],
+   "is": "LC › work › api"
+  },
+  {
+   "fn": "where",
+   "about": "a display string in place of the names",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "display": "work:2",
+      "group": "work",
+      "window": "api"
+     }
+    }
+   ],
+   "is": "LC › work:2"
+  },
+  {
+   "fn": "where",
+   "about": "the hostname when there is no label",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "place": {
+      "kind": "tmux",
+      "window": "api"
+     }
+    }
+   ],
+   "is": "laptop › api"
+  },
+  {
+   "fn": "where",
+   "about": "no place, the host alone",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "LC",
+     "hostname": "laptop",
+     "name": "",
+     "cwd": "/home/me/src/pirc",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": ""
+    }
+   ],
+   "is": "LC"
+  },
+  {
+   "fn": "ago",
+   "about": "under a minute",
+   "args": [
+    1793699940001,
+    1793700000000
+   ],
+   "is": "now"
+  },
+  {
+   "fn": "ago",
+   "about": "a clock ahead counts as now",
+   "args": [
+    1793700300000,
+    1793700000000
+   ],
+   "is": "now"
+  },
+  {
+   "fn": "ago",
+   "about": "minutes",
+   "args": [
+    1793699700000,
+    1793700000000
+   ],
+   "is": "5m"
+  },
+  {
+   "fn": "ago",
+   "about": "just under the hour",
+   "args": [
+    1793696400001,
+    1793700000000
+   ],
+   "is": "59m"
+  },
+  {
+   "fn": "ago",
+   "about": "hours, rounded down",
+   "args": [
+    1793685660000,
+    1793700000000
+   ],
+   "is": "3h"
+  },
+  {
+   "fn": "ago",
+   "about": "past a day, the weekday",
+   "args": [
+    1793613600000,
+    1793700000000
+   ],
+   "is": "weekday 1793613600000"
+  },
+  {
+   "fn": "ago",
+   "about": "just under six days, still the weekday",
+   "args": [
+    1793181660000,
+    1793700000000
+   ],
+   "is": "weekday 1793181660000"
+  },
+  {
+   "fn": "ago",
+   "about": "six days and more, the date",
+   "args": [
+    1793181600000,
+    1793700000000
+   ],
+   "is": "date 1793181600000"
+  }
+ ]
+}

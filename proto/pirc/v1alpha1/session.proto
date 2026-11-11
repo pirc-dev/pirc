@@ -1,0 +1,726 @@
+// The session protocol: messages between a pi session (the extension) and
+// its clients, carried as opaque payload bytes by the relay (relay.proto).
+// End-to-end encryption, when it comes, wraps these bytes and changes
+// nothing in this file.
+syntax = "proto3";
+
+package pirc.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+import "pirc/v1alpha1/common.proto";
+
+// What a session publishes about itself; the relay stores the latest and
+// replays it (relay.proto, SessionAnnounce).
+message SessionAnnouncement {
+  // Display only (docs/design.md, section 4).
+  string name = 1;
+  // The session's working directory on the host.
+  string cwd = 2;
+  // The host's own name for itself.
+  string hostname = 3;
+  Model model = 4;
+  ThinkingLevel thinking_level = 5;
+  // Whether the agent is running a turn.
+  bool working = 6;
+  // From the session file's header; stable across resume.
+  google.protobuf.Timestamp started_at = 7;
+  // The session this process ran before this one, if the process changed
+  // session (new, resume, fork).
+  string replaces_session_id = 8;
+  // How the process came to this session.
+  SessionOrigin origin = 9;
+  // Versions, for diagnostics and compatibility.
+  string pi_version = 10;
+  string extension_version = 11;
+  // Whether pi is compacting the session's context, asked or on its own;
+  // pi takes no prompts meanwhile.
+  bool compacting = 12;
+  // Where pi runs: its tmux or herdr names, or what another extension
+  // gave. Unset when unknown, or turned off (docs/design.md, section 4).
+  Place place = 13;
+  // The first line of the user's first message, cut short: what pi shows
+  // for a session with no name (docs/design.md, section 4). Empty before
+  // one.
+  string first_prompt = 14;
+  // The requests the session takes, by their field names in SessionMessage
+  // ("prompt", "list_past_sessions"), so that a client refuses at once one
+  // it would otherwise wait on in vain, and can leave out what it would
+  // offer. Empty from extensions that do not say (before 0.1.10): a client
+  // then sends as it did before.
+  repeated string requests = 15;
+  // How this process opens a new pi beside itself (Launch): "tmux",
+  // "herdr", or the name another extension gave; empty when it cannot.
+  string launcher = 16;
+  // The Launch that started this process, if one did: its request_id, so
+  // that the client that asked can open the new session once it appears.
+  string launch_id = 17;
+  // The dialogs pi is showing in its terminal for extensions, waiting for
+  // the person, oldest first; empty when there are none.
+  repeated Question questions = 18;
+  // The latest thing in the session worth a notification, unset before the
+  // first (docs/design.md, section 12, step 13).
+  Notice notice = 19;
+}
+
+// Something a session did worth telling the person of: a client that shows
+// notifications shows one whose number is past the last it showed for the
+// session, writing the title and text itself. Each pi process raises them
+// for its own turns and questions only.
+message Notice {
+  // Goes up with each notice of the session, across pi processes too (a
+  // restart, or /resume back to it), since it is the time the notice was
+  // raised, in milliseconds since the epoch, which a client may read as
+  // such; one past the last if the clock went back.
+  uint64 number = 1;
+  NoticeKind kind = 2;
+  // The reply's text, the error, or the question's title and message,
+  // with runs of whitespace made one space, cut to 120 Unicode code points,
+  // "…" included when cut. Empty for a turn that ended with no text, or a
+  // question with neither.
+  string text = 3;
+}
+
+enum NoticeKind {
+  NOTICE_KIND_UNSPECIFIED = 0;
+  // A turn ended, other than by an abort, which raises nothing.
+  NOTICE_KIND_FINISHED = 1;
+  // A turn ended in an error.
+  NOTICE_KIND_FAILED = 2;
+  // pi started showing a question (the newest, if several came at once);
+  // one already showing when the session started raises nothing.
+  NOTICE_KIND_QUESTION = 3;
+}
+
+// A dialog an extension asked pi to show (its ctx.ui): select, confirm and
+// input can be answered by a client as well as in pi's terminal, whichever
+// comes first; an editor or a custom dialog only in the terminal, and is
+// shown so that a client can say what the session waits for
+// (docs/design.md, section 8).
+message Question {
+  // Unique within the process.
+  string id = 1;
+  QuestionKind kind = 2;
+  // As the extension gave them; long ones cut short.
+  string title = 3;
+  // confirm's message.
+  string message = 4;
+  // select's options, in order.
+  repeated string options = 5;
+  // input's placeholder.
+  string placeholder = 6;
+  // Whether a client can answer it (Answer): false for an editor or a
+  // custom dialog, and for a select with more options than fit.
+  bool answerable = 7;
+  google.protobuf.Timestamp asked_at = 8;
+}
+
+enum QuestionKind {
+  QUESTION_KIND_UNSPECIFIED = 0;
+  QUESTION_KIND_SELECT = 1;
+  QUESTION_KIND_CONFIRM = 2;
+  QUESTION_KIND_INPUT = 3;
+  QUESTION_KIND_EDITOR = 4;
+  QUESTION_KIND_CUSTOM = 5;
+}
+
+// The terminal a pi process runs in, as its multiplexer names it. The
+// extension detects tmux and herdr itself; another pi extension can give
+// any place instead (the pirc:place event). Each name is at most 128
+// bytes.
+message Place {
+  // "tmux", "herdr", or what the extension that gave it says.
+  string kind = 1;
+  // The tmux session, the herdr workspace.
+  string group = 2;
+  optional uint32 group_number = 3;
+  // The tmux window, the herdr tab.
+  string window = 4;
+  optional uint32 window_number = 5;
+  // The pane's own label, where it has one.
+  string pane = 6;
+  // Shown as it is, in place of the names above, when an extension knows
+  // no structure.
+  string display = 7;
+}
+
+enum SessionOrigin {
+  SESSION_ORIGIN_UNSPECIFIED = 0;
+  SESSION_ORIGIN_STARTUP = 1;
+  SESSION_ORIGIN_NEW = 2;
+  SESSION_ORIGIN_RESUME = 3;
+  SESSION_ORIGIN_FORK = 4;
+  SESSION_ORIGIN_RELOAD = 5;
+}
+
+message Model {
+  string provider = 1;
+  string id = 2;
+  // pi's display name for the model; empty when pi has none. Display only:
+  // a model is identified by provider and id.
+  string name = 3;
+}
+
+enum ThinkingLevel {
+  THINKING_LEVEL_UNSPECIFIED = 0;
+  THINKING_LEVEL_OFF = 1;
+  THINKING_LEVEL_MINIMAL = 2;
+  THINKING_LEVEL_LOW = 3;
+  THINKING_LEVEL_MEDIUM = 4;
+  THINKING_LEVEL_HIGH = 5;
+  THINKING_LEVEL_XHIGH = 6;
+  THINKING_LEVEL_MAX = 7;
+}
+
+// Every payload of a relay.proto Routed frame.
+message SessionMessage {
+  // A request's ID again, outside body, which clients set on every
+  // request: a session that does not know the request's kind finds no
+  // body, but can still answer it (INVALID, with this ID).
+  string request_id = 50;
+  oneof body {
+    // Client to session.
+    Prompt prompt = 1;
+    Abort abort = 2;
+    HistoryRequest history_request = 3;
+    // Actions (docs/design.md, section 7).
+    ListModels list_models = 4;
+    SetModel set_model = 5;
+    SetThinkingLevel set_thinking_level = 6;
+    Compact compact = 7;
+    NewSession new_session = 8;
+    Rename rename = 9;
+    StatsRequest stats_request = 17;
+    ListCommands list_commands = 18;
+    Fork fork = 19;
+    Clone clone = 20;
+    ListPastSessions list_past_sessions = 21;
+    Resume resume = 22;
+    Reload reload = 24;
+    NavigateTree navigate_tree = 25;
+    ListTree list_tree = 26;
+    Stop stop = 28;
+    Launch launch = 29;
+    Answer answer = 30;
+
+    // Session to client(s).
+    SessionEvent event = 10;
+    History history = 11;
+    Accepted accepted = 12;
+    Error error = 13;
+    Models models = 14;
+    Stats stats = 15;
+    Commands commands = 16;
+    PastSessions past_sessions = 23;
+    Tree tree = 27;
+  }
+}
+
+// --- Actions ------------------------------------------------------------
+//
+// Each carries a request_id, unique per client, and is answered once:
+// Accepted or Error, or for a question its answer (Models, Stats,
+// Commands). A change is broadcast as a SessionEvent before its Accepted,
+// so the asker sees the session's new state by the time it learns of
+// success. Changes are idempotent per client and request_id, as prompts
+// are; questions are simply answered again.
+
+// Asks for the models pi can use now (those with credentials).
+message ListModels {
+  string request_id = 1;
+}
+
+message Models {
+  string request_id = 1;
+  // pi's order.
+  repeated ModelInfo models = 2;
+  // The session's model; unset when pi has none. It may be missing from
+  // models (e.g. its credentials were removed since it was chosen).
+  ModelInfo current = 3;
+}
+
+message ModelInfo {
+  Model model = 1;
+  // Whether the model has a thinking mode.
+  bool reasoning = 2;
+  // Tokens; 0 when unknown.
+  uint64 context_window = 3;
+  // Whether it accepts images.
+  bool images = 4;
+}
+
+// Switches the session's model (pi's setModel): recorded in the session,
+// so resuming it brings the model back, but not made pi's default for new
+// sessions, which only pi's own /model does. pi also re-applies a
+// thinking level for the new model (its per-model setting, else pi's
+// default, else the current level); the announcement shows the outcome.
+// INVALID when model is unset or pi does not know it, PI_FAILED for one
+// without credentials.
+message SetModel {
+  string request_id = 1;
+  // provider and id; name is ignored.
+  Model model = 2;
+}
+
+// Sets the thinking level. pi clamps it to the nearest level the model
+// supports; the announcement broadcast before Accepted carries the level
+// in effect, which may differ from the one asked for. INVALID when the
+// level is unspecified.
+message SetThinkingLevel {
+  string request_id = 1;
+  ThinkingLevel level = 2;
+}
+
+// Compacts the session's context. The announcement shows the session
+// compacting from when the request is taken. Accepted when the compaction
+// is done (its Compaction item precedes the Accepted); Error PI_FAILED
+// with pi's reason when it fails ("Nothing to compact"), SESSION_GONE
+// when the session ends first. It can take minutes. BUSY while the agent
+// is working, since pi would abort the turn first, while it compacts, or
+// while the session is being replaced. An Abort stops it in pi's
+// interactive mode (pi 1.0.0 aborts a compaction with the run), answering
+// it PI_FAILED.
+message Compact {
+  string request_id = 1;
+  // Passed to pi's summariser; empty for none.
+  string instructions = 2;
+}
+
+// Starts a new session in the same process, as pi's /new. Accepted from
+// the old session as pi commits to the change (its shutdown for a new
+// session), before that session ends; the new one is then announced with
+// replaces_session_id. PI_FAILED when another extension cancels the
+// switch, SESSION_GONE when the session ends otherwise first (a resume at
+// the terminal), TIMEOUT after 30 seconds. BUSY while the agent is
+// working, since pi would abort the turn, while it compacts, or while a
+// replacement is under way.
+message NewSession {
+  string request_id = 1;
+}
+
+// Forks the session before one of the user's messages, as pi's /fork: pi
+// moves the process to a new session holding the conversation up to that
+// message, leaving the message out (a client offers it again, to edit and
+// send). Answered as NewSession, the new session announced with
+// replaces_session_id. INVALID when entry_id is not a user message of this
+// session; PI_FAILED, BUSY, SESSION_GONE and TIMEOUT as NewSession.
+message Fork {
+  string request_id = 1;
+  // A user message's ConversationItem.entry_id.
+  string entry_id = 2;
+}
+
+// Copies the session as it is into a new one, as pi's /clone, and moves
+// the process to it. Answered as NewSession; INVALID when the session has
+// nothing to copy yet.
+message Clone {
+  string request_id = 1;
+}
+
+// Asks for the sessions pi has saved, as pi's /resume lists them: those
+// started in the folder of this session, or with all_folders every
+// folder's. This session is left out.
+message ListPastSessions {
+  string request_id = 1;
+  bool all_folders = 2;
+}
+
+message PastSessions {
+  string request_id = 1;
+  // Newest change first.
+  repeated PastSession sessions = 2;
+  // Older ones were left out to fit the frame.
+  bool truncated = 3;
+}
+
+message PastSession {
+  // The session file, which Resume names.
+  string path = 1;
+  string session_id = 2;
+  // The folder it was started in; empty for sessions older than pi kept it.
+  string cwd = 3;
+  // Its name, as pi's /name gives it; empty when it has none.
+  string name = 4;
+  // Its first prompt, cut to its start.
+  string first_prompt = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp modified_at = 7;
+  uint32 message_count = 8;
+}
+
+// Moves the process to a saved session, as pi's /resume: to its folder, if
+// that is another. Answered as NewSession, the session announced with
+// replaces_session_id and origin RESUME. INVALID when path is not one of
+// the sessions ListPastSessions would list, is this session, or names a
+// folder that no longer exists; PI_FAILED, BUSY, SESSION_GONE and TIMEOUT
+// as NewSession. A folder pi does not trust yet makes it ask at its
+// terminal, and the client sees TIMEOUT (docs/design.md, section 8).
+message Resume {
+  string request_id = 1;
+  // A PastSession.path.
+  string path = 2;
+}
+
+// Reloads pi's extensions, skills, prompt templates, themes and context
+// files, as pi's /reload; the session carries on. Accepted when pi starts
+// the reload; requests during it are answered BUSY, and the session is
+// announced again when it is done. A reload that fails shows its error
+// only at pi's terminal (docs/design.md, section 8). BUSY while the agent
+// is working or compacting, or while a replacement is under way;
+// SESSION_GONE and TIMEOUT as NewSession.
+message Reload {
+  string request_id = 1;
+}
+
+// Ends this pi process, as quitting it at its terminal does (pi's
+// shutdown). Accepted first, then the process exits and its session ends.
+// BUSY while pi is working: stop the turn first.
+message Stop {
+  string request_id = 1;
+}
+
+// Opens a new pi beside this one, in the same tmux session or herdr
+// workspace, through the process's launcher (SessionAnnouncement.launcher),
+// in the folder given (a leading ~ is the home directory), which must
+// exist on the host: INVALID otherwise, and when the process has no
+// launcher. Accepted once the launcher has run; the new pi announces this
+// request's ID as its launch_id when it connects (docs/design.md, section 4).
+message Launch {
+  string request_id = 1;
+  string cwd = 2;
+  // The new tmux window's or herdr tab's name; empty leaves it to the
+  // multiplexer.
+  string name = 3;
+}
+
+// Answers one of the session's questions (SessionAnnouncement.questions),
+// as the person would in pi's terminal, which then closes its dialog:
+// option for a select (its index), confirmed for a confirm, text for an
+// input, or dismissed for any of them, as Escape does. INVALID when the
+// question is no longer asked, cannot be answered from a client, or the
+// answer does not fit it. Accepted once the extension has its answer; the
+// question then leaves the announcement.
+message Answer {
+  string request_id = 1;
+  string question_id = 2;
+  oneof value {
+    uint32 option = 3;
+    bool confirmed = 4;
+    string text = 5;
+    bool dismissed = 6;
+  }
+}
+
+// Moves the session to another point of its tree, as pi's /tree, in the
+// same session file. At one of the user's messages, the session goes back
+// to just before it (a client offers its text again, to edit and send);
+// at any other entry, such as a Branch's leaf_id, to just after it. What
+// it leaves stays in the file as a branch (ListTree). With summarize, pi
+// first summarises the branch left, as a BranchSummary item at the new
+// point, and the session is announced compacting meanwhile. Broadcast as
+// BranchChanged, then Accepted. INVALID when entry_id is not an entry of
+// this session; BUSY while the agent is working or compacting, or while a
+// replacement is under way; PI_FAILED when pi or another extension refuses
+// it; SESSION_GONE and TIMEOUT as NewSession.
+message NavigateTree {
+  string request_id = 1;
+  string entry_id = 2;
+  bool summarize = 3;
+}
+
+// Asks for the session's branches: the current one, and every other path
+// through pi's tree to an entry with nothing after it that has messages
+// of its own.
+message ListTree {
+  string request_id = 1;
+}
+
+message Tree {
+  string request_id = 1;
+  // The current branch first, then the newest change first.
+  repeated Branch branches = 2;
+  // Older ones were left out to fit the frame.
+  bool truncated = 3;
+}
+
+message Branch {
+  // The entry it ends at, which NavigateTree names to switch to it; empty
+  // for a current branch with nothing on it yet.
+  string leaf_id = 1;
+  bool current = 2;
+  // Its first user message after it leaves the current branch (for the
+  // current branch, its last user message), and its last message's text,
+  // each cut to their start.
+  string prompt = 3;
+  string last = 4;
+  // When its last entry was written.
+  google.protobuf.Timestamp modified_at = 5;
+  // Its messages after it leaves the current branch (for the current
+  // branch, all of them).
+  uint32 message_count = 6;
+}
+
+// Sets the session's display name, as pi's /name. INVALID when empty.
+message Rename {
+  string request_id = 1;
+  string name = 2;
+}
+
+// Asks for the session's totals and context use.
+message StatsRequest {
+  string request_id = 1;
+}
+
+message Stats {
+  string request_id = 1;
+  // Summed over the whole session file, every branch, as pi's own
+  // session totals are (getSessionStats in pi 1.0.0): assistant messages,
+  // tool results, compaction and branch summaries, and usage entries.
+  Usage total = 2;
+  // Context use as pi estimates it. Unset when unknown, e.g. right after
+  // a compaction until the next reply.
+  optional uint64 context_tokens = 3;
+  // The model's context window; 0 when there is no model.
+  uint64 context_window = 4;
+}
+
+// Asks for the commands a client can send as prompt text: extension
+// commands, prompt templates and skills. pi's built-in commands are not
+// among them (docs/design.md, section 8), nor PiRC's own, which are
+// refused as prompt text.
+message ListCommands {
+  string request_id = 1;
+}
+
+message Commands {
+  string request_id = 1;
+  repeated CommandInfo commands = 2;
+}
+
+message CommandInfo {
+  // Without the leading slash.
+  string name = 1;
+  string description = 2;
+  CommandSource source = 3;
+}
+
+enum CommandSource {
+  COMMAND_SOURCE_UNSPECIFIED = 0;
+  COMMAND_SOURCE_EXTENSION = 1;
+  COMMAND_SOURCE_PROMPT = 2;
+  COMMAND_SOURCE_SKILL = 3;
+}
+
+// How a prompt is delivered when the agent is already running a turn
+// (pi's deliverAs). Ignored when the agent is idle.
+enum Delivery {
+  DELIVERY_UNSPECIFIED = 0;
+  // Interrupt the running turn with this message.
+  DELIVERY_STEER = 1;
+  // Queue it to run after the running turn.
+  DELIVERY_FOLLOW_UP = 2;
+}
+
+message Prompt {
+  // Client-chosen, unique per client. Also the idempotency key: the
+  // session runs a request_id at most once per client, and answers a
+  // repeat with the original outcome.
+  string request_id = 1;
+  string text = 2;
+  repeated Image images = 3;
+  Delivery delivery = 4;
+}
+
+message Image {
+  // e.g. "image/png".
+  string mime_type = 1;
+  // Empty in an item when the image was left out to keep the frame
+  // within the size limit; the client shows a placeholder.
+  bytes data = 2;
+}
+
+message Abort {
+  string request_id = 1;
+}
+
+// Ask for the conversation so far. The answer goes to the asking client
+// only; live events keep flowing to everyone attached.
+message HistoryRequest {
+  string request_id = 1;
+  // At most this many items, newest last; 0 means all.
+  uint32 limit = 2;
+  // Only the items after this entry, for a client that has the
+  // conversation up to it (a phone's kept chat): its last item's entry ID.
+  // When the entry is not on the session's branch, or more than `limit`
+  // items follow it, the answer is the usual last `limit` instead, with
+  // History.from_entry unset.
+  string after_entry_id = 3;
+}
+
+message History {
+  string request_id = 1;
+  repeated ConversationItem items = 2;
+  // The sequence number of the last event reflected in `items`. Live
+  // events with a higher seq follow it; a client discards lower ones.
+  uint64 seq = 3;
+  // True when `limit` cut older items off.
+  bool truncated = 4;
+  // The items are those after HistoryRequest.after_entry_id: the client
+  // keeps what it has up to that entry's items and appends these, dropping
+  // what it had after them. Unset, the items replace the conversation.
+  bool from_entry = 5;
+}
+
+// The session took a request; its effect follows as events (a prompt's
+// UserMessage carries the same request_id). Errors come as Error.
+message Accepted {
+  string request_id = 1;
+}
+
+// A live change in the session, broadcast to every attached client.
+message SessionEvent {
+  // Per session and process, starting at 1, increasing by 1 with no gaps.
+  // A gap means a client missed events and should request History.
+  uint64 seq = 1;
+  google.protobuf.Timestamp at = 2;
+  oneof body {
+    // A complete conversation item: a user message, a finished assistant
+    // message, a tool call, a tool result.
+    ConversationItem item = 3;
+    // A piece of an assistant message still being written.
+    AssistantDelta assistant_delta = 4;
+    // Partial output of a running tool.
+    ToolProgress tool_progress = 5;
+    // The agent started or finished running.
+    WorkingChanged working_changed = 6;
+    // The session's announcement changed (name, model, thinking level...).
+    SessionAnnouncement announcement = 7;
+    // The session moved to another point of its tree (NavigateTree, or
+    // pi's /tree): the conversation a client has is no longer the
+    // session's, and it asks for History again.
+    BranchChanged branch_changed = 8;
+  }
+}
+
+// One entry of the conversation, the same in live events and History.
+message ConversationItem {
+  // pi's entry ID once the item is persisted; empty while it is not.
+  string entry_id = 1;
+  // The turn this item belongs to: the ID of the user message's entry
+  // that started it, so live items and History line up.
+  string turn_id = 2;
+  google.protobuf.Timestamp at = 3;
+  oneof body {
+    UserMessage user_message = 4;
+    AssistantMessage assistant_message = 5;
+    ToolCall tool_call = 6;
+    ToolResult tool_result = 7;
+    Compaction compaction = 8;
+    BranchSummary branch_summary = 9;
+  }
+}
+
+message UserMessage {
+  string text = 1;
+  repeated Image images = 2;
+  // The Prompt's request_id when the message came from a PiRC client.
+  string request_id = 3;
+}
+
+message AssistantMessage {
+  // Identifies the message across its deltas and its final item.
+  string message_id = 1;
+  repeated ContentBlock content = 2;
+  Usage usage = 3;
+  StopReason stop_reason = 4;
+  Model model = 5;
+  // Why the model failed, as pi reports it, when stop_reason is ERROR.
+  string error_message = 6;
+}
+
+message ContentBlock {
+  oneof body {
+    string text = 1;
+    string thinking = 2;
+  }
+}
+
+enum StopReason {
+  STOP_REASON_UNSPECIFIED = 0;
+  STOP_REASON_STOP = 1;
+  STOP_REASON_LENGTH = 2;
+  STOP_REASON_TOOL_USE = 3;
+  STOP_REASON_ABORTED = 4;
+  STOP_REASON_ERROR = 5;
+  // The provider continues the request on its own; the result comes later.
+  STOP_REASON_DEFERRED = 6;
+}
+
+message Usage {
+  uint64 input_tokens = 1;
+  uint64 output_tokens = 2;
+  uint64 cache_read_tokens = 3;
+  uint64 cache_write_tokens = 4;
+  // In US dollars, as pi reports it.
+  double cost = 5;
+}
+
+message AssistantDelta {
+  string message_id = 1;
+  string turn_id = 2;
+  // Index into the message's content blocks.
+  uint32 block_index = 3;
+  oneof body {
+    string text = 4;
+    string thinking = 5;
+  }
+}
+
+message ToolCall {
+  string tool_call_id = 1;
+  string tool_name = 2;
+  // The tool's arguments as JSON text, since every tool defines its own.
+  string arguments_json = 3;
+}
+
+message ToolResult {
+  string tool_call_id = 1;
+  bool is_error = 2;
+  // The result as text; images in results are not carried in v1alpha1.
+  string text = 3;
+  // How long the tool ran, as pi measured it; unset when pi did not say.
+  optional uint32 duration_ms = 4;
+  // A command's exit status (pi's bash tool): 0 for success, else the code
+  // pi reported; unset for other tools, and for a command that timed out,
+  // was stopped, or ended without one.
+  optional int32 exit_code = 5;
+  // A file edit's changes as a unified diff (pi's edit tool); empty for
+  // other tools.
+  string diff = 6;
+}
+
+message ToolProgress {
+  string tool_call_id = 1;
+  string turn_id = 2;
+  // The output so far, replacing any earlier progress for the call.
+  string text = 3;
+}
+
+message WorkingChanged {
+  bool working = 1;
+}
+
+message Compaction {
+  string summary = 1;
+  uint64 tokens_before = 2;
+}
+
+// What was done on a branch the session left (NavigateTree with
+// summarize), where the conversation went on from.
+message BranchSummary {
+  string summary = 1;
+}
+
+message BranchChanged {
+  // The entry the session is now at; empty at the start of the tree.
+  string leaf_id = 1;
+}

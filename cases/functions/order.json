@@ -1,0 +1,1032 @@
+{
+ "about": "the order of sessions in the list, and the next one waiting (core/order.ts); a tie of time and window falls to the titles in the platform's collation, which these cases do not depend on",
+ "cases": [
+  {
+   "fn": "order",
+   "about": "the most recent first, whatever the status",
+   "args": [
+    {
+     "work-old": 2,
+     "work-new": 7
+    },
+    [
+     {
+      "id": "idle-old",
+      "sessionId": "idle-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      }
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "work-old",
+      "sessionId": "work-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "work-old",
+      "cwd": "/",
+      "working": true,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "idle-new",
+      "sessionId": "idle-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 3
+      }
+     },
+     {
+      "id": "work-new",
+      "sessionId": "work-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "work-new",
+      "cwd": "/",
+      "working": true,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 7
+      }
+     }
+    ]
+   ],
+   "is": [
+    "done-new",
+    "idle-new",
+    "work-new",
+    "done-old",
+    "work-old",
+    "idle-old"
+   ]
+  },
+  {
+   "fn": "order",
+   "about": "equal times fall back to the window order, a session with none last",
+   "args": [
+    {},
+    [
+     {
+      "id": "b",
+      "sessionId": "b",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "b",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "place": {
+       "kind": "tmux",
+       "windowNumber": 2
+      }
+     },
+     {
+      "id": "a",
+      "sessionId": "a",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "a",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "place": {
+       "kind": "tmux",
+       "windowNumber": 1
+      }
+     },
+     {
+      "id": "c",
+      "sessionId": "c",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "c",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ]
+   ],
+   "is": [
+    "a",
+    "b",
+    "c"
+   ]
+  },
+  {
+   "fn": "order",
+   "about": "a working session's turn start orders it, not its latest reply",
+   "args": [
+    {
+     "early": 1,
+     "late": 5
+    },
+    [
+     {
+      "id": "early",
+      "sessionId": "early",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "early",
+      "cwd": "/",
+      "working": true,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "late",
+      "sessionId": "late",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "late",
+      "cwd": "/",
+      "working": true,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 5
+      }
+     }
+    ]
+   ],
+   "is": [
+    "late",
+    "early"
+   ]
+  },
+  {
+   "fn": "order",
+   "about": "with no message yet, when it started",
+   "args": [
+    {},
+    [
+     {
+      "id": "a",
+      "sessionId": "a",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "a",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "startedAt": 3
+     },
+     {
+      "id": "b",
+      "sessionId": "b",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "b",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "startedAt": 4
+     },
+     {
+      "id": "c",
+      "sessionId": "c",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "c",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ]
+   ],
+   "is": [
+    "b",
+    "a",
+    "c"
+   ]
+  },
+  {
+   "fn": "starts",
+   "about": "a turn starts at its message when first seen; replies keep it, a new message from the user moves it",
+   "args": [
+    [
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 3
+       }
+      }
+     ],
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 7
+       }
+      }
+     ],
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "user",
+        "text": "",
+        "at": 8
+       }
+      }
+     ]
+    ]
+   ],
+   "is": [
+    {
+     "a": 3
+    },
+    {
+     "a": 3
+    },
+    {
+     "a": 8
+    }
+   ]
+  },
+  {
+   "fn": "starts",
+   "about": "stopped, then started again: a new start from its new message",
+   "args": [
+    [
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 3
+       }
+      }
+     ],
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": false,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 9
+       }
+      }
+     ],
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "user",
+        "text": "",
+        "at": 12
+       }
+      }
+     ]
+    ]
+   ],
+   "is": [
+    {
+     "a": 3
+    },
+    {},
+    {
+     "a": 12
+    }
+   ]
+  },
+  {
+   "fn": "starts",
+   "about": "a user message older than the start does not move it back",
+   "args": [
+    [
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 5
+       }
+      }
+     ],
+     [
+      {
+       "id": "a",
+       "sessionId": "a",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "a",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "user",
+        "text": "",
+        "at": 2
+       }
+      }
+     ]
+    ]
+   ],
+   "is": [
+    {
+     "a": 5
+    },
+    {
+     "a": 5
+    }
+   ]
+  },
+  {
+   "fn": "starts",
+   "about": "seen before its history: no start yet",
+   "args": [
+    [
+     [
+      {
+       "id": "b",
+       "sessionId": "b",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "b",
+       "cwd": "/",
+       "working": true,
+       "compacting": false,
+       "piVersion": "",
+       "extensionVersion": ""
+      }
+     ]
+    ]
+   ],
+   "is": [
+    {}
+   ]
+  },
+  {
+   "fn": "starts",
+   "about": "compacting counts as working",
+   "args": [
+    [
+     [
+      {
+       "id": "c",
+       "sessionId": "c",
+       "hostLabel": "h",
+       "hostname": "h",
+       "name": "c",
+       "cwd": "/",
+       "working": false,
+       "compacting": true,
+       "piVersion": "",
+       "extensionVersion": "",
+       "last": {
+        "who": "assistant",
+        "text": "",
+        "at": 4
+       }
+      }
+     ]
+    ]
+   ],
+   "is": [
+    {
+     "c": 4
+    }
+   ]
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "with none open, the first asking",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "ask",
+      "sessionId": "ask",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "ask",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      },
+      "questions": [
+       {
+        "id": "q",
+        "kind": "confirm",
+        "title": "?",
+        "answerable": true,
+        "askedAt": 1
+       }
+      ]
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     }
+    ],
+    [
+     "done-old",
+     "done-new"
+    ],
+    {},
+    null
+   ],
+   "is": "ask"
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "after the one asking, those done, the newest first",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "ask",
+      "sessionId": "ask",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "ask",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      },
+      "questions": [
+       {
+        "id": "q",
+        "kind": "confirm",
+        "title": "?",
+        "answerable": true,
+        "askedAt": 1
+       }
+      ]
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     }
+    ],
+    [
+     "done-old",
+     "done-new"
+    ],
+    {},
+    "ask"
+   ],
+   "is": "done-new"
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "then the older",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "ask",
+      "sessionId": "ask",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "ask",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      },
+      "questions": [
+       {
+        "id": "q",
+        "kind": "confirm",
+        "title": "?",
+        "answerable": true,
+        "askedAt": 1
+       }
+      ]
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     }
+    ],
+    [
+     "done-old",
+     "done-new"
+    ],
+    {},
+    "done-new"
+   ],
+   "is": "done-old"
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "and round again",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "ask",
+      "sessionId": "ask",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "ask",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      },
+      "questions": [
+       {
+        "id": "q",
+        "kind": "confirm",
+        "title": "?",
+        "answerable": true,
+        "askedAt": 1
+       }
+      ]
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     }
+    ],
+    [
+     "done-old",
+     "done-new"
+    ],
+    {},
+    "done-old"
+   ],
+   "is": "ask"
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "from one not waiting, the first",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 9
+      }
+     },
+     {
+      "id": "done-old",
+      "sessionId": "done-old",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-old",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 2
+      }
+     },
+     {
+      "id": "ask",
+      "sessionId": "ask",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "ask",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 1
+      },
+      "questions": [
+       {
+        "id": "q",
+        "kind": "confirm",
+        "title": "?",
+        "answerable": true,
+        "askedAt": 1
+       }
+      ]
+     },
+     {
+      "id": "done-new",
+      "sessionId": "done-new",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "done-new",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": "",
+      "last": {
+       "who": "assistant",
+       "text": "",
+       "at": 8
+      }
+     }
+    ],
+    [
+     "done-old",
+     "done-new"
+    ],
+    {},
+    "idle"
+   ],
+   "is": "ask"
+  },
+  {
+   "fn": "nextWaiting",
+   "about": "nothing waiting",
+   "args": [
+    [
+     {
+      "id": "idle",
+      "sessionId": "idle",
+      "hostLabel": "h",
+      "hostname": "h",
+      "name": "idle",
+      "cwd": "/",
+      "working": false,
+      "compacting": false,
+      "piVersion": "",
+      "extensionVersion": ""
+     }
+    ],
+    [],
+    {},
+    null
+   ],
+   "is": null
+  }
+ ]
+}

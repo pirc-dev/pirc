@@ -1,0 +1,53 @@
+# The PiRC relay as a systemd service (docs/self-hosting.md).
+#
+# Expects the binary at /usr/local/bin/pirc-relay, a system user
+# pirc-relay, and /etc/pirc-relay/env (see env.example). The registry lives
+# in /var/lib/pirc-relay; run registry commands as the service's user:
+#
+#   sudo -u pirc-relay PIRC_RELAY_DATA_DIR=/var/lib/pirc-relay pirc-relay list
+#
+# For TLS, add the drop-in tls.conf beside this file.
+[Unit]
+Description=PiRC relay
+Documentation=https://pirc.dev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pirc-relay
+Group=pirc-relay
+StateDirectory=pirc-relay
+StateDirectoryMode=0700
+Environment=PIRC_RELAY_DATA_DIR=/var/lib/pirc-relay
+EnvironmentFile=/etc/pirc-relay/env
+ExecStart=/usr/local/bin/pirc-relay serve
+# Also retries a listen address that is not up yet at boot (a VPN's).
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

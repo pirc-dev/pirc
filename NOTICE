@@ -1,0 +1,78 @@
+PiRC
+Copyright (c) 2026 Justino Ltd
+
+PiRC is open source, under three licences by part:
+
+  - MIT (LICENSE): the pi extension (extension/), the code it shares
+    with clients (proto/, protocol/, relay-client/, cases/), the push
+    gateway (relay/cmd/pirc-gateway, relay/internal/gateway), and the
+    rest of the repository.
+  - AGPL-3.0 only: the relay (relay/cmd/pirc-relay, relay/internal/server,
+    relay/internal/registry) and the web app (web/). Each directory has
+    the licence as LICENSE and its notice as COPYRIGHT.
+  - GPL-3.0 only: the mobile app (app/; app/LICENSE, app/COPYRIGHT).
+
+The name PiRC and its icon are Justino Ltd's marks, which the licences
+do not cover (TRADEMARKS.md).
+
+Code adapted from other projects
+--------------------------------
+
+None yet. Anything adapted keeps its project's copyright notice and is
+listed here and in docs/design.md, section 11, with the upstream commit it
+came from.
+
+Third-party code in PiRC's releases
+-----------------------------------
+
+The relay's and the gateway's binaries and the JavaScript bundles include code from the projects
+below. A bundle or binary does not keep their source headers, so their
+licences are reproduced in full under third_party/, and every release
+carries the ones that apply to it.
+
+pirc-relay (Go):
+  - The Go standard library, Copyright 2009 The Go Authors.
+    BSD-3-Clause, with a patent grant: third_party/go/
+  - golang.org/x/crypto, net and text, as vendored by the Go standard
+    library, Copyright 2009 The Go Authors. BSD-3-Clause:
+    third_party/golang.org-x/
+  - github.com/coder/websocket 1.8.15, Copyright (c) 2025 Coder. ISC:
+    third_party/coder-websocket/
+  - google.golang.org/protobuf 1.36.12, Copyright (c) 2018 The Go
+    Authors. BSD-3-Clause, with a patent grant: third_party/go-protobuf/
+  - rsc.io/qr 0.2.0, Copyright (c) 2009 The Go Authors. BSD-3-Clause:
+    third_party/rsc-qr/
+
+pirc-gateway (Go): the Go standard library and golang.org/x, as for
+pirc-relay above; no other module.
+
+The pi extension (a JavaScript bundle):
+  - @bufbuild/protobuf 2.16.0, Copyright 2021-2026 Buf Technologies, Inc.
+    Apache-2.0; parts Copyright 2008 Google Inc., BSD-3-Clause:
+    third_party/bufbuild-protobuf/
+  - ws 8.22.0, Copyright (c) 2011 Einar Otto Stangvik, (c) 2013 Arnout
+    Kazemier and contributors, (c) 2016 Luigi Pinca and contributors. MIT:
+    third_party/ws/
+
+The web app (its server's JavaScript bundle and its page): far more
+packages, so each build lists those it carries, with every licence in
+full, in a file written from the bundle itself (sh/licenses.ts): the
+release's third-party-licenses.txt for the server, and
+page/third-party-licenses.txt for the page, which the server also serves
+at /third-party-licenses.txt to every browser it sends the page to.
+The page's fonts, Literata, Atkinson Hyperlegible Next, JetBrains Mono,
+Geist, Geist Mono and IBM Plex Sans, are under the SIL Open Font License
+1.1 and are listed there with it.
+
+The mobile app (app/): its Dart and Flutter packages, among them image,
+re_highlight, mobile_scanner and qr, and Flutter's engine and framework,
+each with its licence in full, are listed in the NOTICES file that
+Flutter's build writes from the packages themselves and ships inside every
+build of the app (flutter_assets/NOTICES.Z, read by the framework's
+LicenseRegistry). The Android libraries Gradle adds (AndroidX, Firebase
+Cloud Messaging, ML Kit's barcode scanning, Kotlin's coroutines and what
+they bring in), which that file leaves out, are listed with their
+licences in full in a file each Android release build writes from its own
+dependencies (app/android/app/build.gradle.kts, the texts in
+app/android/notices/), shipped in the app as pirc/android_notices.json
+and shown on the same Licences page.

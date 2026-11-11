@@ -1,0 +1,54 @@
+# PiRC's web app as a systemd service
+# (docs/web.md).
+#
+# Expects Node 22 or later at /usr/local/bin/node (else override ExecStart
+# in a drop-in), the bundle at /usr/local/lib/pirc-web/pirc-web.mjs,
+# a system user pirc-web, and /etc/pirc-web/env (see env.example).
+# Its state lives in /var/lib/pirc-web; run its commands as its user:
+#
+#   sudo -u pirc-web PIRC_WEB_DIR=/var/lib/pirc-web \
+#     /usr/local/bin/node /usr/local/lib/pirc-web/pirc-web.mjs list
+#
+# The page is served from /usr/local/lib/pirc-web/page, beside the bundle.
+# For TLS from root-only certificate files, add tls.conf as a drop-in.
+[Unit]
+Description=PiRC web app
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pirc-web
+Group=pirc-web
+StateDirectory=pirc-web
+StateDirectoryMode=0700
+Environment=PIRC_WEB_DIR=/var/lib/pirc-web
+EnvironmentFile=/etc/pirc-web/env
+ExecStart=/usr/local/bin/node /usr/local/lib/pirc-web/pirc-web.mjs serve
+# Also retries a listen address that is not up yet at boot (a VPN's).
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

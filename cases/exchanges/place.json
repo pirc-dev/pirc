@@ -1,0 +1,326 @@
+{
+ "about": "where a session runs: its tmux names, a renamed window, a display string, a place with no names, none",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.1.8",
+        "place": {
+         "kind": "tmux",
+         "group": "work",
+         "window": "api",
+         "windowNumber": 2
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.8",
+      "place": {
+       "kind": "tmux",
+       "group": "work",
+       "window": "api",
+       "windowNumber": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "0"
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [],
+      "truncated": false,
+      "loading": false
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.1.8",
+       "place": {
+        "kind": "tmux",
+        "group": "work",
+        "window": "tests",
+        "windowNumber": 2
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.8",
+      "place": {
+       "kind": "tmux",
+       "group": "work",
+       "window": "tests",
+       "windowNumber": 2
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.1.8",
+       "place": {
+        "kind": "mine",
+        "display": "my agent"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.8",
+      "place": {
+       "kind": "mine",
+       "display": "my agent"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.1.8",
+       "place": {
+        "kind": "tmux"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.8"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.1.8"
+      }
+     }
+    }
+   }
+  },
+  {
+   "snapshot": {
+    "relay": {
+     "state": "ready"
+    },
+    "sessions": [
+     {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.8"
+     }
+    ],
+    "pendingHosts": [],
+    "devices": []
+   }
+  }
+ ]
+}

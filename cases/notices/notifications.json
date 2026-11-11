@@ -1,0 +1,304 @@
+{
+ "about": "a notification's title and body, written from a session's notice (core/notices.ts); cuts count Unicode code points, \"…\" included",
+ "cases": [
+  {
+   "fn": "notification",
+   "about": "a turn finished: its text",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "finished",
+      "text": "Done: the tests pass."
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Done: the tests pass."
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "finished with no text",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "finished",
+      "text": ""
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Finished"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "a turn failed: its error",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "failed",
+      "text": "overloaded"
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Failed: overloaded"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "failed with no reason",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "failed",
+      "text": ""
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Failed: pi gave no reason"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "a question: its title and message",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "question",
+      "text": "Overwrite? It has changes."
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Asks: Overwrite? It has changes."
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "a question with neither",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "question",
+      "text": ""
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Asks: a question in pi's terminal"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "the host's text is not cut again: a prefix takes it past 120",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "failed",
+      "text": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé…"
+     }
+    }
+   ],
+   "is": {
+    "title": "release · laptop",
+    "body": "Failed: ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé…"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "the title falls to the session's first message, and the hostname with no label",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "",
+     "hostname": "laptop.local",
+     "name": "",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "first": "fix the build",
+     "notice": {
+      "number": 5,
+      "kind": "finished",
+      "text": ""
+     }
+    }
+   ],
+   "is": {
+    "title": "fix the build · laptop.local",
+    "body": "Finished"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "a long title is cut to 80 code points",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": "",
+     "notice": {
+      "number": 5,
+      "kind": "finished",
+      "text": ""
+     }
+    }
+   ],
+   "is": {
+    "title": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂…",
+    "body": "Finished"
+   }
+  },
+  {
+   "fn": "notification",
+   "about": "no notice, no notification",
+   "args": [
+    {
+     "id": "p",
+     "sessionId": "s",
+     "hostLabel": "laptop",
+     "hostname": "laptop.local",
+     "name": "release",
+     "cwd": "/src/app",
+     "working": false,
+     "compacting": false,
+     "piVersion": "",
+     "extensionVersion": ""
+    }
+   ],
+   "is": null
+  },
+  {
+   "fn": "cut",
+   "about": "short text is kept",
+   "args": [
+    "hello",
+    5
+   ],
+   "is": "hello"
+  },
+  {
+   "fn": "cut",
+   "about": "one over: cut, with the ellipsis counted",
+   "args": [
+    "hello!",
+    5
+   ],
+   "is": "hell…"
+  },
+  {
+   "fn": "cut",
+   "about": "code points, not UTF-16 units: an emoji is one",
+   "args": [
+    "🙂🙂🙂🙂🙂🙂",
+    5
+   ],
+   "is": "🙂🙂🙂🙂…"
+  },
+  {
+   "fn": "cut",
+   "about": "spaces before the ellipsis go",
+   "args": [
+    "abc   defgh",
+    6
+   ],
+   "is": "abc…"
+  }
+ ]
+}

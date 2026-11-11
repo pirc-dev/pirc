@@ -1,0 +1,5 @@
+packages:
+  - protocol
+  - relay-client
+  - extension
+  - web

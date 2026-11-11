@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+dist/
+target/
+build/
+.dart_tool/
+relay/internal/pb/
+protocol/gen/
+app/lib/gen/
+app/ios/PircNotices/Sources/PircNotices/gen/

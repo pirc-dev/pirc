@@ -1,0 +1,384 @@
+{
+ "about": "a session's latest notice, carried from its announcement: absent before the first, each kind, its number from a string, and one of a kind this client does not know dropped",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.2.0"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "0"
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [],
+      "truncated": false,
+      "loading": false
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.2.0",
+       "working": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": true,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.2.0",
+       "notice": {
+        "number": "1793700000250",
+        "kind": "NOTICE_KIND_FINISHED",
+        "text": "Done: the tests pass."
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "notice": {
+       "number": 1793700000250,
+       "kind": "finished",
+       "text": "Done: the tests pass."
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.2.0",
+       "notice": {
+        "number": "1793700060000",
+        "kind": "NOTICE_KIND_FAILED"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "notice": {
+       "number": 1793700060000,
+       "kind": "failed",
+       "text": ""
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.2.0",
+       "notice": {
+        "number": "1793700120000",
+        "kind": "NOTICE_KIND_QUESTION",
+        "text": "Overwrite the file? It has changes."
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "notice": {
+       "number": 1793700120000,
+       "kind": "question",
+       "text": "Overwrite the file? It has changes."
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.2.0",
+       "notice": {
+        "number": "1793700180000",
+        "kind": "NOTICE_KIND_UNSPECIFIED",
+        "text": "a kind from a newer host"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    }
+   ]
+  },
+  {
+   "snapshot": {
+    "relay": {
+     "state": "ready"
+    },
+    "sessions": [
+     {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    ],
+    "pendingHosts": [],
+    "devices": []
+   }
+  }
+ ]
+}

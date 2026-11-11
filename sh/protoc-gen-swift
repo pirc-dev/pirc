@@ -1,0 +1,7 @@
+#!/bin/bash
+# protoc-gen-swift at the version pinned in
+# app/ios/PircNotices/Package.resolved, for buf.gen.swift.yaml.
+set -euo pipefail
+pkg="$(dirname "$0")/../app/ios/PircNotices"
+swift build -c release --package-path "$pkg" --product protoc-gen-swift >&2
+exec "$pkg/.build/release/protoc-gen-swift" "$@"

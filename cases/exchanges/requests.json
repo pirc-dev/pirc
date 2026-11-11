@@ -1,0 +1,491 @@
+{
+ "about": "a request is answered only by the session it went to; it times out, and fails when its session ends",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "name": "",
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.1.3"
+       }
+      },
+      {
+       "session": {
+        "hostKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+        "sessionId": "s2",
+        "instanceId": "i2"
+       },
+       "hostLabel": "evil",
+       "announcement": {
+        "name": "",
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.1.3"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    },
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+       "sessionId": "s2",
+       "instanceId": "i2"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+       "sessionId": "s2",
+       "instanceId": "i2"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-2",
+        "limit": 200
+       },
+       "requestId": "id-2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3"
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0202020202020202-i2",
+      "sessionId": "s2",
+      "hostLabel": "evil",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "0",
+       "items": []
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [],
+      "truncated": false,
+      "loading": false
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+      "sessionId": "s2",
+      "instanceId": "i2"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-2",
+       "seq": "0",
+       "items": []
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0202020202020202-i2",
+     "chat": {
+      "items": [],
+      "truncated": false,
+      "loading": false
+     }
+    }
+   ]
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "prompt": {
+      "requestId": "p1",
+      "text": "hi"
+     }
+    }
+   },
+   "as": "prompt"
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "prompt": {
+        "requestId": "p1",
+        "text": "hi"
+       },
+       "requestId": "p1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=",
+      "sessionId": "s2",
+      "instanceId": "i2"
+     },
+     "message": {
+      "error": {
+       "requestId": "p1",
+       "code": "ERROR_CODE_PERMISSION_DENIED",
+       "message": "forged by another session"
+      }
+     }
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "other-instance"
+     },
+     "message": {
+      "error": {
+       "requestId": "p1",
+       "code": "ERROR_CODE_PERMISSION_DENIED",
+       "message": "forged by another session"
+      }
+     }
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "accepted": {
+       "requestId": "p1"
+      }
+     }
+    }
+   }
+  },
+  {
+   "reply": {
+    "as": "prompt",
+    "is": {
+     "accepted": {
+      "requestId": "p1"
+     }
+    }
+   }
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "abort": {
+      "requestId": "a1"
+     }
+    }
+   },
+   "as": "abort"
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "abort": {
+        "requestId": "a1"
+       },
+       "requestId": "a1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "wait": 45000
+  },
+  {
+   "reply": {
+    "as": "abort",
+    "is": {
+     "error": {
+      "code": "ERROR_CODE_TIMEOUT",
+      "message": "no answer from the session",
+      "requestId": "a1"
+     }
+    }
+   }
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "statsRequest": {
+      "requestId": "st1"
+     }
+    }
+   },
+   "as": "stats"
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "statsRequest": {
+        "requestId": "st1"
+       },
+       "requestId": "st1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionEnded": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     }
+    }
+   }
+  },
+  {
+   "reply": {
+    "as": "stats",
+    "is": {
+     "error": {
+      "code": "ERROR_CODE_SESSION_GONE",
+      "message": "the session has ended",
+      "requestId": "st1"
+     }
+    }
+   }
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "abort": {
+      "requestId": "a2"
+     }
+    }
+   },
+   "as": "after-end"
+  },
+  {
+   "reply": {
+    "as": "after-end",
+    "is": {
+     "error": {
+      "code": "ERROR_CODE_SESSION_GONE",
+      "message": "the session has ended",
+      "requestId": "a2"
+     }
+    }
+   }
+  },
+  {
+   "ask": {
+    "id": "nobody",
+    "body": {
+     "abort": {
+      "requestId": "a3"
+     }
+    }
+   },
+   "as": "unknown"
+  },
+  {
+   "reply": {
+    "as": "unknown",
+    "is": {
+     "error": {
+      "code": "ERROR_CODE_SESSION_GONE",
+      "message": "the session has ended",
+      "requestId": "a3"
+     }
+    }
+   }
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "events": [
+    {
+     "type": "sessionGone",
+     "id": "0101010101010101-i1"
+    }
+   ]
+  },
+  {
+   "snapshot": {
+    "relay": {
+     "state": "ready"
+    },
+    "sessions": [
+     {
+      "id": "0202020202020202-i2",
+      "sessionId": "s2",
+      "hostLabel": "evil",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3"
+     }
+    ],
+    "pendingHosts": [],
+    "devices": []
+   }
+  }
+ ]
+}

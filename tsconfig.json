@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "protocol/**/*.ts",
+    "relay-client/**/*.ts",
+    "extension/**/*.ts",
+    "web/core/**/*.ts",
+    "web/server/**/*.ts",
+    "web/test/**/*.ts",
+    "test/**/*.ts",
+    "sh/**/*.ts"
+  ]
+}

@@ -1,0 +1,51 @@
+# PiRC's push gateway as a systemd service (docs/gateway.md).
+#
+# Expects the binary at /usr/local/bin/pirc-gateway, a system user
+# pirc-gateway, /etc/pirc-gateway/env (see env.example) and the gateway key
+# in /etc/pirc-gateway/key, which may stay readable by root only: systemd
+# reads it and hands the service a private copy. Add apns.conf,
+# apns-sandbox.conf and fcm.conf beside this file for the push services;
+# without one, wakes for it answer 503 and relays keep their registrations.
+[Unit]
+Description=PiRC push gateway
+Documentation=https://pirc.dev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pirc-gateway
+Group=pirc-gateway
+EnvironmentFile=/etc/pirc-gateway/env
+LoadCredential=key:/etc/pirc-gateway/key
+Environment=PIRC_GATEWAY_KEY_FILE=%d/key
+ExecStart=/usr/local/bin/pirc-gateway serve
+# Also retries a listen address that is not up yet at boot (a VPN's).
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

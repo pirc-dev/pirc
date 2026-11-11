@@ -1,0 +1,8 @@
+# The notification extension's Swift types, generated apart from
+# buf.gen.yaml so that sh/generate.sh, and the deploy, need no Swift
+# (sh/notices.sh runs it).
+version: v2
+plugins:
+  - local: sh/protoc-gen-swift
+    out: app/ios/PircNotices/Sources/PircNotices/gen
+    opt: FileNaming=DropPath

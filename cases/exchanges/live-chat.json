@@ -1,0 +1,893 @@
+{
+ "about": "a session's history, then its live stream: deltas, the finished message, a tool call, its progress and result",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "name": "",
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "model": {
+         "provider": "anthropic",
+         "id": "claude-x",
+         "name": "Claude X"
+        },
+        "thinkingLevel": "THINKING_LEVEL_HIGH",
+        "startedAt": "2026-10-25T10:00:00Z",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.1.3"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": false,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "4",
+       "items": [
+        {
+         "entryId": "u1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:01:00Z",
+         "userMessage": {
+          "text": "list the files"
+         }
+        },
+        {
+         "entryId": "a1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:01:05Z",
+         "assistantMessage": {
+          "messageId": "a1",
+          "content": [
+           {
+            "thinking": "use ls"
+           },
+           {
+            "text": "Listing."
+           }
+          ],
+          "stopReason": "STOP_REASON_TOOL_USE",
+          "model": {
+           "provider": "anthropic",
+           "id": "claude-x"
+          },
+          "usage": {
+           "inputTokens": "100",
+           "outputTokens": "20",
+           "cost": 0.001
+          }
+         }
+        },
+        {
+         "entryId": "a1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:01:05Z",
+         "toolCall": {
+          "toolCallId": "t1",
+          "toolName": "bash",
+          "argumentsJson": "{\"command\":\"ls\"}"
+         }
+        },
+        {
+         "entryId": "r1",
+         "turnId": "u1",
+         "at": "2026-10-25T10:01:06Z",
+         "toolResult": {
+          "toolCallId": "t1",
+          "text": "README.md"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1792922460000,
+        "entryId": "u1",
+        "text": "list the files",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "a1",
+        "turnId": "u1",
+        "at": 1792922465000,
+        "entryId": "a1",
+        "blocks": [
+         {
+          "kind": "thinking",
+          "text": "use ls"
+         },
+         {
+          "kind": "text",
+          "text": "Listing."
+         }
+        ],
+        "streaming": false,
+        "stop": "tool_use",
+        "model": {
+         "provider": "anthropic",
+         "id": "claude-x",
+         "name": ""
+        },
+        "usage": {
+         "input": 100,
+         "output": 20,
+         "cacheRead": 0,
+         "cacheWrite": 0,
+         "cost": 0.001
+        }
+       },
+       {
+        "kind": "tool",
+        "id": "t1",
+        "turnId": "u1",
+        "at": 1792922465000,
+        "entryId": "a1",
+        "name": "bash",
+        "args": "{\"command\":\"ls\"}",
+        "result": {
+         "text": "README.md",
+         "isError": false
+        }
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": false,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "assistant",
+       "text": "Listing.",
+       "at": 1792922465000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1792922460000,
+       "entryId": "u1",
+       "text": "list the files",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a1",
+       "turnId": "u1",
+       "at": 1792922465000,
+       "entryId": "a1",
+       "blocks": [
+        {
+         "kind": "thinking",
+         "text": "use ls"
+        },
+        {
+         "kind": "text",
+         "text": "Listing."
+        }
+       ],
+       "streaming": false,
+       "stop": "tool_use",
+       "model": {
+        "provider": "anthropic",
+        "id": "claude-x",
+        "name": ""
+       },
+       "usage": {
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": 0.001
+       }
+      },
+      {
+       "kind": "tool",
+       "id": "t1",
+       "turnId": "u1",
+       "at": 1792922465000,
+       "entryId": "a1",
+       "name": "bash",
+       "args": "{\"command\":\"ls\"}",
+       "result": {
+        "text": "README.md",
+        "isError": false
+       }
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "name": "",
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "model": {
+        "provider": "anthropic",
+        "id": "claude-x",
+        "name": "Claude X"
+       },
+       "thinkingLevel": "THINKING_LEVEL_HIGH",
+       "working": true,
+       "startedAt": "2026-10-25T10:00:00Z",
+       "piVersion": "1.0.0",
+       "extensionVersion": "0.1.3"
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": true,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "assistant",
+       "text": "Listing.",
+       "at": 1792922465000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "5",
+       "at": "2026-10-25T10:02:00Z",
+       "item": {
+        "entryId": "u2",
+        "turnId": "u2",
+        "at": "2026-10-25T10:02:00Z",
+        "userMessage": {
+         "text": "and the tests?",
+         "requestId": "phone-1"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "e-u2",
+      "turnId": "u2",
+      "at": 1792922520000,
+      "entryId": "u2",
+      "text": "and the tests?",
+      "images": [],
+      "requestId": "phone-1"
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": true,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "user",
+       "text": "and the tests?",
+       "at": 1792922520000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "6",
+       "at": "2026-10-25T10:02:01Z",
+       "assistantDelta": {
+        "messageId": "m-1",
+        "turnId": "u2",
+        "blockIndex": 0,
+        "text": "Run"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatDelta",
+     "id": "0101010101010101-i1",
+     "itemId": "m-1",
+     "turnId": "u2",
+     "at": 1792922521000,
+     "block": 0,
+     "kind": "text",
+     "text": "Run"
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "7",
+       "at": "2026-10-25T10:02:01Z",
+       "assistantDelta": {
+        "messageId": "m-1",
+        "turnId": "u2",
+        "blockIndex": 0,
+        "text": "ning them."
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatDelta",
+     "id": "0101010101010101-i1",
+     "itemId": "m-1",
+     "turnId": "u2",
+     "at": 1792922521000,
+     "block": 0,
+     "kind": "text",
+     "text": "ning them."
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "8",
+       "at": "2026-10-25T10:02:02Z",
+       "item": {
+        "entryId": "a2",
+        "turnId": "u2",
+        "at": "2026-10-25T10:02:02Z",
+        "assistantMessage": {
+         "messageId": "m-1",
+         "content": [
+          {
+           "text": "Running them."
+          }
+         ],
+         "stopReason": "STOP_REASON_TOOL_USE"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "assistant",
+      "id": "m-1",
+      "turnId": "u2",
+      "at": 1792922522000,
+      "entryId": "a2",
+      "blocks": [
+       {
+        "kind": "text",
+        "text": "Running them."
+       }
+      ],
+      "streaming": false,
+      "stop": "tool_use"
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": true,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "assistant",
+       "text": "Running them.",
+       "at": 1792922522000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "9",
+       "at": "2026-10-25T10:02:02Z",
+       "item": {
+        "entryId": "a2",
+        "turnId": "u2",
+        "at": "2026-10-25T10:02:02Z",
+        "toolCall": {
+         "toolCallId": "t2",
+         "toolName": "bash",
+         "argumentsJson": "{\"command\":\"npm test\"}"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "tool",
+      "id": "t2",
+      "turnId": "u2",
+      "at": 1792922522000,
+      "entryId": "a2",
+      "name": "bash",
+      "args": "{\"command\":\"npm test\"}"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "10",
+       "at": "2026-10-25T10:02:03Z",
+       "toolProgress": {
+        "toolCallId": "t2",
+        "turnId": "u2",
+        "text": "1 passing"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "toolProgress",
+     "id": "0101010101010101-i1",
+     "itemId": "t2",
+     "text": "1 passing"
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "11",
+       "at": "2026-10-25T10:02:04Z",
+       "item": {
+        "entryId": "r2",
+        "turnId": "u2",
+        "at": "2026-10-25T10:02:04Z",
+        "toolResult": {
+         "toolCallId": "t2",
+         "isError": true,
+         "text": "1 failing"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "tool",
+      "id": "t2",
+      "turnId": "u2",
+      "at": 1792922522000,
+      "entryId": "a2",
+      "name": "bash",
+      "args": "{\"command\":\"npm test\"}",
+      "result": {
+       "text": "1 failing",
+       "isError": true
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1792922460000,
+       "entryId": "u1",
+       "text": "list the files",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "a1",
+       "turnId": "u1",
+       "at": 1792922465000,
+       "entryId": "a1",
+       "blocks": [
+        {
+         "kind": "thinking",
+         "text": "use ls"
+        },
+        {
+         "kind": "text",
+         "text": "Listing."
+        }
+       ],
+       "streaming": false,
+       "stop": "tool_use",
+       "model": {
+        "provider": "anthropic",
+        "id": "claude-x",
+        "name": ""
+       },
+       "usage": {
+        "input": 100,
+        "output": 20,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": 0.001
+       }
+      },
+      {
+       "kind": "tool",
+       "id": "t1",
+       "turnId": "u1",
+       "at": 1792922465000,
+       "entryId": "a1",
+       "name": "bash",
+       "args": "{\"command\":\"ls\"}",
+       "result": {
+        "text": "README.md",
+        "isError": false
+       }
+      },
+      {
+       "kind": "user",
+       "id": "e-u2",
+       "turnId": "u2",
+       "at": 1792922520000,
+       "entryId": "u2",
+       "text": "and the tests?",
+       "images": [],
+       "requestId": "phone-1"
+      },
+      {
+       "kind": "assistant",
+       "id": "m-1",
+       "turnId": "u2",
+       "at": 1792922522000,
+       "entryId": "a2",
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "Running them."
+        }
+       ],
+       "streaming": false,
+       "stop": "tool_use"
+      },
+      {
+       "kind": "tool",
+       "id": "t2",
+       "turnId": "u2",
+       "at": 1792922522000,
+       "entryId": "a2",
+       "name": "bash",
+       "args": "{\"command\":\"npm test\"}",
+       "result": {
+        "text": "1 failing",
+        "isError": true
+       }
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "snapshot": {
+    "relay": {
+     "state": "ready"
+    },
+    "sessions": [
+     {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "model": {
+       "provider": "anthropic",
+       "id": "claude-x",
+       "name": "Claude X"
+      },
+      "thinking": "high",
+      "working": true,
+      "compacting": false,
+      "startedAt": 1792922400000,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.1.3",
+      "last": {
+       "who": "assistant",
+       "text": "Running them.",
+       "at": 1792922522000
+      }
+     }
+    ],
+    "pendingHosts": [],
+    "devices": []
+   }
+  }
+ ]
+}

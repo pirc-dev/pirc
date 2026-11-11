@@ -1,0 +1,434 @@
+{
+ "about": "a chat kept from before, seeded by pi's session ID: shown at once, still loading, its history asked for after its last saved item and appended; a session not seeded starts empty and asks for the last 200 as before",
+ "steps": [
+  {
+   "seed": {
+    "sessionId": "s1",
+    "chat": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-e1",
+       "entryId": "e1",
+       "turnId": "t1",
+       "at": 1000,
+       "text": "fix the build",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "m1",
+       "entryId": "e2",
+       "turnId": "t1",
+       "at": 2000,
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "Fixed."
+        }
+       ],
+       "streaming": false
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.2.0"
+       }
+      },
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s2",
+        "instanceId": "i2"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.0.0",
+        "extensionVersion": "0.2.0"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200,
+        "afterEntryId": "e2"
+       },
+       "requestId": "id-1"
+      }
+     }
+    },
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s2",
+       "instanceId": "i2"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s2",
+       "instanceId": "i2"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-2",
+        "limit": 200
+       },
+       "requestId": "id-2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    },
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-e1",
+        "entryId": "e1",
+        "turnId": "t1",
+        "at": 1000,
+        "text": "fix the build",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "m1",
+        "entryId": "e2",
+        "turnId": "t1",
+        "at": 2000,
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "Fixed."
+         }
+        ],
+        "streaming": false
+       }
+      ],
+      "truncated": false,
+      "loading": true
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i2",
+      "sessionId": "s2",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0"
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-e1",
+       "entryId": "e1",
+       "turnId": "t1",
+       "at": 1000,
+       "text": "fix the build",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "m1",
+       "entryId": "e2",
+       "turnId": "t1",
+       "at": 2000,
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "Fixed."
+        }
+       ],
+       "streaming": false
+      }
+     ],
+     "truncated": false,
+     "loading": true
+    }
+   }
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "7",
+       "fromEntry": true,
+       "items": [
+        {
+         "entryId": "e3",
+         "turnId": "t2",
+         "at": "1970-01-01T00:00:03Z",
+         "userMessage": {
+          "text": "and the docs"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-e1",
+        "entryId": "e1",
+        "turnId": "t1",
+        "at": 1000,
+        "text": "fix the build",
+        "images": []
+       },
+       {
+        "kind": "assistant",
+        "id": "m1",
+        "entryId": "e2",
+        "turnId": "t1",
+        "at": 2000,
+        "blocks": [
+         {
+          "kind": "text",
+          "text": "Fixed."
+         }
+        ],
+        "streaming": false
+       },
+       {
+        "kind": "user",
+        "id": "e-e3",
+        "turnId": "t2",
+        "at": 3000,
+        "entryId": "e3",
+        "text": "and the docs",
+        "images": []
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.0.0",
+      "extensionVersion": "0.2.0",
+      "last": {
+       "who": "user",
+       "text": "and the docs",
+       "at": 3000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s2",
+      "instanceId": "i2"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-2",
+       "seq": "1"
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i2",
+     "chat": {
+      "items": [],
+      "truncated": false,
+      "loading": false
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-e1",
+       "entryId": "e1",
+       "turnId": "t1",
+       "at": 1000,
+       "text": "fix the build",
+       "images": []
+      },
+      {
+       "kind": "assistant",
+       "id": "m1",
+       "entryId": "e2",
+       "turnId": "t1",
+       "at": 2000,
+       "blocks": [
+        {
+         "kind": "text",
+         "text": "Fixed."
+        }
+       ],
+       "streaming": false
+      },
+      {
+       "kind": "user",
+       "id": "e-e3",
+       "turnId": "t2",
+       "at": 3000,
+       "entryId": "e3",
+       "text": "and the docs",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i2",
+    "is": {
+     "items": [],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  }
+ ]
+}
