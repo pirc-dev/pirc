@@ -133,6 +133,19 @@ The link opens the app from outside it too, as the phone's camera would:
 emulator, `xcrun simctl openurl booted '<link>'` on the simulator, which
 first asks whether to open it in PiRC unless PiRC is in front.
 
+## Store builds
+
+Only the stores' builds have the paywall (`docs/design.md`, step 15,
+Price): they are made with `--dart-define=PIRC_STORE=true`, on `flutter
+build appbundle` for Google Play and on `flutter build ios --config-only
+--release` (or `flutter build ipa`) before archiving for the App Store.
+Without it the app has no subscription and opens without the paywall.
+An app bundle or an archive made without `PIRC_STORE` stops, so that a
+store release cannot forget it; `--dart-define=PIRC_STORE=false` makes
+one without the paywall. An archive takes the defines the last `flutter`
+command wrote (`ios/Flutter/Generated.xcconfig`), so archive right after
+the `--config-only` command that gave `PIRC_STORE=true`.
+
 ## Android release
 
 A release (`flutter build appbundle`) is signed with Play's upload key,

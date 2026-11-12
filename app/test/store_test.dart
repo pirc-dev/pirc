@@ -19,6 +19,18 @@ void main() {
   final ends = DateTime.utc(2026, 11, 22);
   final grace = DateTime.utc(2026, 12, 8);
 
+  test('a build from source, as the tests are, has no subscription', () {
+    expect(storeBuild, isFalse);
+    expect(subscriptionFor(TargetPlatform.iOS), isNull);
+    expect(subscriptionFor(TargetPlatform.android), isNull);
+  });
+
+  test("a store build has the App Store's or Google Play's, and none elsewhere", () {
+    expect(subscriptionFor(TargetPlatform.iOS, store: true), isA<ChannelStore>());
+    expect(subscriptionFor(TargetPlatform.android, store: true), isA<ChannelStore>());
+    expect(subscriptionFor(TargetPlatform.macOS, store: true), isNull);
+  });
+
   test('the free trial is allowed', () async {
     final store = answering((_) => {'state': 'allowed', 'trial': true, 'ends': ends.millisecondsSinceEpoch, 'renews': true});
     final s = await store.status();

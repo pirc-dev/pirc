@@ -105,6 +105,11 @@ abstract class AppPrefs {
   }
 
   Future<void> setAllowedUntil(DateTime? until) => set('store.until', until?.millisecondsSinceEpoch.toString());
+
+  // That this build has no subscription, a build from source's
+  // (store.dart's storeBuild), for the iOS notification extension, which
+  // is built apart from the app and would otherwise ask StoreKit.
+  Future<void> setNoStore(bool none) => set('store.none', none ? 'yes' : null);
 }
 
 // The platform's, over a channel (packages/pirc_platform).
@@ -221,7 +226,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     final subscription = widget.subscription;
     Future.wait([
-      widget.prefs.relay(),
+      // Said before anything connects, and so before any notification.
+      widget.prefs.setNoStore(subscription == null).then((_) => widget.prefs.relay()),
       widget.prefs.unfolded(),
       PhoneSettings.load(store: widget.store, prefs: widget.prefs, push: widget.push, resync: () => _notes?.answered(), protect: widget.protect),
       if (subscription != null) _askStore(subscription),

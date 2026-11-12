@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.SortedSet
 import java.util.zip.ZipFile
 
@@ -73,6 +74,27 @@ gradle.taskGraph.whenReady {
         (System.getenv("PIRC_UPLOAD_KEYSTORE") == null || System.getenv("PIRC_UPLOAD_KEYSTORE_PASSWORD") == null)
     ) {
         throw GradleException("A release build needs the upload key: set PIRC_UPLOAD_KEYSTORE and PIRC_UPLOAD_KEYSTORE_PASSWORD (and PIRC_UPLOAD_KEY_ALIAS if it is not \"upload\").")
+    }
+}
+
+// The store build, the one with the paywall, is asked for with
+// --dart-define=PIRC_STORE=true (lib/app/store.dart); a build from source
+// has none. An app bundle, which is what goes to Google Play, says which
+// it is, true or false, so that a store release that forgets it stops
+// rather than go out without the paywall. Flutter gives the defines as
+// base64, comma-separated.
+val pircStore: String? = (project.findProperty("dart-defines") as String?)
+    ?.split(",")
+    ?.filter { it.isNotEmpty() }
+    ?.map { String(Base64.getDecoder().decode(it)) }
+    ?.lastOrNull { it.startsWith("PIRC_STORE=") }
+    ?.removePrefix("PIRC_STORE=")
+gradle.taskGraph.whenReady {
+    if (pircStore != null && pircStore != "true" && pircStore != "false") {
+        throw GradleException("PIRC_STORE is true, a store build, or false, a build from source, not \"$pircStore\".")
+    }
+    if (pircStore == null && allTasks.any { it.project == project && it.name == "bundleRelease" }) {
+        throw GradleException("An app bundle is for Google Play: say whether it is the store build, with --dart-define=PIRC_STORE=true (with the paywall) or false (without).")
     }
 }
 

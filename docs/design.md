@@ -2093,8 +2093,26 @@ Each step ends with something that can be seen working.
       The paywall offers the subscription and restoring a purchase, with
       the Terms of Use (Apple's standard licence) and the privacy policy;
       the stores handle payment, and the app learns only whether a
-      subscription is active. A build from source has no paywall
-      obligation under the GPL; the stores' builds are the publisher's.
+      subscription is active. Only the stores' builds, the publisher's,
+      have the paywall; a build from source has none and opens as a
+      subscribed one does (decided 2026-11-12). A store build is asked for
+      at build time, by `--dart-define=PIRC_STORE=true` in the publisher's
+      release builds (`lib/app/store.dart`); without it, as in a plain
+      `flutter build` or `flutter run`, there is no subscription at all:
+      no paywall, no Subscription section in Settings, and notifications
+      not checked against the store: Android's wake is the app's own
+      code, and the iOS notification extension, built apart from the app,
+      reads that the build has none from the App Group, where the app
+      writes it at each start before it connects ("store.none", cleared
+      by a store build). Nothing at run time decides it, neither
+      the signing key, the bundle ID nor where the app was installed
+      from, so that a build from source cannot be locked by mistake.
+      The other way, a store release that forgets the flag stops
+      rather than go out unlocked: an Android app bundle and an iOS
+      archive, the forms that go to the stores, are not built unless
+      `PIRC_STORE` is given, true or false
+      (`android/app/build.gradle.kts`, `ios/store-build.sh`), and any
+      other value stops every build.
       Built with the stores' own libraries in the app's plugin, StoreKit 2
       on iOS and Play Billing on Android, over 'dev.pirc.app/store'
       (`lib/app/store.dart`); rejected: Flutter's `in_app_purchase`, a
@@ -2414,7 +2432,10 @@ Each step ends with something that can be seen working.
        restoring in the app; the subscription in both stores (one
        subscription group on Apple's side), which needs the paid
        agreements, banking and tax first; App Review given a sandbox
-       account's way through it.
+       account's way through it. Since 2026-11-12 only the store builds
+       have the paywall, made with `--dart-define=PIRC_STORE=true`; a
+       build from source has none, and a bundle or archive made without
+       saying which it is stops (Price, above).
     8. **A relay for App Review**, with a pi session behind it, kept up
        while Apple reviews each version, since the app shows nothing
        without a relay; its join link goes in the review notes. Decided

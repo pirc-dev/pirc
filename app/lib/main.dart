@@ -19,8 +19,8 @@ Future<void> main() async {
   runApp(PircApp(store: ChannelKeyStore(), prefs: ChannelPrefs(), camera: true, push: PushPlatform(), links: LinkPlatform(), subscription: _subscription(), cache: await keptChats(files), drafts: await keptDrafts(files)));
 }
 
-// The App Store's subscription, or Google Play's.
-Store? _subscription() => defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android ? ChannelStore() : null;
+// The App Store's subscription, or Google Play's, in a store build only.
+Store? _subscription() => subscriptionFor(defaultTargetPlatform);
 
 // A push woke the phone (Android: packages/pirc_platform's WakeService
 // starts an engine here): the notifications for what is new, the fixed

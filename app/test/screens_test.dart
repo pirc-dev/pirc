@@ -1296,6 +1296,23 @@ void main() {
     expect(find.text('Add this phone'), findsOneWidget);
   });
 
+  testWidgets('a build from source opens without the paywall', (tester) async {
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), subscription: subscriptionFor(TargetPlatform.android), fontFamily: font));
+    await tester.pump();
+    expect(find.text('Add this phone'), findsOneWidget);
+    expect(find.text('Subscribe to PiRC'), findsNothing);
+  });
+
+  testWidgets("the iOS notification extension is told when the build has no store, and a store build's clears it", (tester) async {
+    final prefs = MemoryPrefs()..set('store.none', 'yes');
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: prefs, subscription: FakeStore(const StoreStatus(Access.never)), fontFamily: font));
+    await tester.pump();
+    expect(await prefs.get('store.none'), isNull);
+    await tester.pumpWidget(PircApp(key: const ValueKey('source'), store: MemoryKeyStore(), prefs: prefs, subscription: subscriptionFor(TargetPlatform.iOS), fontFamily: font));
+    await tester.pump();
+    expect(await prefs.get('store.none'), 'yes');
+  });
+
   group('a join link opened from outside the app', () {
     const channel = MethodChannel('dev.pirc.app/links');
     const first = 'pirc://join?relay=ws%3A%2F%2F127.0.0.1%3A9&token=t1';

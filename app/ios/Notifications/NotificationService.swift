@@ -51,7 +51,9 @@ final class NotificationService: UNNotificationServiceExtension {
           let relay = defaults.string(forKey: "relay").flatMap(URL.init(string:)),
           let seed = readKey(relay.absoluteString)
     else { return nil }
-    if relay.absoluteString != reviewRelay, !(await allowed(defaults)) { return nil }
+    // A build from source has no subscription ("store.none", which the app
+    // writes at its start), and so no store to ask.
+    if relay.absoluteString != reviewRelay, defaults.string(forKey: "store.none") == nil, !(await allowed(defaults)) { return nil }
     let shown = defaults.string(forKey: "notices.v1").flatMap { try? JSONDecoder().decode(Shown.self, from: Data($0.utf8)) } ?? Shown()
     let now = UInt64(Date().timeIntervalSince1970 * 1000)
     guard let (notes, next) = try? await Fetch.run(relay: relay, seed: seed, shown: shown, now: now, deadline: 20) else { return nil }

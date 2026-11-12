@@ -8,6 +8,19 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+// Whether this is a store build, the publisher's for the App Store and
+// Google Play, which alone has the paywall: --dart-define=PIRC_STORE=true
+// (docs/design.md, step 15, Price). A build from source, without it, has
+// none. An Android app bundle and an iOS archive, what goes to a store,
+// stop unless it is given, true or false (android/app/build.gradle.kts,
+// ios/store-build.sh).
+const storeBuild = bool.fromEnvironment('PIRC_STORE');
+
+// The subscription for this build: the App Store's or Google Play's in a
+// store build, none in a build from source or on another platform.
+Store? subscriptionFor(TargetPlatform platform, {bool store = storeBuild}) =>
+    store && (platform == TargetPlatform.iOS || platform == TargetPlatform.android) ? ChannelStore() : null;
+
 // The relay PiRC runs for the stores' app review, with only its own demo
 // host: joined to it, the phone is allowed without the subscription, and
 // the store's answer is left as it is (docs/design.md, step 15, Price).
