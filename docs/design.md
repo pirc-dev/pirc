@@ -118,8 +118,12 @@ Proposed:
   ends, other than by an abort (`FINISHED`, with the reply's text, or
   `FAILED`, with the error), and when pi starts showing a question
   (`QUESTION`, its title and message; one already showing when the session
-  started raises none). The text has runs of whitespace made one space and
-  is cut to 120 Unicode code points, "…" included, so that no character is
+  started raises none). The reply and the question are made plain text
+  first, since a notification shows no markup (2026-11-12; until then their
+  Markdown showed as written): the marks of headings, quotes, lists, rules
+  and tables dropped, a link and an image as their text, emphasis and code
+  without their marks, a heading followed by a colon. The text has runs of
+  whitespace made one space and is cut to 120 Unicode code points, "…" included, so that no character is
   split; the client writes the title and the rest. Its number is the time
   it was raised, in milliseconds, one past the last if the clock went back,
   so it goes up across pi processes too (a restart, or `/resume` back to

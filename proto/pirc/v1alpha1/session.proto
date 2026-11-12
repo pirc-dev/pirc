@@ -74,6 +74,7 @@ message Notice {
   uint64 number = 1;
   NoticeKind kind = 2;
   // The reply's text, the error, or the question's title and message,
+  // the reply and the question as plain text, without Markdown's marks,
   // with runs of whitespace made one space, cut to 120 Unicode code points,
   // "…" included when cut. Empty for a turn that ended with no text, or a
   // question with neither.
