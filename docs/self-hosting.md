@@ -22,11 +22,15 @@ tar -xzf pirc-relay-X.Y.Z-linux-amd64.tar.gz
 cd pirc-relay-X.Y.Z-linux-amd64
 ```
 
-On macOS, a browser marks what it downloads as quarantined, and macOS
-refuses to run the relay, which is not notarised, until the mark is
-removed: run `xattr -dr com.apple.quarantine pirc-relay-X.Y.Z-darwin-arm64`
-on the unpacked directory before starting it (`curl -LO` downloads
-without the mark).
+On macOS, the relay from 0.3.2 on is signed with PiRC's Developer ID and
+notarised by Apple. The first time one a browser downloaded is run, macOS
+checks with Apple and asks once, in a window, whether to open it, saying
+that Apple found no malicious software. Earlier ones are not notarised,
+and macOS refuses to run one a browser downloaded until its quarantine
+mark is removed: run `xattr -dr com.apple.quarantine
+pirc-relay-X.Y.Z-darwin-arm64` on the unpacked directory before starting
+it. Either way, `curl -LO` downloads without the mark, so nothing is
+asked.
 
 The relay's archive holds the binary, `LICENSE` (the relay is under the
 AGPL-3.0), `NOTICE`, the licences of the code built into it

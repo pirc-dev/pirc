@@ -2399,11 +2399,23 @@ Each step ends with something that can be seen working.
        the commit they were built from. The README and the self-hosting
        guide start from the download, building from source kept as the
        alternative. A snapshot's Linux relays and web bundle ran on arm64
-       and amd64 machines. The macOS relay is signed ad hoc only, as Go
-       links it, so macOS refuses to run one a browser downloaded until
-       its quarantine mark is removed, which the guide says; signing it
-       with the Apple developer team's Developer ID and notarising it
-       would remove that step, not done yet.
+       and amd64 machines. The macOS relay was signed only as Go links
+       it (the arm64 one ad hoc, the amd64 one not at all), so macOS
+       refuses to run one a browser downloaded until its quarantine mark
+       is removed, which the guide says. Decided and
+       built 2026-11-12, from 0.3.2: `sh/release.sh` signs both macOS
+       relays with the team's Developer ID Application certificate (G2),
+       with the hardened runtime, and has Apple notarise them in one
+       submission, using rcodesign, so a release can be built on Linux.
+       A bare program cannot carry a stapled ticket, so macOS looks the
+       ticket up online the first time it runs a downloaded one, and asks
+       once whether to open it, saying Apple found nothing malicious
+       (seen with a trial build on macOS, 2026-11-12). The key,
+       certificate and App Store Connect API key come by path from the
+       environment; a release without them fails unless
+       `PIRC_MACOS_UNSIGNED=1` asks to build one without, for anyone else
+       building one, which `sh/publish-release.sh` then refuses to
+       publish, and a snapshot signs only when they are given.
     7. **Store listings.** The owner's, started early, since Apple's take
        days to approve: the price, Play's payments profile, Apple's Paid
        Apps Agreement with its banking and tax forms, and the EU's trader

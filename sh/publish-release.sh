@@ -21,6 +21,7 @@ version=$(basename "$release")
 version=${version#pirc-}
 [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "not a release (snapshots are not published): $release"
 command -v gh >/dev/null || die "needs gh on PATH"
+[ ! -e "$release/MACOS_UNSIGNED" ] || die "$release has macOS relays not signed with a Developer ID (PIRC_MACOS_UNSIGNED)"
 (cd "$release" && shasum -a 256 -c --quiet SHA256SUMS) || die "$release does not match its SHA256SUMS"
 
 # Exactly the files the checksums name, and every one of them.

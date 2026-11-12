@@ -11,6 +11,17 @@
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are
 # written, and a missing tool fails the release rather than skipping it.
+#
+# A release signs the macOS relays with a Developer ID and has Apple
+# notarise them, which needs rcodesign and zip and three files, given by
+# path: PIRC_MACOS_SIGN_KEY, the certificate's private key, and
+# PIRC_MACOS_SIGN_CERT, the Developer ID Application certificate, both PEM;
+# PIRC_NOTARY_KEY, an App Store Connect API key as
+# `rcodesign encode-app-store-connect-api-key` writes it. Without them a
+# release fails, unless PIRC_MACOS_UNSIGNED=1 says to build one without:
+# Go signs the arm64 relay ad hoc and leaves the amd64 one unsigned. Such a
+# release is marked MACOS_UNSIGNED, which sh/publish-release.sh refuses. A
+# snapshot signs only if they are given.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,6 +39,21 @@ for tool in go node corepack pi tmux openssl; do
   command -v "$tool" >/dev/null || die "needs $tool on PATH"
 done
 [ -z "$(git status --porcelain)" ] || die "the tree has uncommitted changes"
+
+sign_macos=false
+if [ -n "${PIRC_MACOS_SIGN_KEY:-}${PIRC_MACOS_SIGN_CERT:-}${PIRC_NOTARY_KEY:-}" ]; then
+  sign_macos=true
+elif ! $snapshot && [ "${PIRC_MACOS_UNSIGNED:-}" != 1 ]; then
+  die "a release signs and notarises the macOS relays: set PIRC_MACOS_SIGN_KEY, PIRC_MACOS_SIGN_CERT and PIRC_NOTARY_KEY, or PIRC_MACOS_UNSIGNED=1 to build without"
+fi
+if $sign_macos; then
+  for var in PIRC_MACOS_SIGN_KEY PIRC_MACOS_SIGN_CERT PIRC_NOTARY_KEY; do
+    [ -r "${!var:-}" ] || die "$var must name a readable file"
+  done
+  for tool in rcodesign zip; do
+    command -v "$tool" >/dev/null || die "needs $tool on PATH to sign the macOS relays"
+  done
+fi
 
 commit=$(git rev-parse --short=12 HEAD)
 # The version the build gives: the tag at HEAD, else a -dev one, which only
@@ -69,9 +95,55 @@ for platform in "${relay_platforms[@]}"; do
   step "relay, $platform"
   name="pirc-relay-${version}-${platform}"
   GOOS=${platform%-*} GOARCH=${platform#*-} sh/build.sh relay "$out/$name"
+  if [ "$platform" = "$host_platform" ]; then host_relay="$PWD/$out/$name/pirc-relay"; fi
+done
+
+# Signed with the hardened runtime, which notarisation requires, and
+# notarised in one submission. A bare program cannot have its ticket stapled,
+# so macOS looks the ticket up when it first runs one that was downloaded.
+if $sign_macos; then
+  step "relay, signing and notarising for macOS"
+  notary="$out/notary.zip"
+  for platform in "${relay_platforms[@]}"; do
+    [[ $platform == darwin-* ]] || continue
+    name="pirc-relay-${version}-${platform}"
+    rcodesign sign --for-notarization --pem-file "$PIRC_MACOS_SIGN_KEY" --pem-file "$PIRC_MACOS_SIGN_CERT" \
+      --code-signature-flags runtime --binary-identifier dev.pirc.relay \
+      "$out/$name/pirc-relay"
+    (cd "$out" && zip -q "notary.zip" "$name/pirc-relay")
+  done
+  submission=$(rcodesign notary-submit --api-key-path "$PIRC_NOTARY_KEY" "$notary" 2>&1 | tee /dev/stderr |
+    sed -n 's/^created submission ID: \([0-9a-f-]*\)$/\1/p')
+  [ -n "$submission" ] || die "notarisation: no submission ID from rcodesign"
+  # Apple's first answers for a new certificate took an hour, and one failed
+  # poll ends rcodesign's wait, so it waits again, up to two hours in all;
+  # the outcome is then read from the submission's log, not assumed.
+  # Five failed waits are not a passing fault but a wrong key or ID.
+  deadline=$((SECONDS + 7200))
+  failures=0
+  until rcodesign notary-wait --api-key-path "$PIRC_NOTARY_KEY" \
+      --max-wait-seconds $((deadline - SECONDS > 60 ? deadline - SECONDS : 60)) "$submission" 2>&1 |
+      grep -v '^poll state'; [ "${PIPESTATUS[0]}" = 0 ]; do
+    failures=$((failures + 1))
+    [ $SECONDS -lt $deadline ] || die "notarisation: no answer for submission $submission in two hours"
+    [ $failures -lt 5 ] || die "notarisation: waiting on submission $submission failed five times"
+    sleep 30
+  done
+  # Read whole: grep -q would stop reading, and rcodesign fails on the closed
+  # pipe.
+  notary_log=$(rcodesign notary-log --api-key-path "$PIRC_NOTARY_KEY" "$submission")
+  grep -q '"status": "Accepted"' <<<"$notary_log" ||
+    die "notarisation: submission $submission was not accepted: $notary_log"
+  rm "$notary"
+else
+  echo "macOS relays not signed with a Developer ID"
+  $snapshot || echo "the macOS relays are not signed with a Developer ID" > "$out/MACOS_UNSIGNED"
+fi
+
+for platform in "${relay_platforms[@]}"; do
+  name="pirc-relay-${version}-${platform}"
   tar_c "$out" "$name" "$out/$name.tar.gz"
   echo "$name.tar.gz"
-  if [ "$platform" = "$host_platform" ]; then host_relay="$PWD/$out/$name/pirc-relay"; fi
 done
 # The end-to-end test runs this machine's, which sh/build.sh does not run
 # when GOOS and GOARCH are set.
