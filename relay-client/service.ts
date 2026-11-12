@@ -74,7 +74,9 @@ export class Cli {
   }
 
   // Registers this service's client key with a relay through a
-  // registration token, waiting at most 20 seconds for the answer.
+  // registration token, once: the first answer is the result, the relay's
+  // refusal or why it could not be reached (an untrusted certificate, say),
+  // and none in 20 seconds is a failure too.
   async enrol(o: { dir: string; url: string; token: string; label: string; software: string }): Promise<void> {
     try {
       relayURL(o.url);
@@ -84,10 +86,10 @@ export class Cli {
     const key = loadOrCreateKey(join(o.dir, "client.key"));
     const state = await new Promise<ConnectionState>((resolve) => {
       const conn = new RelayConnection({
-        url: o.url, role: "client", key, token: o.token, label: o.label, software: o.software,
+        url: o.url, role: "client", key, token: o.token, tokenRetry: false, label: o.label, software: o.software,
         onFrame() {},
         onState: (s) => {
-          if (s.kind === "ready" || s.kind === "refused") {
+          if (s.kind === "ready" || s.kind === "refused" || s.kind === "offline") {
             conn.stop();
             resolve(s);
           }
@@ -99,6 +101,10 @@ export class Cli {
         resolve({ kind: "offline", reason: "no answer from the relay in 20 s" });
       }, 20_000).unref();
     });
+    if (state.kind === "offline") {
+      const ca = /self[- ]signed|unable to (verify|get (local )?issuer)/i.test(state.reason) ? "; a certificate from a private CA needs NODE_EXTRA_CA_CERTS set to the CA's file" : "";
+      this.die(`cannot reach the relay at ${o.url}: ${state.reason}${ca}`);
+    }
     if (state.kind !== "ready") this.die(`the relay refused: ${"reason" in state ? state.reason : state.kind}`);
   }
 }

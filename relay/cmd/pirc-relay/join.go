@@ -55,9 +55,9 @@ func encodeComponent(s string) string {
 // use (the link, or the /pirc enrol line), on info what is for the eye
 // only (the QR code and when the token expires).
 func printJoin(out, info io.Writer, role registry.Role, relay, token string, expires, now time.Time) error {
-	until := expires.Format("15:04")
+	until := expires.Format("15:04 MST")
 	if y, m, d := expires.Date(); y != now.Year() || m != now.Month() || d != now.Day() {
-		until = expires.Format("2006-01-02 15:04")
+		until = expires.Format("2006-01-02 15:04 MST")
 	}
 	if role == registry.RoleHost {
 		fmt.Fprintf(out, "/pirc enrol %s %s\n", relay, token)

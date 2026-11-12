@@ -47,13 +47,16 @@ step "install"
 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --silent
 sh/generate.sh
 
-# Archives without macOS's extended attributes and metadata files, which
-# other tars warn about.
+# tar_c DIR NAME ARCHIVE: DIR/NAME as ARCHIVE, owned by root and writable
+# by its owner alone, whoever built it and with whatever umask, and without
+# macOS's extended attributes and metadata files, which other tars warn
+# about.
 tar_c() {
+  chmod -R u=rwX,go=rX "$1/$2"
   if tar --version | grep -q bsdtar; then
-    COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata "$@"
+    COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata --uid 0 --gid 0 --uname root --gname root -C "$1" -czf "$3" "$2"
   else
-    tar "$@"
+    tar --owner=root:0 --group=root:0 -C "$1" -czf "$3" "$2"
   fi
 }
 
@@ -66,7 +69,7 @@ for platform in "${relay_platforms[@]}"; do
   step "relay, $platform"
   name="pirc-relay-${version}-${platform}"
   GOOS=${platform%-*} GOARCH=${platform#*-} sh/build.sh relay "$out/$name"
-  tar_c -C "$out" -czf "$out/$name.tar.gz" "$name"
+  tar_c "$out" "$name" "$out/$name.tar.gz"
   echo "$name.tar.gz"
   if [ "$platform" = "$host_platform" ]; then host_relay="$PWD/$out/$name/pirc-relay"; fi
 done
@@ -80,7 +83,7 @@ done
 step "web app"
 web="$out/pirc-web-${version}"
 sh/build.sh web "$web"
-tar_c -C "$out" -czf "$web.tar.gz" "pirc-web-${version}"
+tar_c "$out" "pirc-web-${version}" "$web.tar.gz"
 echo "pirc-web-${version}.tar.gz"
 
 # --- The extension -----------------------------------------------------
@@ -91,7 +94,7 @@ echo "pirc-web-${version}.tar.gz"
 step "extension"
 ext="$out/pirc-extension-${version}"
 sh/build.sh extension "$ext"
-tar_c -C "$out" -czf "$ext.tar.gz" "pirc-extension-${version}"
+tar_c "$out" "pirc-extension-${version}" "$ext.tar.gz"
 echo "pirc-extension-${version}.tar.gz"
 
 # --- Checks against what was built ------------------------------------------

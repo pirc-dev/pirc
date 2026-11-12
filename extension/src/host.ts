@@ -298,7 +298,9 @@ export class Host implements Sink {
       lines.push(`config ${c.path}`);
       if (c.relay) lines.push(`relay ${c.relay}`);
       lines.push(`key ${c.keyFile}${this.key ? ` (${Buffer.from(this.key.publicKey).toString("base64url")})` : ""}`);
-      lines.push(`label ${c.label}`);
+      // The relay names a host by its token's label, or as approved, once
+      // it has joined; this is only the name it asks for.
+      lines.push(`label asked for ${c.label} (the relay's name for this machine may differ: pirc-relay list)`);
     }
     if ("reason" in this.state) lines.push(`relay said: ${this.state.reason}`);
     if (this.live) lines.push(`session ${this.live.sessionId}, instance ${this.instanceId}`);

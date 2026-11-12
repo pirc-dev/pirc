@@ -105,6 +105,12 @@ export async function startRelay(h: Harness): Promise<Relay> {
   };
   relay.start();
   h.onCleanup(() => proc?.kill());
+  // Its registry is made by then, which the commands need.
+  const deadline = Date.now() + 10_000;
+  while (!log.includes("msg=listening")) {
+    if (proc!.exitCode !== null || Date.now() > deadline) throw new Error(`relay did not start:\n${log}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
   return relay;
 }
 

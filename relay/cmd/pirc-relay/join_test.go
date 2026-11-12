@@ -45,7 +45,7 @@ func TestAddPrintsBareToken(t *testing.T) {
 	t.Setenv("PIRC_RELAY_URL", "")
 	for _, role := range []registry.Role{registry.RoleClient, registry.RoleHost} {
 		var out, info bytes.Buffer
-		if err := add(role, []string{"--data-dir", t.TempDir(), "--label", "phone"}, &out, &info); err != nil {
+		if err := add(role, []string{"--data-dir", relayDir(t), "--label", "phone"}, &out, &info); err != nil {
 			t.Fatal(err)
 		}
 		if !regexp.MustCompile(`^[A-Za-z0-9_-]{22}\n$`).MatchString(out.String()) {
@@ -77,7 +77,7 @@ func TestAddWithURL(t *testing.T) {
 	// The flag wins over the variable.
 	t.Setenv("PIRC_RELAY_URL", "wss://other.example")
 	var out, info bytes.Buffer
-	if err := add(registry.RoleClient, []string{"--data-dir", t.TempDir(), "--url", "wss://relay.example"}, &out, &info); err != nil {
+	if err := add(registry.RoleClient, []string{"--data-dir", relayDir(t), "--url", "wss://relay.example"}, &out, &info); err != nil {
 		t.Fatal(err)
 	}
 	link := regexp.MustCompile(`^pirc://join\?relay=wss%3A%2F%2Frelay\.example&token=[A-Za-z0-9_-]{22}\n$`)
@@ -87,28 +87,29 @@ func TestAddWithURL(t *testing.T) {
 	if got := decodeDrawn(t, info.String()); got+"\n" != out.String() {
 		t.Errorf("the code reads %q", got)
 	}
-	if !regexp.MustCompile(`\nScan it with PiRC's app, or paste the link into it; valid until \d\d:\d\d\.\n$`).MatchString(info.String()) {
+	if !regexp.MustCompile(`\nScan it with PiRC's app, or paste the link into it; valid until \d\d:\d\d \S+\.\n$`).MatchString(info.String()) {
 		t.Errorf("stderr ends %q", info.String()[max(0, info.Len()-100):])
 	}
 
 	out.Reset()
 	info.Reset()
-	if err := add(registry.RoleHost, []string{"--data-dir", t.TempDir()}, &out, &info); err != nil {
+	if err := add(registry.RoleHost, []string{"--data-dir", relayDir(t)}, &out, &info); err != nil {
 		t.Fatal(err)
 	}
 	if !regexp.MustCompile(`^/pirc enrol wss://other\.example [A-Za-z0-9_-]{22}\n$`).MatchString(out.String()) {
 		t.Errorf("stdout %q", out.String())
 	}
-	if !regexp.MustCompile(`^Run it in pi on that computer; valid until \d\d:\d\d\.\n$`).MatchString(info.String()) {
+	if !regexp.MustCompile(`^Run it in pi on that computer; valid until \d\d:\d\d \S+\.\n$`).MatchString(info.String()) {
 		t.Errorf("stderr %q", info.String())
 	}
 }
 
 func TestExpiryShown(t *testing.T) {
-	now := time.Date(2026, 11, 7, 13, 50, 0, 0, time.Local)
+	// With its time zone, since a server's may not be the reader's.
+	now := time.Date(2026, 11, 7, 13, 50, 0, 0, time.FixedZone("CET", 3600))
 	for ttl, want := range map[time.Duration]string{
-		15 * time.Minute: "valid until 14:05.",
-		24 * time.Hour:   "valid until 2026-11-08 13:50.",
+		15 * time.Minute: "valid until 14:05 CET.",
+		24 * time.Hour:   "valid until 2026-11-08 13:50 CET.",
 	} {
 		var out, info bytes.Buffer
 		if err := printJoin(&out, &info, registry.RoleHost, "wss://relay.example", "t", now.Add(ttl), now); err != nil {

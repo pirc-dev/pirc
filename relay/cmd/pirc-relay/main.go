@@ -29,6 +29,8 @@
 // registry lives; the default is $XDG_STATE_HOME/pirc-relay, else
 // ~/.local/state/pirc-relay. A command refuses a data directory owned by
 // another user, since files it creates there would lock that user out.
+// serve makes the registry when it starts, and the other commands refuse a
+// directory without one, which is not the relay's.
 //
 // serve's flags can also be set in the environment, for a service's
 // environment file: PIRC_RELAY_LISTEN, PIRC_RELAY_TLS_CERT,
@@ -40,11 +42,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -132,6 +136,28 @@ func parse(fs *flag.FlagSet, dataDir *string, args []string) error {
 	return checkOwner(*dataDir)
 }
 
+// parseAdmin is parse for the commands that read or change the registry,
+// which refuse a directory without one, since the relay makes its registry
+// when it starts: run without the relay's directory, they would show an
+// empty registry, or start one the relay never reads.
+func parseAdmin(fs *flag.FlagSet, dataDir *string, args []string) error {
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	reg := registry.New(*dataDir)
+	ok, err := reg.Exists()
+	if err != nil || ok {
+		return err
+	}
+	return fmt.Errorf("no registry at %s: give the relay's own data directory, with --data-dir or PIRC_RELAY_DATA_DIR, running this as the relay's user (sudo -u USER pirc-relay %s --data-dir DIR); the relay makes its registry when it starts", reg.Path, fs.Name())
+}
+
+// when is a time as the commands show it: in this machine's time zone,
+// named, since the registry's times are UTC and a server's zone may be too.
+func when(t time.Time) string {
+	return t.Local().Format("2006-01-02 15:04:05 MST")
+}
+
 // An empty variable counts as unset, as an environment file's NAME= reads.
 func envString(name, def string) string {
 	if v := os.Getenv(name); v != "" {
@@ -217,6 +243,9 @@ func serve(args []string) error {
 	if gateway == "" {
 		log.Info("no push gateway: clients registered for push are not woken (--push-gateway)")
 	}
+	if err := registry.New(*dataDir).Create(); err != nil {
+		return err
+	}
 	server.Software = "pirc-relay/" + version
 	srv, err := server.New(server.Config{
 		Registry:       registry.New(*dataDir),
@@ -249,11 +278,24 @@ func serve(args []string) error {
 	if !useTLS {
 		scheme = "ws"
 	}
+	// The certificate is loaded and the address taken before the relay says
+	// it listens, so that a bad file or a busy port is the last word logged.
+	if useTLS {
+		pair, err := tls.LoadX509KeyPair(*cert, *key)
+		if err != nil {
+			return fmt.Errorf("TLS certificate: %w", err)
+		}
+		hs.TLSConfig = &tls.Config{Certificates: []tls.Certificate{pair}}
+	}
+	ln, err := net.Listen("tcp", *listen)
+	if err != nil {
+		return err
+	}
 	log.Info("listening", "url", fmt.Sprintf("%s://%s/v1alpha1", scheme, *listen), "data_dir", *dataDir, "version", version, "trusted_proxies", *proxyList)
 	if useTLS {
-		err = hs.ListenAndServeTLS(*cert, *key)
+		err = hs.ServeTLS(ln, "", "")
 	} else {
-		err = hs.ListenAndServe()
+		err = hs.Serve(ln)
 	}
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
@@ -271,7 +313,7 @@ func add(role registry.Role, args []string, stdout, stderr io.Writer) error {
 		reusable = fs.Bool("reusable", false, "a token for several apps until it expires or is used --max-uses times, each labelled LABEL-1, LABEL-2 and so on (needs --label): for a store's reviewers, say")
 	}
 	maxUses := fs.Int("max-uses", 20, "with --reusable, how many apps it may register")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	many := reusable != nil && *reusable
@@ -314,7 +356,7 @@ func add(role registry.Role, args []string, stdout, stderr io.Writer) error {
 
 func tokens(args []string) error {
 	fs, dataDir := flags("tokens")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	d, err := registry.New(*dataDir).Load()
@@ -332,14 +374,14 @@ func tokens(args []string) error {
 		if t.Reusable {
 			kind, used = "reusable", fmt.Sprintf("%d of %d", t.Used, t.MaxUses)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", t.Role, shown(t.Label), kind, used, t.ExpiresAt.Local().Format(time.DateTime))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", t.Role, shown(t.Label), kind, used, when(t.ExpiresAt))
 	}
 	return w.Flush()
 }
 
 func revoke(args []string) error {
 	fs, dataDir := flags("revoke")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 || fs.Arg(0) == "" {
@@ -355,7 +397,7 @@ func revoke(args []string) error {
 
 func list(args []string) error {
 	fs, dataDir := flags("list")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	d, err := registry.New(*dataDir).Load()
@@ -371,7 +413,7 @@ func list(args []string) error {
 		return ""
 	}
 	for _, k := range d.Sorted() {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", k.Role, shown(k.Label), k.PublicKey, k.AddedAt.Format(time.DateTime), yes(k.PushHandle != ""), yes(k.ReadKey != ""))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", k.Role, shown(k.Label), k.PublicKey, when(k.AddedAt), yes(k.PushHandle != ""), yes(k.ReadKey != ""))
 	}
 	if err := w.Flush(); err != nil {
 		return err
@@ -384,7 +426,7 @@ func list(args []string) error {
 
 func pending(args []string) error {
 	fs, dataDir := flags("pending")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	d, err := registry.New(*dataDir).Load()
@@ -394,7 +436,7 @@ func pending(args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "LABEL\tKEY\tFROM\tSOFTWARE\tFIRST SEEN\tLAST SEEN")
 	for _, q := range d.Pending(time.Now()) {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", shown(q.Label), q.PublicKey, shown(q.Remote), shown(q.Software), q.FirstSeen.Format(time.DateTime), q.LastSeen.Format(time.DateTime))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", shown(q.Label), q.PublicKey, shown(q.Remote), shown(q.Software), when(q.FirstSeen), when(q.LastSeen))
 	}
 	return w.Flush()
 }
@@ -406,7 +448,7 @@ func keyArg(fs *flag.FlagSet, dataDir *string, args []string) (string, error) {
 	if len(args) > 0 && args[0] != "" && args[0][0] != '-' {
 		key, args = args[0], args[1:]
 	}
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return "", err
 	}
 	if key == "" && fs.NArg() == 1 {
@@ -448,7 +490,7 @@ func reject(args []string) error {
 
 func remove(args []string) error {
 	fs, dataDir := flags("remove")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -464,7 +506,7 @@ func remove(args []string) error {
 
 func label(args []string) error {
 	fs, dataDir := flags("label")
-	if err := parse(fs, dataDir, args); err != nil {
+	if err := parseAdmin(fs, dataDir, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 2 {

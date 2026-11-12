@@ -2341,6 +2341,20 @@ Each step ends with something that can be seen working.
        read; the relay logs that it listens before loading its
        certificate; a wrong token is reported as an unregistered key; the
        release archives carry the builder's owner and group-writable modes.
+       Fixed 2026-11-12, for 0.3.1: `pirc-web enrol` takes the first
+       answer, so a relay it cannot reach, or whose certificate it does
+       not trust, is reported at once with the reason (and, for a
+       certificate, `NODE_EXTRA_CA_CERTS`); it no longer retries a refused
+       token with the key alone, and a connection that did and was refused
+       as unregistered reports the token's refusal. The relay makes its
+       registry when it starts, and the other commands refuse a directory
+       without one, naming it (a directory owned by another user is
+       refused with `--data-dir` in the example, since `sudo` drops
+       `PIRC_RELAY_DATA_DIR`); the relay loads its certificate and takes
+       its address before logging that it listens; the archives are
+       root's, writable by their owner only; the commands show times with
+       their zone; and `/pirc status` calls its label the name asked for,
+       since the relay names a host by its token or approval.
        Checks on GitHub (2026-11-11), since a visitor should see the
        project's state and outside changes may come: `sh/check.sh` on
        Linux with pi and tmux, so the end-to-end tests too, and the mobile

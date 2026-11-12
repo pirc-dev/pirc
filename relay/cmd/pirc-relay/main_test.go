@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"pirc.dev/relay/internal/registry"
 )
@@ -50,6 +52,52 @@ func TestServeRefusesBadEnv(t *testing.T) {
 	}
 }
 
+// relayDir is a data directory as a relay that has started leaves it.
+func relayDir(t *testing.T) string {
+	dir := t.TempDir()
+	if err := registry.New(dir).Create(); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// The commands that read or change the registry refuse a directory without
+// one, rather than show an empty registry or start one the relay never
+// reads; the relay makes it when it starts.
+func TestAdminNeedsRegistry(t *testing.T) {
+	dir := t.TempDir()
+	var out, info bytes.Buffer
+	err := add(registry.RoleHost, []string{"--data-dir", dir}, &out, &info)
+	if err == nil || !strings.Contains(err.Error(), "no registry at "+filepath.Join(dir, "registry.json")) {
+		t.Fatalf("add-host: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "registry.json")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("add-host made a registry: %v", err)
+	}
+	for _, cmd := range []func([]string) error{list, tokens, pending} {
+		if err := cmd([]string{"--data-dir", dir}); err == nil || !strings.Contains(err.Error(), "no registry at") {
+			t.Errorf("%v", err)
+		}
+	}
+	if err := approve([]string{"abc", "--data-dir", dir}); err == nil || !strings.Contains(err.Error(), "no registry at") {
+		t.Errorf("approve: %v", err)
+	}
+	// Create leaves an existing registry as it is.
+	reg := registry.New(dir)
+	if err := reg.Create(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.IssueToken(registry.RoleHost, "laptop", time.Minute, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Create(); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := reg.Load(); err != nil || len(d.Tokens) != 1 {
+		t.Errorf("after Create again: %v, %v", d, err)
+	}
+}
+
 func TestCheckOwner(t *testing.T) {
 	dir := t.TempDir()
 	if err := checkOwner(dir); err != nil {
@@ -81,7 +129,7 @@ func TestShown(t *testing.T) {
 }
 
 func TestAddReusable(t *testing.T) {
-	dir := t.TempDir()
+	dir := relayDir(t)
 	var out, info bytes.Buffer
 	if err := add(registry.RoleClient, []string{"--data-dir", dir, "--label", "review-apple", "--ttl", "720h", "--reusable", "--url", "wss://relay.example"}, &out, &info); err != nil {
 		t.Fatal(err)

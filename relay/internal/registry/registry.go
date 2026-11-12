@@ -159,6 +159,26 @@ func (r *Registry) Load() (*Data, error) {
 	return d, nil
 }
 
+// Create writes an empty registry if there is none, so that a command
+// pointed at another directory can tell it holds no registry.
+func (r *Registry) Create() error {
+	return r.update(func(d *Data) error {
+		if _, err := os.Stat(r.Path); err == nil {
+			return errUnchanged
+		}
+		return nil
+	})
+}
+
+// Exists says whether the file is there.
+func (r *Registry) Exists() (bool, error) {
+	_, err := os.Stat(r.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // Stamp is what a reader checks to tell whether the file changed.
 type Stamp struct {
 	ModTime time.Time

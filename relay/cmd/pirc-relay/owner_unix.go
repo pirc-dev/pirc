@@ -31,5 +31,6 @@ func checkOwner(dir string) error {
 	if u, err := user.LookupId(owner); err == nil {
 		owner = u.Username
 	}
-	return fmt.Errorf("%s belongs to user %s; run this command as that user (for example sudo -u %s pirc-relay ...)", dir, owner, owner)
+	// --data-dir, since sudo drops PIRC_RELAY_DATA_DIR.
+	return fmt.Errorf("%s belongs to user %s; run this command as that user (for example sudo -u %s pirc-relay COMMAND --data-dir %s)", dir, owner, owner, dir)
 }

@@ -110,6 +110,41 @@ test("a key removed while connected stops asking; other closes retry", async () 
   assert.equal(states.at(-1)?.kind, "stopped");
 });
 
+// A relay that refuses a token, then the key alone as not registered, as
+// the relay does a client with a wrong token.
+async function refusingTokens(): Promise<{ wss: WebSocketServer; url: string; hellos: string[] }> {
+  const { wss, url } = await server();
+  const hellos: string[] = [];
+  wss.on("connection", (ws) => {
+    ws.on("message", (data: Buffer) => {
+      const f = fromBinary(FrameSchema, new Uint8Array(data));
+      if (f.body.case !== "hello") return;
+      const token = f.body.value.registrationToken;
+      hellos.push(token);
+      const [code, message] = token ? [ErrorCode.TOKEN_INVALID, "token not found or expired"] : [ErrorCode.UNAUTHENTICATED, "key not registered"];
+      ws.send(toBinary(FrameSchema, create(FrameSchema, { body: { case: "error", value: { code, message } } })));
+    });
+  });
+  return { wss, url, hellos };
+}
+
+test("a wrong token is reported as the token's refusal, not as an unregistered key", async () => {
+  for (const tokenRetry of [undefined, false]) {
+    const { wss, url, hellos } = await refusingTokens();
+    const refused = await new Promise<ConnectionState>((resolve) => {
+      const conn = new RelayConnection({
+        url, role: "client", key, token: "wrong", tokenRetry, software: "test", minBackoffMs: 10, maxBackoffMs: 10, onFrame() {},
+        onState: (s) => s.kind === "refused" && resolve(s),
+      });
+      conn.start();
+    });
+    wss.close();
+    assert.deepEqual(refused, { kind: "refused", code: ErrorCode.TOKEN_INVALID, reason: "token not found or expired" });
+    // Without the retry, the token is the only try.
+    assert.deepEqual(hellos, tokenRetry === false ? ["wrong"] : ["wrong", ""]);
+  }
+});
+
 test("strings are cut to whole characters", () => {
   assert.equal(cutUtf8("abc", 2), "ab");
   assert.equal(cutUtf8("aé", 2), "a");
