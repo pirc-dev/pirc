@@ -2373,6 +2373,14 @@ Each step ends with something that can be seen working.
        root's, writable by their owner only; the commands show times with
        their zone; and `/pirc status` calls its label the name asked for,
        since the relay names a host by its token or approval.
+       Found then and fixed for 0.3.2: a host given a wrong token in
+       `/pirc enrol` asked to be approved instead, since its one retry,
+       kept for another pi process of the host that redeemed the token at
+       the same moment, dropped the token, and the relay holds a host's
+       key alone for approval (and listed it as asking). The retry now
+       brings the token again: the relay lets a registered key in whatever
+       token it brings, so the race still ends logged in, and refuses a
+       wrong token again, which the host then reports.
        Checks on GitHub (2026-11-11), since a visitor should see the
        project's state and outside changes may come: `sh/check.sh` on
        Linux with pi and tmux, so the end-to-end tests too, and the mobile

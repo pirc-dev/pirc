@@ -281,6 +281,14 @@ func TestRegisterThenReconnectWithoutToken(t *testing.T) {
 
 	p2 := r.dial(pub, priv)
 	p2.mustLogin(pb.Role_ROLE_HOST, "", "")
+
+	// With the token it used, as a host's other process does that found the
+	// token gone at the same moment: the key is known, so the token is not
+	// looked at, and no request for approval is made.
+	r.dial(pub, priv).mustLogin(pb.Role_ROLE_HOST, tok, "")
+	if d, _ := r.reg.Load(); len(d.Requests) != 0 {
+		t.Fatalf("requests %+v", d.Requests)
+	}
 }
 
 func TestLoginRefusals(t *testing.T) {

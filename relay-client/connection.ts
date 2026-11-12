@@ -31,8 +31,8 @@ export interface ConnectionOptions {
   key: DeviceKey;
   // A one-time registration token, for a key not yet registered.
   token?: string;
-  // Whether a refused token earns one retry with the key alone, for a host
-  // whose other process redeemed it at the same moment; true unless false.
+  // Whether a refused token earns one retry, for a host whose other process
+  // redeemed it at the same moment; true unless false.
   tokenRetry?: boolean;
   label?: string;
   software: string;
@@ -102,11 +102,11 @@ export class RelayConnection {
   private loginTimer: NodeJS.Timeout | undefined;
   private token: string | undefined;
   // A token refused because another process of this host redeemed it at
-  // the same moment, with the same key, earns one retry without it.
+  // the same moment, with the same key, earns one retry. The retry keeps
+  // the token: the relay lets a registered key in whatever token it brings,
+  // and refuses a wrong one again, which is then the answer. Without it, a
+  // host's key alone would be held for approval instead.
   private tokenRetried = false;
-  // Why the token was refused, which is the answer if the key alone is
-  // then refused as not registered.
-  private tokenRefusal: string | undefined;
   private readonly url: string;
 
   constructor(private readonly opts: ConnectionOptions) {
@@ -251,12 +251,7 @@ export class RelayConnection {
           const { code, message } = body.value;
           if (code === ErrorCode.TOKEN_INVALID && this.token && !this.tokenRetried && this.opts.tokenRetry !== false) {
             this.tokenRetried = true;
-            this.tokenRefusal = message;
-            this.token = undefined;
-            return this.retry("registration token already used; retrying with the key alone", 1000);
-          }
-          if (code === ErrorCode.UNAUTHENTICATED && this.tokenRefusal !== undefined) {
-            return this.refuse(ErrorCode.TOKEN_INVALID, this.tokenRefusal || "registration token refused");
+            return this.retry("registration token refused; trying once more, in case this host's other process used it", 1000);
           }
           if (code === ErrorCode.APPROVAL_PENDING) return this.await(message);
           if (REFUSALS.has(code)) return this.refuse(code, message);
@@ -274,7 +269,6 @@ export class RelayConnection {
           phase = "ready";
           clearTimeout(this.loginTimer);
           this.attempt = 0;
-          this.tokenRefusal = undefined;
           if (this.token) {
             this.token = undefined;
             this.call("onRegistered", this.opts.onRegistered);
