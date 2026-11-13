@@ -814,6 +814,25 @@ test("stats: pi's totals over the whole file, and context use", () => {
   live.dispose();
 });
 
+test("the announcement has the session's cost and context use, and a reply announces them again", () => {
+  const { pi, sink, live } = setup();
+  const a = { ...assistant("hello"), usage: { ...usage, cost: { ...usage.cost, total: 0.5 } } } as AgentMessage;
+  live.onMessageStart(a);
+  live.onMessageEnd(a);
+  pi.persist(a);
+  const before = announcements(sink).length;
+  live.onWorking(false);
+  const after = announcements(sink);
+  assert.ok(after.length > before, "announced once the reply was persisted");
+  assert.deepEqual([after.at(-1)?.cost, after.at(-1)?.contextTokens, after.at(-1)?.contextWindow], [0.5, 250n, 1000n]);
+  const moved = announcements(sink).length;
+  live.onTree(null);
+  assert.equal(announcements(sink).length, moved + 1, "another branch, another context");
+  pi.contextUsage = { tokens: null, contextWindow: 1000, percent: null };
+  assert.equal(live.announcement().contextTokens, undefined, "unknown, as right after a compaction");
+  live.dispose();
+});
+
 test("commands: PiRC's own are neither listed nor run as prompt text, nor are pi's built-ins", () => {
   const { pi, live } = setup();
   pi.commands = [{ name: "pirc", source: "extension" }, { name: "pirc:new", source: "extension" }, { name: "review", source: "prompt", description: "Review" }, { name: "deploy", source: "extension" }];

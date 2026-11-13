@@ -280,19 +280,34 @@ not in `web/`, since they belong to neither client.
 - **Context and cost in the chat's header** (`42% · $0.31`, 2026-10-30),
   at the end of the title's line, which gives way to it. The page asks pi
   for them when the chat opens, after each reply and when the model
-  changes; they are not in the session's announcement, since only an open
-  chat shows them. Reason: how full the context is decides when to
+  changes. Reason: how full the context is decides when to
   compact or start afresh, and was three taps away. The sheet's row still
   gives the details.
+- **Cost and context in the session list** (2026-11-13), as dingger
+  shows them: each row has what the session has cost (`$1.84`, its whole
+  total, as pi's footer) and a small meter of its context, grey, in the
+  working colour above 70% and the asking colour above 90%, as in pi,
+  before the time; the figures in its title. They come in the session's
+  announcement (session.proto, from extension 0.3.3), which the extension
+  sends again after each of pi's messages; a row from an older extension has
+  neither. Reason: which sessions are filling up or dear is a reason to
+  open one, and was only inside it.
 - **The composer, while pi works** (from Triage, 2026-10-26): Stop on a
   line of its own, by how long the turn has run, and away from the send
-  button; a small Queue/Steer switch on that line (2026-11-03), what each
-  does in its tooltip; and one send button that says which. Queue is the default, and Cmd/Ctrl+Enter
-  sends as the button would, so it queues unless Steer is chosen; the
-  choice holds for the turn, and each turn starts on Queue. Reason: Stop next to Steer was one
-  slip from the wrong one, and a message typed while the agent works is
-  safer waiting for the turn than cutting into it. The price is a line of
-  height on a phone, and Steer is two taps instead of one. Before, Queue,
+  button; a small Steer/Queue switch on that line (2026-11-03), what each
+  does in its tooltip; and one send button that says which. Steer is the
+  default (since 2026-11-13; Queue before), and Cmd/Ctrl+Enter
+  sends as the button would, so it steers unless Queue is chosen, while
+  Alt+Enter queues, as in pi; the
+  choice holds for the turn, and each turn starts on Steer. Reason: Stop next to Steer was one
+  slip from the wrong one. Queue was the default while a steer was taken
+  to cut into pi's work, but in pi neither does: a steer is read after
+  the step pi is on (the reply and its tool calls), a queued message once
+  the whole task is done, and only Stop interrupts. Steer is what Enter
+  does in pi's own terminal, and the tooltips now say that ("after the
+  step it is on", "when the whole task is done") rather than "interrupt
+  now". The price of the switch is a line of
+  height on a phone. Before, Queue,
   Steer and Stop sat in one row and Cmd/Ctrl+Enter steered. Until
   2026-11-03 the switch had a line of its own, each side with a line
   under it ("after this turn", "interrupt now"), which took too much

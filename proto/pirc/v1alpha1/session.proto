@@ -60,6 +60,13 @@ message SessionAnnouncement {
   // The latest thing in the session worth a notification, unset before the
   // first (docs/design.md, section 12, step 13).
   Notice notice = 19;
+  // What the session has cost, in US dollars, summed as Stats.total is,
+  // and its context use as Stats has it; announced again after each
+  // reply, so that a list of sessions can show them. Unset from extensions
+  // before 0.3.3.
+  optional double cost = 20;
+  optional uint64 context_tokens = 21;
+  uint64 context_window = 22;
 }
 
 // Something a session did worth telling the person of: a client that shows

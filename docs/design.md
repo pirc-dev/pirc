@@ -719,7 +719,13 @@ Message groups:
   The actions besides prompt and abort (step 8): list models, set the model,
   set the thinking level, compact, new session, fork, clone, list past
   sessions, resume, reload, move in the session tree, list its branches,
-  rename, stats (cost and context use) and list commands. A change is broadcast as an event before
+  rename, stats (cost and context use) and list commands. The session's
+  cost and context use are also in its announcement (2026-11-13, for the
+  session list, `web.md` section 5), sent again after each of pi's
+  messages (a run's every step) and on a move in the session tree, which
+  costs a few hundred bytes to every client subscribed to the relay each
+  time, less than the reply's own deltas; Stats keeps the token counts,
+  which only the chat shows. A change is broadcast as an event before
   its `Accepted`, so the asker sees the new state by the time it learns of
   success, including a level pi clamped; a question is answered with its
   answer (`Models`, `Stats`, `Commands`). Compact is answered when the

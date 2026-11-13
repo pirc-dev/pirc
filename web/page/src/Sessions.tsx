@@ -6,7 +6,7 @@
 // since it was last open here.
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { rank } from "../../core/fuzzy.ts";
-import type { PendingHostView, SessionView } from "../../core/view.ts";
+import type { PendingHostView, SessionUsageView, SessionView } from "../../core/view.ts";
 import { JoinRequests } from "./Hosts.tsx";
 import { useLayer } from "./layer.ts";
 import { launchable, LaunchSheet } from "./Launch.tsx";
@@ -266,14 +266,16 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
           )}
         </div>
         {shown.length > 0 && (
-          <p className="flex flex-wrap gap-3 text-sm text-ink2 cards:gap-1.5 cockpit:font-mono cockpit:text-[13px]">
+          <p className="flex flex-wrap items-center gap-3 text-sm text-ink2 cards:gap-1.5 cockpit:font-mono cockpit:text-[13px]">
             {asking > 0 && <span className={`${tone.blocked} ${pill} native:bg-block-wash`}><Sym>×</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{asking}</b><Word>asking</Word></span>}
             {fresh > 0 && <span className={`${tone.done} ${pill} native:bg-done-wash`}><Sym>✓</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{fresh}</b><Word>done</Word></span>}
             {working > 0 && <span className={`${tone.working} ${pill} native:bg-work-wash`}><Sym>◐</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{working}</b><Word>working</Word></span>}
             <span className={`${pill} native:bg-wash`}><Sym>·</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0 cockpit:font-medium">{shown.length}</b><Word>in all</Word></span>
             {host && (group ?? oneGroup(shown)) && launchable(shown) && (
-              <button className={`${pill} -my-1 flex min-h-9 items-center gap-1 text-ink cards:text-accent native:bg-wash cockpit:text-link`} onClick={() => launchBeside(launchable(shown)!)}>
-                <Icon name="plus" className="size-4" />New agent
+              // The counts' size, its wider target a margin of its own
+              // that moves nothing.
+              <button className={`${pill} relative inline-flex items-center gap-1 text-ink before:absolute before:-inset-x-1.5 before:-inset-y-2.5 before:content-[''] cards:text-accent native:bg-wash cockpit:text-link`} onClick={() => launchBeside(launchable(shown)!)}>
+                <Icon name="plus" className="size-3.5" />New agent
               </button>
             )}
           </p>
@@ -416,8 +418,28 @@ function Counts(p: { sessions: SessionView[]; news: Set<string> }) {
   );
 }
 
+// What a session has cost and a meter of its context, as dingger and pi's
+// footer show them: grey, the working colour above 70% and the asking
+// colour above 90%.
+function Usage(p: { usage: SessionUsageView }) {
+  const u = p.usage;
+  const pct = u.contextWindow > 0 && u.contextTokens !== undefined ? (u.contextTokens / u.contextWindow) * 100 : undefined;
+  const cost = u.cost > 0 && u.cost < 0.005 ? "<$0.01" : `$${u.cost.toFixed(2)}`;
+  const fill = pct === undefined ? "" : pct > 90 ? "bg-block" : pct > 70 ? "bg-work" : "bg-ink3";
+  const context = u.contextWindow === 0 ? "Context unknown" : pct === undefined ? "Context unknown until the next reply" : `Context ${pct < 1 && u.contextTokens! > 0 ? "<1" : Math.round(pct)}% used`;
+  const title = `${context} · ${cost} so far`;
+  return (
+    <span className="flex items-baseline gap-1.5 text-[12.5px] text-ink3 tabular-nums cards:font-mono cards:text-xs native:font-ui cockpit:font-mono cockpit:text-[11.5px]" title={title} role="img" aria-label={title}>
+      {cost}
+      <span className="relative h-1 w-4 self-center overflow-hidden rounded-full bg-rule" aria-hidden>
+        {pct !== undefined && <span className={`absolute inset-y-0 left-0 ${fill}`} style={{ width: `${Math.min(100, Math.max(pct, pct > 0 ? 8 : 0))}%` }} />}
+      </span>
+    </span>
+  );
+}
+
 // A session: its status, pi's name for it and when it last had a
-// message; alone in its window, the window's name above. A search result
+// message, with its cost and context use; alone in its window, the window's name above. A search result
 // also says where it runs, and marks what matched. One that finished since it was last open is set
 // heavier, its time in teal.
 function Row(p: { session: SessionView; window?: string; open: (id: string) => void; matched?: Set<number>; news: boolean; now: number; selected?: boolean }) {
@@ -427,6 +449,7 @@ function Row(p: { session: SessionView; window?: string; open: (id: string) => v
   // Beside the chat, the session open in it is marked.
   const selected = p.selected ? "bg-wash cards:bg-accent-soft cards:shadow-[inset_3px_0_0_var(--accent)] cockpit:shadow-[inset_2px_0_0_var(--accent)]" : "";
   const time = <span className={`text-[13px] tabular-nums cards:font-mono cards:text-[12.5px] native:font-ui native:text-[13px] cockpit:font-mono cockpit:text-xs ${p.news ? `font-bold ${tone.done} cards:font-semibold` : "text-ink2 cards:text-ink3 native:text-ink2 cockpit:text-ink3"}`}>{last ? ago(last.at, p.now) : ""}</span>;
+  const right = <span className="flex items-baseline gap-2">{s.usage && <Usage usage={s.usage} />}{time}</span>;
   const name = <span className={`truncate text-base leading-[1.35] cards:text-[15px] native:text-base cockpit:font-mono cockpit:text-sm ${p.news ? "font-bold cards:font-[650] native:font-bold" : "font-medium cards:font-[550] native:font-medium"}`}>{p.matched ? <Marked text={title(s)} offset={0} positions={p.matched} /> : title(s)}</span>;
   return (
     <li>
@@ -442,11 +465,11 @@ function Row(p: { session: SessionView; window?: string; open: (id: string) => v
             <span className="col-span-2 col-start-2 row-start-1 truncate text-[13px] leading-[1.4] text-ink2 cards:font-mono cards:text-[12.5px] cards:text-ink3 native:font-ui native:text-[13px] cockpit:font-mono cockpit:text-xs cockpit:text-ink3">{p.window}</span>
             <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} news={p.news} className="col-start-1 row-start-2 w-[22px] text-[15px] leading-[1.35] native:row-span-2 native:row-start-1" />
             <span className="col-start-2 row-start-2 flex min-w-0">{name}</span>
-            <span className="col-start-3 row-start-2">{time}</span>
+            <span className="col-start-3 row-start-2">{right}</span>
           </>
           : <>
             <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} news={p.news} className={`w-[22px] text-[15px] leading-[1.35] ${lines ? "row-span-2" : ""}`} />
-            {name}{time}
+            {name}{right}
           </>}
         {p.matched && <span className="col-span-2 col-start-2 truncate text-[12.5px] text-ink3 cards:font-mono cards:text-xs native:font-ui native:text-[12.5px] cockpit:font-mono cockpit:text-[11.5px]"><Marked text={where(s)} offset={whereAt(s)} positions={p.matched} /></span>}
       </button>

@@ -46,6 +46,8 @@ const session = (host: string, group: string | undefined, window: string, o: Par
     // In tmux, a pi can open another beside it.
     ...(group ? { launcher: "tmux" } : {}),
     ...(o.said ? { last: { who: o.you ? "user" : "assistant", text: o.said, at: now - (o.ago ?? 5) * min } } : {}),
+    // Spread over cheap and dear, and context from nearly empty to full.
+    usage: { cost: ((n * 137) % 900) / 100, contextTokens: ((n * 23) % 97) * 10_000, contextWindow: 1_000_000 },
     ...o,
   };
 };
@@ -61,7 +63,7 @@ const sessions: SessionView[] = [
   session("studio", "work", "docs", { first: "Tidy the README's install section", said: "thanks, that's all for today", you: true, ago: 180 }),
   session("studio", "work", "billing", { name: "Invoice template", said: "Updated the invoice template and its snapshot.", ago: 60 * 24 * 2 }),
   session("studio", "infra", "backups", { name: "Restic check", said: "Restic snapshot verified: 2.1 GB, 0 errors.", ago: 25 }),
-  session("studio", "infra", "terraform", { first: "Plan the DNS changes for the new relay", compacting: true, said: "Planning 3 changes to dns.tf", ago: 1 }),
+  session("studio", "infra", "terraform", { first: "Plan the DNS changes for the new relay", compacting: true, usage: { cost: 4.12, contextWindow: 1_000_000 }, said: "Planning 3 changes to dns.tf", ago: 1 }),
   session("studio", "infra", "grafana", { name: "Relay latency panel", said: "Added the relay latency panel.", ago: 300 }),
   session("studio", "notes", "journal", { first: "Add Sunday's entry", said: "Added Sunday's entry.", ago: 60 * 24 }),
   session("laptop", "main", "pirc", { name: "Deploy pipeline", said: "Pushed to master; the deploy is green.", ago: 60 }),
@@ -71,7 +73,7 @@ const sessions: SessionView[] = [
   session("build-box", "ci", "runners", { name: "arm64 runners", working: true, said: "Rebuilding the arm64 image.", ago: 4 }),
   session("build-box", "ci", "cache", { first: "Why did the cache hit rate drop?", said: "The cache hit rate is back to 94%.", ago: 90 }),
   session("build-box", "bench", "rel-bench", { name: "Reconnect bench", said: "p95 reconnect is 0.8 s on arm64.", ago: 60 * 24 * 3 }),
-  session("build-box", undefined, "~/sandbox", { cwd: "~/sandbox" }),
+  session("build-box", undefined, "~/sandbox", { cwd: "~/sandbox", usage: undefined }),
 ];
 // Finished since last opened: their latest message is newer than what this
 // browser read, which is nothing, so mark the rest read.

@@ -397,6 +397,9 @@ export class Live {
   private toolTook = new Map<string, number>();
   private prompts: { requestId: string; text: string; images: boolean; at: number }[] = [];
   private disposed = false;
+  // The announcement onAnnouncementChanged is sending, for the sink to send
+  // as it is rather than build again.
+  private building: SessionAnnouncement | undefined;
   // The run's last reply, for the notice when it ends.
   private reply: AgentMessage | undefined;
   // The questions seen showing, so that only a new one raises a notice.
@@ -468,11 +471,23 @@ export class Live {
       launchId: this.sink.launchId,
       questions: this.sink.questions(),
       notice: this.notice.notice,
+      ...this.usage(),
     });
   }
 
+  // What the session has cost and how full its context is, as Stats has
+  // them.
+  private usage(): { cost: number; contextTokens?: bigint; contextWindow: bigint } {
+    const usage = this.ctx.getContextUsage();
+    return {
+      cost: sessionTotals(this.ctx.sessionManager.getEntries()).cost,
+      contextTokens: usage && usage.tokens !== null ? count(usage.tokens) : undefined,
+      contextWindow: count(usage?.contextWindow ?? this.ctx.model?.contextWindow),
+    };
+  }
+
   announcementBytes(): Uint8Array {
-    return toBinary(SessionAnnouncementSchema, this.announcement());
+    return toBinary(SessionAnnouncementSchema, this.building ?? this.announcement());
   }
 
   dispose(): void {
@@ -537,6 +552,9 @@ export class Live {
     this.catchUp();
     this.turnId = lastTurnId(this.ctx.sessionManager.getBranch());
     this.emit({ case: "branchChanged", value: { leafId: leafId ?? "" } });
+    // Another branch has its own context use, and a summary its cost; a
+    // move that summarised announces as its summary ends.
+    if (!this.replacement?.summarizing) this.onAnnouncementChanged();
   }
 
   // Runs a timer's work, keeping its errors from pi.
@@ -586,11 +604,13 @@ export class Live {
   // still not persisted after PERSIST_MS goes without an entry ID.
   private resolvePending(): void {
     const now = Date.now();
+    let replied = false;
     while (this.pending.length > 0) {
       const p = this.pending[0];
       const entryId = this.findEntry(p.message);
       if (entryId === undefined && now - p.since < PERSIST_MS) break;
       this.pending.shift();
+      if (p.message.role === "assistant") replied = true;
       if (p.message.role === "user" && entryId) this.turnId = entryId;
       // The session's first message names it until pi has a name.
       if (p.message.role === "user" && !this.firstPrompt) {
@@ -612,6 +632,9 @@ export class Live {
     }
     clearTimeout(this.pendingTimer);
     this.pendingTimer = undefined;
+    // A reply changes the cost and the context use the announcement has:
+    // each assistant message, a run's every step.
+    if (replied && !this.disposed) this.onAnnouncementChanged();
     if (this.pending.length > 0 && !this.disposed) this.waitForPending();
   }
 
@@ -743,8 +766,15 @@ export class Live {
   }
 
   onAnnouncementChanged(): void {
-    this.emit({ case: "announcement", value: this.announcement() });
-    this.sink.announce(this);
+    // Built once for both: its cost and context use read the whole session.
+    const a = this.announcement();
+    this.emit({ case: "announcement", value: a });
+    this.building = a;
+    try {
+      this.sink.announce(this);
+    } finally {
+      this.building = undefined;
+    }
   }
 
   // pi refuses prompts while it compacts. A compaction before a prompt's

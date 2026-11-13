@@ -51,12 +51,14 @@ function useBlind(s: SessionView, attached: boolean): boolean {
 
 // The composer. Idle, the message and Send. While pi works: Stop on its
 // own line, by how long the turn has run and away from the send button; a
-// small switch on that line choosing whether the message waits for the
-// turn to end (Queue, the default) or interrupts it (Steer); and
-// one send button that says which. Images come with the button beside
+// small switch on that line choosing whether pi reads the message after
+// the step it is on (Steer, the default, as Enter in pi) or once the whole
+// task is done (Queue, as Alt+Enter in pi); and one send button that says
+// which. Neither interrupts pi: only Stop does. Images come with the button beside
 // the box, or pasted or dropped anywhere on the page. Cmd/Ctrl+Enter sends
 // as the button would; so does Enter where there is a mouse or trackpad, taken as a sign
-// of a hardware keyboard (keys.ts), Shift+Enter there making a new line. On a touch
+// of a hardware keyboard (keys.ts), Shift+Enter there making a new line, and
+// Alt+Enter queues. On a touch
 // screen Enter is the keyboard's return key, a new line. With the keys on,
 // Esc leaves the box, and a second stops pi (Chat.tsx).
 export function Composer(p: {
@@ -73,15 +75,15 @@ export function Composer(p: {
 }) {
   const { text, setText } = p;
   const area = useRef<HTMLTextAreaElement>(null);
-  const [mode, setMode] = useState<"followUp" | "steer">("followUp");
+  const [mode, setMode] = useState<"followUp" | "steer">("steer");
   const keyboard = useKeyboard();
   const keys = useKeys();
   const busy = p.session.working || p.session.compacting;
   const send = () => p.send(busy ? mode : undefined);
-  // Each turn starts on Queue: a Steer chosen for the last one is not kept,
+  // Each turn starts on Steer: a Queue chosen for the last one is not kept,
   // also when a queued message starts the next without pi going idle.
   useEffect(() => {
-    setMode("followUp");
+    setMode("steer");
   }, [busy, p.turn]);
   useEffect(() => {
     const el = area.current;
@@ -133,7 +135,7 @@ export function Composer(p: {
   // near Stop; its title says what each side does.
   const switcher = (
     <div className="ml-auto flex flex-none rounded-full bg-wash p-[2px] text-[12.5px] cards:rounded-[9px] cockpit:rounded-lg cockpit:bg-card cockpit:font-ui" role="group" aria-label="When pi gets the message">
-      {([["followUp", "Queue", "Send after this turn"], ["steer", "Steer", "Interrupt pi now"]] as const).map(([m, label, title]) => (
+      {([["steer", "Steer", "pi reads it after the step it is on"], ["followUp", "Queue", "pi reads it when the whole task is done"]] as const).map(([m, label, title]) => (
         <button
           key={m}
           className="h-7 rounded-full px-2.5 text-ink2 aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:ring-1 aria-pressed:ring-ink3 cards:rounded-[7px] cards:aria-pressed:bg-card cards:aria-pressed:shadow-card cards:aria-pressed:ring-wash2 native:aria-pressed:bg-sheet-card cockpit:rounded-md cockpit:aria-pressed:ring-accent"
@@ -194,7 +196,14 @@ export function Composer(p: {
                 e.currentTarget.blur();
                 return;
               }
-              if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
+              if (e.key !== "Enter" || e.shiftKey) return;
+              if (e.altKey) {
+                // Queued, as in pi, whatever the switch says; never a new
+                // line, which Option+Enter would otherwise make.
+                e.preventDefault();
+                if (!empty) p.send(busy ? "followUp" : undefined);
+                return;
+              }
               if (e.metaKey || e.ctrlKey || keyboard) {
                 e.preventDefault();
                 send();

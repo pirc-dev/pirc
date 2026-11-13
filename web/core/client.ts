@@ -195,6 +195,7 @@ function sessionView(id: string, e: SessionEntry, a: SessionAnnouncement): Sessi
     ...(a.launchId ? { launchId: a.launchId } : {}),
     ...(questions.length ? { questions } : {}),
     ...(notice ? { notice } : {}),
+    ...(a.cost !== undefined ? { usage: { cost: a.cost, ...(a.contextTokens !== undefined ? { contextTokens: Number(a.contextTokens) } : {}), contextWindow: Number(a.contextWindow) } } : {}),
   };
 }
 

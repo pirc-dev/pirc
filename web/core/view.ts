@@ -44,6 +44,10 @@ export interface SessionView {
   launchId?: string;
   // The chat's latest message, for the session list; absent before one.
   last?: LastView;
+  // What the session has cost, in US dollars, and how full its context is
+  // (session.proto, SessionAnnouncement); absent from extensions before
+  // 0.3.3.
+  usage?: SessionUsageView;
   // The dialogs pi shows in its terminal for extensions, waiting for the
   // person, oldest first; absent when there are none.
   questions?: QuestionView[];
@@ -51,6 +55,14 @@ export interface SessionView {
   // session; absent before the first, from a host older than notices, or
   // of a kind this client does not know.
   notice?: NoticeView;
+}
+
+export interface SessionUsageView {
+  cost: number;
+  // Absent when pi does not know it, as right after a compaction.
+  contextTokens?: number;
+  // 0 when there is no model.
+  contextWindow: number;
 }
 
 // session.proto, Notice. The host decides what is worth a notification;
