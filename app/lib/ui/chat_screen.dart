@@ -3,7 +3,7 @@
 // where it runs; its items as runs (core/chat.dart), replies in Markdown,
 // tool calls as lines that open to their arguments and output, messages
 // sent and not yet shown; and the composer, with pi's question above it,
-// and while pi works how long, Queue or Steer, and Stop. One of the user's
+// and while pi works how long, Steer or Queue, and Stop. One of the user's
 // messages, once pi has saved it, offers going back or a fork from there.
 import 'dart:async';
 import 'dart:convert';
@@ -1234,9 +1234,10 @@ class _TurnTimeState extends State<_TurnTime> {
 }
 
 // The composer. Idle, the message and a round send. While pi works, on its
-// own line: how long, the switch choosing whether the message waits for the
-// turn to end (Queue, the default) or interrupts it (Steer), and Stop; the
-// send button says which.
+// own line: how long, the switch choosing whether pi reads the message
+// after the step it is on (Steer, the default, as Enter in pi) or when the
+// whole task is done (Queue, as Alt+Enter in pi), and Stop, the only one
+// that interrupts pi; the send button says which.
 class _Composer extends StatefulWidget {
   const _Composer({required this.model, required this.session, required this.text, required this.images, this.wide = false});
   // Beside the list: in the conversation's column.
@@ -1251,8 +1252,8 @@ class _Composer extends StatefulWidget {
 }
 
 class _ComposerState extends State<_Composer> {
-  // Each turn starts on Queue.
-  var _steer = false;
+  // Each turn starts on Steer.
+  var _steer = true;
   var _wasWorking = false;
   // Why an image could not be added.
   String? _problem;
@@ -1322,7 +1323,7 @@ class _ComposerState extends State<_Composer> {
     final busy = s.working || s.compacting;
     if (busy != _wasWorking) {
       _wasWorking = busy;
-      _steer = false;
+      _steer = true;
     }
     final images = widget.images.value;
     final empty = widget.text.text.trim().isEmpty && images.isEmpty;
@@ -1428,7 +1429,7 @@ class _ComposerState extends State<_Composer> {
   }
 }
 
-// Queue or Steer: a small switch that sends nothing.
+// Steer or Queue: a small switch that sends nothing.
 class _Switch extends StatelessWidget {
   const _Switch({required this.steer, required this.set});
   final bool steer;
@@ -1437,10 +1438,11 @@ class _Switch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    Widget side(String label, bool value) => Semantics(
+    Widget side(String label, String hint, bool value) => Semantics(
           button: true,
           selected: steer == value,
           label: label,
+          hint: hint,
           excludeSemantics: true,
           onTap: () => set(value),
           child: GestureDetector(
@@ -1457,7 +1459,7 @@ class _Switch extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(9)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [side('Queue', false), side('Steer', true)]),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [side('Steer', 'pi reads it after the step it is on', true), side('Queue', 'pi reads it when the whole task is done', false)]),
     );
   }
 }

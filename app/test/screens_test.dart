@@ -249,7 +249,7 @@ void main() {
       await tester.pump();
       expect(find.text('2 tools read, edit'), findsOneWidget, reason: 'two that finished well fold');
       expect(find.text('Stop'), findsOneWidget);
-      expect(find.text('Queue'), findsNWidgets(2), reason: 'the switch, and the send button saying it');
+      expect(find.text('Steer'), findsNWidgets(2), reason: 'the switch, and the send button saying it: Steer, the default');
       await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/chat_${b.name}.png'));
     }, skip: !drawsGoldens);
   }
@@ -1253,11 +1253,25 @@ void main() {
     await tester.pump(const Duration(seconds: 46));
   }, skip: !drawsGoldens);
 
+  testWidgets('a message sent while pi works steers, unless Queue is chosen', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    await tester.pump();
+    await tester.enterText(find.byType(CupertinoTextField), 'and the docs too');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('send')));
+    await tester.pump();
+    expect(model.pending('0101010101010101-i1').single.delivery, 'steer');
+    await tester.pump(const Duration(seconds: 46));
+  });
+
   testWidgets('a message sent while pi works is queued, and shows until pi has it', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
     await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
     await tester.pump();
+    await tester.tap(find.text('Queue'));
     await tester.enterText(find.byType(CupertinoTextField), 'and update the changelog');
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('send')));

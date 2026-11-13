@@ -216,7 +216,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    child: Wrap(spacing: 6, runSpacing: 6, children: [
+                    child: Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
                       if (asking > 0) Pill(count: asking, word: 'asking', color: look.block, wash: look.blockWash, big: true),
                       if (fresh > 0) Pill(count: fresh, word: 'done', color: look.done, wash: look.doneWash, big: true),
                       if (working > 0) Pill(count: working, word: 'working', color: look.work, wash: look.workWash, big: true),
@@ -568,7 +568,8 @@ class _Connection extends StatelessWidget {
   }
 }
 
-// New agent, among a host's or group's counts on its own page.
+// New agent, among a host's or group's counts on its own page: their size,
+// in a wider target that moves nothing beside it, the row centring them.
 class _NewAgentPill extends StatelessWidget {
   const _NewAgentPill({required this.onTap});
   final VoidCallback onTap;
@@ -584,14 +585,17 @@ class _NewAgentPill extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(16)),
-          child: Row(mainAxisSize: MainAxisSize.min, spacing: 4, children: [
-            Icon(CupertinoIcons.plus, size: 15, color: look.accent),
-            Text('New agent', style: look.text(size: 15, color: look.accent, spacing: 0)),
-          ]),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Container(
+            height: 26,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(13)),
+            child: Row(mainAxisSize: MainAxisSize.min, spacing: 3, children: [
+              Icon(CupertinoIcons.plus, size: 13, color: look.accent),
+              Text('New agent', style: look.text(size: 13, color: look.accent, spacing: 0)),
+            ]),
+          ),
         ),
       ),
     );
