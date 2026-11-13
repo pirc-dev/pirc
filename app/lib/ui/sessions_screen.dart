@@ -448,7 +448,7 @@ class _Card extends StatelessWidget {
 }
 
 // A session: its status, its window's name above pi's name for it, and when
-// it last had a message. One that finished since it was last opened is set
+// it last had a message, with its cost and context use. One that finished since it was last opened is set
 // heavier, its time in teal. A search result says where it runs instead,
 // and marks what matched.
 class _Row extends StatefulWidget {
@@ -503,6 +503,7 @@ class _RowState extends State<_Row> {
                 Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
                   Expanded(child: name),
                   const SizedBox(width: 12),
+                  if (s.usage != null) ...[_Usage(s.usage!), const SizedBox(width: 8)],
                   time,
                 ]),
                 if (widget.matched != null)
@@ -512,6 +513,49 @@ class _RowState extends State<_Row> {
           ]),
         ),
       ),
+    );
+  }
+}
+
+// What a session has cost and a meter of its context, as dingger and pi's
+// footer show them (web/page/src/Sessions.tsx, Usage): grey, the working
+// colour above 70% and the asking colour above 90%; to a screen reader, the
+// figures in words.
+class _Usage extends StatelessWidget {
+  const _Usage(this.u);
+  final SessionUsageView u;
+
+  @override
+  Widget build(BuildContext context) {
+    final look = Look.of(context);
+    final tokens = u.contextTokens;
+    final pct = u.contextWindow > 0 && tokens != null ? tokens / u.contextWindow * 100 : null;
+    final cost = u.cost > 0 && u.cost < 0.005 ? '<\$0.01' : '\$${u.cost.toStringAsFixed(2)}';
+    final used = u.contextWindow == 0
+        ? 'Context unknown'
+        : pct == null
+            ? 'Context unknown until the next reply'
+            : 'Context ${pct < 1 && tokens! > 0 ? '<1' : pct.round()}% used';
+    return Semantics(
+      label: '$used · $cost so far',
+      excludeSemantics: true,
+      child: Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+        Text(cost, style: look.text(size: 12.5, color: look.ink3, spacing: 0).copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+        Container(
+          width: 16,
+          height: 4,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(color: look.rule, borderRadius: BorderRadius.circular(2)),
+          alignment: Alignment.centerLeft,
+          child: pct == null
+              ? null
+              : FractionallySizedBox(
+                  widthFactor: math.min(100, math.max(pct, pct > 0 ? 8 : 0)) / 100,
+                  heightFactor: 1,
+                  child: ColoredBox(color: pct > 90 ? look.block : pct > 70 ? look.work : look.ink3),
+                ),
+        ),
+      ]),
     );
   }
 }

@@ -177,6 +177,7 @@ SessionView _sessionView(String id, SessionEntry e, SessionAnnouncement a) {
     launchId: a.launchId.isEmpty ? null : a.launchId,
     questions: questions.isEmpty ? null : questions,
     notice: _noticeView(a),
+    usage: a.hasCost() ? SessionUsageView(cost: a.cost, contextTokens: a.hasContextTokens() ? a.contextTokens.toInt() : null, contextWindow: a.contextWindow.toInt()) : null,
   );
 }
 

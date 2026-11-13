@@ -39,6 +39,7 @@ class SessionView {
     this.last,
     this.questions,
     this.notice,
+    this.usage,
   });
 
   final String id;
@@ -73,12 +74,15 @@ class SessionView {
   final List<QuestionView>? questions;
   // The latest notice the host raised; absent before the first.
   final NoticeView? notice;
+  // What the session has cost and how full its context is (session.proto,
+  // SessionAnnouncement); absent from extensions before 0.3.3.
+  final SessionUsageView? usage;
 
   SessionView withLast(LastView? last) => SessionView(
         id: id, sessionId: sessionId, hostLabel: hostLabel, hostname: hostname, name: name, first: first, cwd: cwd,
         model: model, thinking: thinking, working: working, compacting: compacting, startedAt: startedAt,
         piVersion: piVersion, extensionVersion: extensionVersion, requests: requests, place: place,
-        launcher: launcher, launchId: launchId, last: last, questions: questions, notice: notice,
+        launcher: launcher, launchId: launchId, last: last, questions: questions, notice: notice, usage: usage,
       );
 
   factory SessionView.fromJson(Json j) => SessionView(
@@ -103,6 +107,7 @@ class SessionView {
         last: j['last'] == null ? null : LastView.fromJson(j['last'] as Json),
         questions: _list(j['questions'], QuestionView.fromJson),
         notice: j['notice'] == null ? null : NoticeView.fromJson(j['notice'] as Json),
+        usage: j['usage'] == null ? null : SessionUsageView.fromJson(j['usage'] as Json),
       );
 
   Json toJson() => _json({
@@ -127,7 +132,24 @@ class SessionView {
         'last': last?.toJson(),
         'questions': questions?.map((q) => q.toJson()).toList(),
         'notice': notice?.toJson(),
+        'usage': usage?.toJson(),
       });
+}
+
+class SessionUsageView {
+  const SessionUsageView({required this.cost, this.contextTokens, required this.contextWindow});
+
+  // In US dollars, the session's whole total.
+  final double cost;
+  // Absent when pi does not know it, as right after a compaction.
+  final int? contextTokens;
+  // 0 when there is no model.
+  final int contextWindow;
+
+  factory SessionUsageView.fromJson(Json j) =>
+      SessionUsageView(cost: (j['cost'] as num).toDouble(), contextTokens: _int(j['contextTokens']), contextWindow: _int(j['contextWindow'])!);
+
+  Json toJson() => _json({'cost': cost, 'contextTokens': contextTokens, 'contextWindow': contextWindow});
 }
 
 // A dialog pi shows for an extension. select, confirm and input can be

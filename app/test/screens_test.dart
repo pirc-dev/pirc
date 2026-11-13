@@ -159,10 +159,10 @@ Future<PircModel> fixture(WidgetTester tester) async {
   final m = 60 * 1000;
   c.onFrame(Frame(sessionList: SessionList(sessions: [
     entry('i1', 'laptop', SessionAnnouncement(name: 'release', cwd: '/home/me/src/pirc', hostname: 'laptop.local', working: true, launcher: 'tmux',
-        place: Place(kind: 'tmux', group: 'work', window: 'pirc'))),
+        place: Place(kind: 'tmux', group: 'work', window: 'pirc'), cost: 1.84, contextTokens: Int64(122000), contextWindow: Int64(200000))),
     entry('i2', 'laptop', SessionAnnouncement(cwd: '/home/me/src/api', firstPrompt: 'fix the flaky tests', hostname: 'laptop.local', questions: [
       Question(id: 'q1', kind: QuestionKind.QUESTION_KIND_CONFIRM, title: 'Overwrite tests/fixtures.json?', message: 'It has changes not yet committed.', answerable: true, askedAt: ts(now - 2 * m)),
-    ])),
+    ], cost: 0.004, contextTokens: Int64(150000), contextWindow: Int64(200000))),
     entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local', working: true)),
     entry('i4', 'server', SessionAnnouncement(cwd: '/srv/relay', hostname: 'server', startedAt: ts(now - 3 * 24 * 60 * m))),
   ])));
@@ -189,7 +189,7 @@ Future<PircModel> fixture(WidgetTester tester) async {
     c.onFrame(Frame(routed: Routed(session: f.routed.session, payload: h.writeToBuffer())));
   }
   // docs finishes: news.
-  c.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local')))));
+  c.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local', cost: 12.5, contextTokens: Int64(190000), contextWindow: Int64(200000))))));
   // The running check's output so far.
   c.onFrame(Frame(routed: Routed(
     session: SessionRef(hostKey: hostKey, sessionId: 's-i1', instanceId: 'i1'),
@@ -241,6 +241,26 @@ void main() {
       expect(find.text('work'), findsOneWidget, reason: 'the tmux session, as a group above the sessions in none');
       await expectLater(find.byType(SessionsScreen), matchesGoldenFile('goldens/sessions_${b.name}.png'));
     }, skip: !drawsGoldens);
+
+    testWidgets('a session list row says its cost and context use, ${b.name}', (tester) async {
+      await phone(tester);
+      final model = await fixture(tester);
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}), brightness: b));
+      await tester.pump();
+      expect(find.text('\$1.84'), findsOneWidget);
+      expect(find.text('<\$0.01'), findsOneWidget, reason: 'above zero and under half a cent');
+      expect(find.text('\$12.50'), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'Context 61% used · \$1\.84 so far')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'Context 95% used · \$12\.50 so far')), findsOneWidget);
+      // An older extension's session has neither.
+      expect(find.bySemanticsLabel(RegExp('so far')), findsNWidgets(3));
+      model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i4', 'server', SessionAnnouncement(cwd: '/srv/relay', hostname: 'server', cost: 0.2, contextWindow: Int64(200000))))));
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp(r'Context unknown until the next reply · \$0\.20 so far')), findsOneWidget);
+      model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i4', 'server', SessionAnnouncement(cwd: '/srv/relay', hostname: 'server', cost: 0)))));
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp(r'(^|\n)Context unknown · \$0\.00 so far')), findsOneWidget, reason: 'no model, so no window');
+    });
 
     testWidgets('a chat while pi works, ${b.name}', (tester) async {
       await phone(tester);
