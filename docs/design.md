@@ -1368,7 +1368,9 @@ Each step ends with something that can be seen working.
      alone. The extension's repository gets a build on its default branch
      whenever a change here changes the extension, and a tag for each
      release, so an install without a tag follows this repository. What
-     follows describes releases as they were until then.
+     follows describes releases as they were until then. Since 2026-11-08
+     the relay and the web app are released again, for self-hosters to
+     download (step 15).
    - **Releases.** One version for the relay, the extension and the adapter
      (`0.x`, tagged `vX.Y.Z` here), built by `sh/release.sh` into `dist/`
      (git-ignored):
@@ -2509,6 +2511,14 @@ Each step ends with something that can be seen working.
        following until they move; release 0.3.0 cut and its downloads
        published on GitHub, checked against their checksums once
        downloaded.
+
+       Both repositories made public 2026-11-13, after the commits since
+       the opening were checked the same way, each then given what GitHub
+       offers a public repository: rules refusing a deleted or rewritten
+       master and a deleted, moved or rewritten release tag, secret
+       scanning with push protection, Dependabot alerts and private
+       vulnerability reporting; pirc.dev linking the source, the releases
+       and the guide the same day.
 
 ## 13. Review log
 
