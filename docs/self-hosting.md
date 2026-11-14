@@ -9,6 +9,56 @@ admits. The relay passes messages along without reading them, but in this
 version they are not end-to-end encrypted, so whoever runs the relay
 could read them. Run it yourself, on a machine you trust.
 
+## With Docker Compose
+
+The shortest way, on a machine with Docker and a public name: the relay
+and the web app in containers, behind Caddy, which gets and renews their
+certificate. Both are reached by one name, the relay at `wss://<name>` and
+the web app at `https://<name>`. The name's DNS must point at the machine,
+with ports 80 and 443 open to Caddy. The images, `ghcr.io/pirc-dev/pirc-relay`
+and `ghcr.io/pirc-dev/pirc-web`, are built from each release's own
+archives (from the release after 0.3.4 on), for amd64 and arm64, with
+provenance (`gh attestation verify oci://ghcr.io/pirc-dev/pirc-relay:X.Y.Z
+--owner pirc-dev`).
+
+From `docker/` in a clone of this repository, checked out at the release's
+tag:
+
+```sh
+cp env.example .env                  # set PIRC_DOMAIN and PIRC_VERSION
+docker compose up -d caddy relay
+alias pirc-relay='docker compose exec relay pirc-relay'
+pirc-relay add-client --url '' --label web    # the token alone, valid 15 minutes
+docker compose run --rm web enrol ws://relay:8443 <token>
+docker compose up -d web
+docker compose logs web                       # wait for "listening"
+docker compose exec web pirc-web pair         # a link that adds a passkey
+```
+
+Open the link and make a passkey, then add hosts and phones as in
+[Hosts and clients](#hosts-and-clients), with the alias above:
+`pirc-relay add-host --label <name>` prints the `/pirc enrol` line, and
+`pirc-relay add-client --label phone` the app's link.
+
+- **Upgrading**: check out the new release's tag, so that `docker/` is
+  that release's, set `PIRC_VERSION` to it in `.env`, and run
+  `docker compose up -d`. The relay and the web app go together.
+- **Backups**: the relay's registry and the web app's keys and passkeys
+  are in the volumes `pirc_relay` and `pirc_web`; back up both (Backup and
+  restore, below). Caddy's volumes hold only its certificates, which it
+  gets again.
+- **Notifications**: the relay wakes PiRC's apps through PiRC's push
+  gateway, `push.pirc.dev`, which learns which relay woke which phone, and
+  when (`SECURITY.md`). Set `PIRC_RELAY_PUSH_GATEWAY=` (empty) in `.env`
+  for none; phones are then not woken.
+- **Addresses**: the containers share the network `172.30.88.0/24`, with
+  Caddy at `172.30.88.2`, the one proxy the relay and the web app believe
+  `X-Forwarded-For` from, so that their limits count each client. If the
+  subnet collides with one of the machine's, change it and Caddy's address
+  in `compose.yaml`, and the two `TRUSTED_PROXIES` with them. With
+  Docker's userland proxy, as by default, clients reaching the machine
+  over IPv6 all appear as the network's gateway, and so share one limit.
+
 ## Downloading
 
 Each release is on GitHub, at `https://github.com/pirc-dev/pirc/releases`:
@@ -420,6 +470,12 @@ including any removed since it was taken: remove them again.
 
 The web app's state is its directory, `/var/lib/pirc-web`: its relay key
 (`client.key`, a secret) and the passkeys. Stop it to copy or restore it.
+
+With Docker Compose, the two are the volumes `pirc_relay` and `pirc_web`:
+stop the relay and the web app (`docker compose stop relay web`), copy
+each volume out, for example with `docker run --rm -v pirc_relay:/v -v
+"$PWD":/b busybox tar -C /v -czf /b/pirc_relay.tar.gz .`, and start them
+again. Restore the same way, into the stopped services' volumes.
 
 Hosts keep their own key in `~/.config/pirc/host.key`. A host that loses
 it enrols again with a new token, and its old key should be removed.

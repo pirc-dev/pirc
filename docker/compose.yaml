@@ -1,0 +1,70 @@
+# PiRC's relay and web app behind Caddy, which gets and renews their
+# certificate (docs/self-hosting.md, "With Docker Compose"). One name for
+# both: the relay at wss://<name>, the web app at https://<name>. Set it,
+# and the version, in .env beside this file (env.example).
+name: pirc
+
+services:
+  caddy:
+    image: caddy:2.11@sha256:4e2425f6009577e7c651010f16679c28f7d12df3e7b1914f941a7a3370746b3c
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      PIRC_DOMAIN: ${PIRC_DOMAIN:?set PIRC_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      pirc:
+        # The one address the relay and the web app believe
+        # X-Forwarded-For from.
+        ipv4_address: 172.30.88.2
+
+  relay:
+    image: ghcr.io/pirc-dev/pirc-relay:${PIRC_VERSION:?set PIRC_VERSION in .env}
+    restart: unless-stopped
+    environment:
+      # Caddy terminates TLS; the relay's port is not published, so only
+      # the containers here reach it.
+      PIRC_RELAY_PLAINTEXT: "true"
+      PIRC_RELAY_TRUSTED_PROXIES: 172.30.88.2
+      PIRC_RELAY_PUSH_GATEWAY: ${PIRC_RELAY_PUSH_GATEWAY-https://push.pirc.dev}
+      PIRC_RELAY_CLOSED_TO_HOSTS: ${PIRC_RELAY_CLOSED_TO_HOSTS:-false}
+      # For the links add-host and add-client print.
+      PIRC_RELAY_URL: wss://${PIRC_DOMAIN}
+    volumes:
+      - relay:/data
+    networks:
+      - pirc
+
+  web:
+    image: ghcr.io/pirc-dev/pirc-web:${PIRC_VERSION}
+    restart: unless-stopped
+    environment:
+      PIRC_WEB_ORIGIN: https://${PIRC_DOMAIN}
+      PIRC_WEB_PLAINTEXT: "true"
+      PIRC_WEB_TRUSTED_PROXIES: 172.30.88.2
+    volumes:
+      - web:/data
+    networks:
+      - pirc
+    depends_on:
+      - relay
+
+# A fixed subnet, for Caddy's fixed address. Change both, and the trusted
+# proxies above, if it collides with a network of this machine's.
+networks:
+  pirc:
+    ipam:
+      config:
+        - subnet: 172.30.88.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:
+  relay:
+  web:

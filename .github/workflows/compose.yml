@@ -1,0 +1,82 @@
+# The Docker Compose setup (docker/), checked from outside: images built
+# from the latest release's archives, checked against its SHA256SUMS, as
+# the images workflow builds them; Caddy with a certificate of its own CA
+# for pirc.test; then web/test/compose-smoke.ts through it: the page, a
+# passkey, the event stream, and a host over a WebSocket.
+name: compose
+
+on:
+  push:
+    branches: [master, "test/compose"]
+    paths: [docker/**, .github/workflows/compose.yml, web/test/compose-smoke.ts]
+  pull_request:
+    paths: [docker/**, .github/workflows/compose.yml, web/test/compose-smoke.ts]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: relay/go.mod
+          cache-dependency-path: relay/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: the latest release's archives, checked against its SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          version=${tag#v}
+          mkdir context
+          cd context
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS \
+            --pattern "pirc-relay-${version}-linux-amd64.tar.gz" --pattern "pirc-web-${version}.tar.gz"
+          grep -E "  (pirc-relay-${version}-linux-amd64|pirc-web-${version})\.tar\.gz$" SHA256SUMS > checked
+          [ "$(wc -l < checked)" -eq 2 ]
+          sha256sum --check --strict checked
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+      - name: the images, as ghcr.io's names, built here
+        run: |
+          docker build -f docker/relay.Dockerfile --build-arg "VERSION=$VERSION" -t "ghcr.io/pirc-dev/pirc-relay:$VERSION" context
+          docker build -f docker/web.Dockerfile --build-arg "VERSION=$VERSION" -t "ghcr.io/pirc-dev/pirc-web:$VERSION" context
+      - name: up, as docker/env.example says, with Caddy's own CA for pirc.test
+        working-directory: docker
+        run: |
+          printf 'PIRC_DOMAIN=pirc.test\nPIRC_VERSION=%s\nPIRC_RELAY_PUSH_GATEWAY=\n' "$VERSION" > .env
+          # shellcheck disable=SC2016 # Caddy's placeholder, not the shell's
+          sed 's|^{\$PIRC_DOMAIN} {$|&\n\ttls internal|' Caddyfile > Caddyfile.smoke
+          grep -q 'tls internal' Caddyfile.smoke
+          printf 'services:\n  caddy:\n    volumes:\n      - ./Caddyfile.smoke:/etc/caddy/Caddyfile:ro\n' > compose.smoke.yaml
+          echo "127.0.0.1 pirc.test" | sudo tee -a /etc/hosts
+          compose() { docker compose -f compose.yaml -f compose.smoke.yaml "$@"; }
+          compose pull caddy
+          compose up -d --pull never caddy relay
+          for _ in $(seq 30); do compose exec -T relay pirc-relay list >/dev/null 2>&1 && break; sleep 1; done
+          token=$(compose exec -T relay pirc-relay add-client --url '' --label web)
+          compose run --rm -T --pull never web enrol ws://relay:8443 "$token"
+          compose up -d --pull never web
+          for _ in $(seq 30); do compose logs web | grep -q listening && break; sleep 1; done
+          compose logs web | grep listening
+          compose exec -T web pirc-web pair > pair-link
+          for _ in $(seq 30); do compose cp caddy:/data/caddy/pki/authorities/local/root.crt caddy-root.crt 2>/dev/null && break; sleep 1; done
+          test -s caddy-root.crt
+      - run: COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile --silent
+      - run: sh/generate.sh
+      - name: through Caddy
+        run: NODE_EXTRA_CA_CERTS=docker/caddy-root.crt node --experimental-transform-types --no-warnings web/test/compose-smoke.ts https://pirc.test "$(cat docker/pair-link)"
+      - name: the containers' logs
+        if: always()
+        working-directory: docker
+        run: docker compose -f compose.yaml -f compose.smoke.yaml logs --no-color || true

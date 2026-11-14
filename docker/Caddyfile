@@ -1,0 +1,11 @@
+# The relay's protocol path to the relay, everything else to the web app
+# (docs/self-hosting.md, "With Docker Compose"). Caddy passes WebSocket
+# upgrades, and the web app's event stream unbuffered, as they are.
+{$PIRC_DOMAIN} {
+	handle /v1alpha1* {
+		reverse_proxy relay:8443
+	}
+	handle {
+		reverse_proxy web:7402
+	}
+}

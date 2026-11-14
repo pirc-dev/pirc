@@ -1,0 +1,110 @@
+# Container images for each release (docs/self-hosting.md, "With Docker
+# Compose"): once a release is published, its own archives are fetched and
+# checked against its SHA256SUMS, and the images are built from them, for
+# linux/amd64 and linux/arm64, so that what they run is the download, byte
+# for byte. They go to ghcr.io/pirc-dev with the release's version, and
+# latest when it is GitHub's latest release, with provenance attested. The
+# release itself is not changed. Packages pushed so start private: each is
+# made public by hand once, after its first release.
+name: images
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# One release's images at a time, in the order published, so that latest
+# is never moved back by a slower run.
+concurrency:
+  group: images
+  cancel-in-progress: false
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: the release's archives, checked against its SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${TAG#v}
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+          mkdir context
+          cd context
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS \
+            --pattern "pirc-relay-${version}-linux-*.tar.gz" --pattern "pirc-web-${version}.tar.gz"
+          grep -E "  (pirc-relay-${version}-linux-(amd64|arm64)|pirc-web-${version})\.tar\.gz$" SHA256SUMS > checked
+          [ "$(wc -l < checked)" -eq 3 ] || { echo "SHA256SUMS does not list the three archives"; exit 1; }
+          sha256sum --check --strict checked
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          # latest only for GitHub's latest release, not a fix to an older one.
+          if [ "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$TAG" ]; then
+            echo "LATEST=true" >> "$GITHUB_ENV"
+          else
+            echo "LATEST=false" >> "$GITHUB_ENV"
+          fi
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: relay
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: context
+          file: docker/relay.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ghcr.io/pirc-dev/pirc-relay:${{ env.VERSION }}
+            ${{ env.LATEST == 'true' && 'ghcr.io/pirc-dev/pirc-relay:latest' || '' }}
+          labels: |
+            org.opencontainers.image.title=PiRC relay
+            org.opencontainers.image.source=https://github.com/pirc-dev/pirc
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/pirc-dev/pirc-relay
+          subject-digest: ${{ steps.relay.outputs.digest }}
+          push-to-registry: true
+      - id: web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: context
+          file: docker/web.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ghcr.io/pirc-dev/pirc-web:${{ env.VERSION }}
+            ${{ env.LATEST == 'true' && 'ghcr.io/pirc-dev/pirc-web:latest' || '' }}
+          labels: |
+            org.opencontainers.image.title=PiRC web app
+            org.opencontainers.image.source=https://github.com/pirc-dev/pirc
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/pirc-dev/pirc-web
+          subject-digest: ${{ steps.web.outputs.digest }}
+          push-to-registry: true
