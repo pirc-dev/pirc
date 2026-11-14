@@ -14,7 +14,8 @@ const pi = realpathSync(join(import.meta.dirname, "..", "node_modules", "@earend
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const theme = { fg: (_: string, s: string) => `<${s}>` } as never;
 const entry = (message: string): CustomEntry<PhotoData> => ({ type: "custom", id: "c1", parentId: "e1", timestamp: "", customType: PHOTO_ENTRY, data: { message } });
-const opts = { expanded: false };
+// pi gives the keybinding hints too since 1.5, which the renderer does not use.
+const opts = { expanded: false, keyText: () => "", keyHint: () => "" };
 
 interface Tui {
   setCapabilities(c: { images: "kitty" | "iterm2" | null; trueColor: boolean; hyperlinks: boolean }): void;

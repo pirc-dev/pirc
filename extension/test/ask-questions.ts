@@ -9,6 +9,8 @@ import { join } from "node:path";
 
 export default function (pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (e, ctx) => {
+    // A run a custom message starts (pi 1.5) has no prompt.
+    if (!("prompt" in e)) return;
     const m = /^ask (select|confirm|input|editor)\b/.exec(e.prompt);
     if (!m) return;
     const kind = m[1];
