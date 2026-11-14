@@ -8,9 +8,11 @@
 #   sh/release.sh              the release tagged vX.Y.Z at HEAD
 #   sh/release.sh --snapshot   a test build of HEAD, versioned X.Y.Z-dev+<commit>
 #
-# Before tagging, add the version's section to CHANGELOG.md: what it
-# changes for the people running it. A release is not built without one
-# (sh/changelog.sh), and sh/publish-release.sh makes it the release's notes.
+# Before tagging, rename CHANGELOG.md's "## Unreleased" to "## X.Y.Z
+# (date)" in a commit of its own, leaving an empty Unreleased above it: what
+# the release changes for the people running it. A release is not built
+# without its section, nor with lines still under Unreleased
+# (sh/changelog.sh), and sh/publish-release.sh makes the section its notes.
 #
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are
@@ -71,6 +73,7 @@ fi
 # sh/publish-release.sh puts in its notes, is there before anything is built.
 if ! $snapshot; then
   sh/changelog.sh "$version" >/dev/null || die "add a section for ${version} to CHANGELOG.md, at the tag"
+  [ -z "$(sh/changelog.sh --unreleased)" ] || die "CHANGELOG.md still has lines under Unreleased: move them into ${version}'s section before tagging"
 fi
 
 out="dist/pirc-${version}"

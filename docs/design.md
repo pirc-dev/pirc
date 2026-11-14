@@ -2424,10 +2424,13 @@ Each step ends with something that can be seen working.
        relay, the web bundle and the extension package before the
        checksums; `sh/publish-release.sh` attaches them to a GitHub
        release of a tag already pushed there, after checking the tag is
-       the commit they were built from. Before tagging, the version's
-       section goes into `CHANGELOG.md` (decided 2026-11-14):
-       `sh/release.sh` refuses to build without it, and
-       `sh/publish-release.sh` makes it the release's notes. The README and the self-hosting
+       the commit they were built from. Each change adds its line under
+       `CHANGELOG.md`'s "Unreleased"; before tagging, a commit renames
+       that heading to the version's, "X.Y.Z (date)", and leaves an empty
+       Unreleased above it (decided 2026-11-14): `sh/release.sh` refuses
+       to build without the version's section or with lines still under
+       Unreleased, and `sh/publish-release.sh` makes the section the
+       release's notes. The README and the self-hosting
        guide start from the download, building from source kept as the
        alternative. A snapshot's Linux relays and web bundle ran on arm64
        and amd64 machines. The macOS relay was signed only as Go links
