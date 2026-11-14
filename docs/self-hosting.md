@@ -59,6 +59,44 @@ Open the link and make a passkey, then add hosts and phones as in
   Docker's userland proxy, as by default, clients reaching the machine
   over IPv6 all appear as the network's gateway, and so share one limit.
 
+## With Tailscale
+
+For a tailnet you already run: the relay and the web app on one of its
+machines, reached only from the tailnet, and `tailscale serve` giving
+them a name with a real certificate, so that there is nothing to set up
+for TLS and nothing on the internet. Every host and phone must be on the
+tailnet too: the Tailscale app on a phone, with PiRC's app beside it.
+
+1. On the machine, with Tailscale running, turn on **HTTPS Certificates**
+   in the admin console's DNS page (it puts the machine's name in public
+   certificate logs). The machine's name is then
+   `<machine>.<tailnet>.ts.net`: `tailscale status --json | jq -r
+   .Self.DNSName` shows it, without the final dot.
+2. Install the relay as in [The relay on Linux](#the-relay-on-linux-systemd)
+   or [on macOS](#the-relay-on-macos-launchd), with no TLS, on loopback:
+   `PIRC_RELAY_LISTEN=127.0.0.1:8443`, `PIRC_RELAY_PLAINTEXT=true`,
+   `PIRC_RELAY_TRUSTED_PROXIES=127.0.0.1`, and
+   `PIRC_RELAY_URL=wss://<machine>.<tailnet>.ts.net`.
+3. If you want the web app, install it as in [The web app](#the-web-app),
+   also on loopback: `PIRC_WEB_ORIGIN=https://<machine>.<tailnet>.ts.net`,
+   `PIRC_WEB_LISTEN=127.0.0.1:7402`, `PIRC_WEB_PLAINTEXT=true` and
+   `PIRC_WEB_TRUSTED_PROXIES=127.0.0.1` (0.3.5 or later). Enrol it with
+   the relay at `ws://127.0.0.1:8443`.
+4. Put both behind the name, the relay's protocol path to the relay and
+   everything else to the web app, kept across restarts:
+
+   ```sh
+   tailscale serve --bg --set-path /v1alpha1 http://127.0.0.1:8443/v1alpha1
+   tailscale serve --bg http://127.0.0.1:7402        # the web app, if any
+   tailscale serve status
+   ```
+
+Then hosts enrol with `/pirc enrol wss://<machine>.<tailnet>.ts.net`, and
+phones join with `pirc-relay add-client --label phone` (Hosts and clients,
+below). `tailscale serve` passes WebSockets and the web app's event
+stream as they are, and says who each request is from in
+`X-Forwarded-For`, which the trusted proxies above believe.
+
 ## Downloading
 
 Each release is on GitHub, at `https://github.com/pirc-dev/pirc/releases`:
