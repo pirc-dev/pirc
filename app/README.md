@@ -206,7 +206,7 @@ take them from there, and the Swift code reads them back from the
 Info.plist, so a build under your own Apple developer account changes
 those three lines and nothing else. It needs a paid account, for the App
 Group and the Keychain group the app shares with its notification
-extension (`<team>.dev.pirc.shared`, which stays as it is).
+extension (`<App ID prefix>dev.pirc.shared`, which stays as it is).
 
 1. In `ios/Flutter/Identity.xcconfig`, set your team ID, a bundle ID of
    your own, and an App Group, such as `group.` and that bundle ID.
