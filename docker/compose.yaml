@@ -55,13 +55,17 @@ services:
     depends_on:
       - relay
 
-# A fixed subnet, for Caddy's fixed address. Change both, and the trusted
-# proxies above, if it collides with a network of this machine's.
+# A fixed subnet, for Caddy's fixed address, with the addresses Docker
+# hands out kept to its upper half so that none can take Caddy's first:
+# Docker does not keep a fixed address back from containers started
+# before the one that has it. Change all three, and the trusted proxies
+# above, if the subnet collides with a network of this machine's.
 networks:
   pirc:
     ipam:
       config:
         - subnet: 172.30.88.0/24
+          ip_range: 172.30.88.128/25
 
 volumes:
   caddy-data:

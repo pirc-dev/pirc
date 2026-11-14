@@ -54,8 +54,9 @@ Open the link and make a passkey, then add hosts and phones as in
 - **Addresses**: the containers share the network `172.30.88.0/24`, with
   Caddy at `172.30.88.2`, the one proxy the relay and the web app believe
   `X-Forwarded-For` from, so that their limits count each client. If the
-  subnet collides with one of the machine's, change it and Caddy's address
-  in `compose.yaml`, and the two `TRUSTED_PROXIES` with them. With
+  subnet collides with one of the machine's, change it, the `ip_range`
+  Docker hands addresses out from (kept clear of Caddy's) and Caddy's
+  address in `compose.yaml`, and the two `TRUSTED_PROXIES` with them. With
   Docker's userland proxy, as by default, clients reaching the machine
   over IPv6 all appear as the network's gateway, and so share one limit.
 
