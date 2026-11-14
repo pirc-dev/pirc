@@ -1,5 +1,6 @@
 # sh/check.sh on every push and pull request: on Linux everything but the
-# mobile app, end-to-end tests included; on macOS the mobile app (without its
+# mobile app, end-to-end tests included, once with pi 1.0.0 and once with
+# the current pi; on macOS the mobile app (without its
 # golden images: GitHub's Macs draw them differently) and the iOS
 # notification extension, which need Apple's frameworks.
 name: check
@@ -18,8 +19,16 @@ permissions:
 
 jobs:
   linux:
+    name: linux (pi ${{ matrix.pi }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # The end-to-end tests run with each pi: the oldest the hosts run, and
+    # the current one the extension is developed against (its
+    # devDependency); one failing does not stop the other.
+    strategy:
+      fail-fast: false
+      matrix:
+        pi: ["1.0.0", "current"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,7 +44,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends tmux
-          npm install -g "@earendil-works/pi-coding-agent@$(node -p "require('./extension/package.json').devDependencies['@earendil-works/pi-coding-agent']")"
+          version="${{ matrix.pi }}"
+          if [ "$version" = current ]; then
+            version=$(node -p "require('./extension/package.json').devDependencies['@earendil-works/pi-coding-agent']")
+          fi
+          npm install -g "@earendil-works/pi-coding-agent@${version}"
+          pi --version
       - run: sh/check.sh
 
   macos:

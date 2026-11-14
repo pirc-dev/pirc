@@ -6,6 +6,12 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- The extension is tested with pi 1.0.0 and the current pi on every
+  change, and expects pi 1.0.0 or later in 1.x; outside that,
+  `/pirc status` says so.
+
 ## 0.3.6 (2026-11-14)
 
 - Fixed: in the Docker Compose setup, the relay or the web app could take

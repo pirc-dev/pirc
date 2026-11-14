@@ -11,6 +11,7 @@ import { loadOrCreateKey, RelayConnection, type ConnectionState, type DeviceKey 
 import { loadConfig, saveRemoved, type HostConfig } from "./config.ts";
 import { errorText, Live, REQUESTS, type NoticeMemo, type Sink } from "./live.ts";
 import { LAUNCH_ENV, LauncherChoice, type Launcher } from "./launch.ts";
+import { piRangeNote } from "./pi.ts";
 import { PlaceTracker } from "./place.ts";
 import { Questions } from "./questions.ts";
 
@@ -304,6 +305,8 @@ export class Host implements Sink {
     }
     if ("reason" in this.state) lines.push(`relay said: ${this.state.reason}`);
     if (this.live) lines.push(`session ${this.live.sessionId}, instance ${this.instanceId}`);
+    const range = piRangeNote(this.versions.pi);
+    if (range) lines.push(range);
     if (this.dialogs.problem) lines.push(this.dialogs.problem);
     if (this.lastError) lines.push(`last error: ${this.lastError}`);
     if (c?.removed) lines.push(`removed from the relay ${c.removed}; to join again: /pirc enrol <relay-url> [token]`);

@@ -14,6 +14,9 @@ the parts of pi it draws images with. Its source is in PiRC's repository,
 
 ## Install
 
+It is tested with pi 1.0.0 and the current pi on every change, and expects
+pi 1.0.0 or later in 1.x; outside that, `/pirc status` says so.
+
 pi installs it from this repository with `git` and `npm`. Pin it to a
 release:
 

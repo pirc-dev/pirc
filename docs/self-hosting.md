@@ -302,7 +302,9 @@ The extension is published as a pi package in its own repository,
 `https://github.com/pirc-dev/pirc-extension`. Its default branch follows
 this repository: it gets a new build whenever a change here changes the
 extension. Releases are tags there. pi installs it with `git` and `npm`,
-so a host needs both. Install it pinned to a release:
+so a host needs both. It is tested with pi 1.0.0 and the current pi on
+every change, and expects pi 1.0.0 or later in 1.x; outside that,
+`/pirc status` says so. Install it pinned to a release:
 
 ```sh
 pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
