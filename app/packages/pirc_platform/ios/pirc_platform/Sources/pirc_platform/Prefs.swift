@@ -4,7 +4,7 @@
 import Flutter
 
 enum Prefs {
-  static let group = "group.dev.pirc.app"
+  static let group = Identity.appGroup
 
   static func register(with messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "dev.pirc.app/prefs", binaryMessenger: messenger)

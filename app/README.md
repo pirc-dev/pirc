@@ -195,3 +195,30 @@ written to the login keychain:
 
   Xcode makes the development profiles for `dev.pirc.app` and
   `dev.pirc.app.notifications` itself, for the team's registered devices.
+
+## Building it yourself, on iOS
+
+The iOS app's identity is three settings in `ios/Flutter/Identity.xcconfig`:
+the team (`PIRC_TEAM`), the bundle ID (`PIRC_BUNDLE_ID`; the notification
+extension's is it with `.notifications`) and the App Group
+(`PIRC_APP_GROUP`). Both targets, their entitlements and their Info.plists
+take them from there, and the Swift code reads them back from the
+Info.plist, so a build under your own Apple developer account changes
+those three lines and nothing else. It needs a paid account, for the App
+Group and the Keychain group the app shares with its notification
+extension (`<team>.dev.pirc.shared`, which stays as it is).
+
+1. In `ios/Flutter/Identity.xcconfig`, set your team ID, a bundle ID of
+   your own, and an App Group, such as `group.` and that bundle ID.
+2. Generate the protocol types: `sh/app.sh` (Dart) and `sh/notices.sh`
+   (Swift), from the repository's root, after `pnpm install`.
+3. Open `ios/Runner.xcworkspace` in Xcode and run the Runner scheme on
+   your phone, with automatic signing for your team. If Xcode does not
+   register the App Group, add it under Identifiers in Apple's developer
+   site and assign it to both app IDs.
+
+A build from source has no paywall (Store builds, above). It has no
+notifications either: PiRC's push gateway, `push.pirc.dev`, wakes only
+the publisher's app (`dev.pirc.app`), with the publisher's push keys, and
+nothing arrives for an app built under another bundle ID. Everything else
+works: joining a relay, sessions, questions, photos.

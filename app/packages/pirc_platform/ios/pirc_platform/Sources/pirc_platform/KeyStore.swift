@@ -10,9 +10,10 @@ import Security
 
 enum KeyStore {
   // The groups the two keys live in: the app's own, and the one it shares
-  // with the notification extension (Runner.entitlements).
-  static let mainGroup = "4PC6T9727Y.dev.pirc.app"
-  static let readGroup = "4PC6T9727Y.dev.pirc.shared"
+  // with the notification extension (Runner.entitlements), under the team
+  // the app was built as (Identity).
+  static let mainGroup = "\(Identity.team).\(Identity.bundle)"
+  static let readGroup = "\(Identity.team).dev.pirc.shared"
 
   static func register(with messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(name: "dev.pirc.app/keys", binaryMessenger: messenger)

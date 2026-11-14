@@ -2121,6 +2121,16 @@ Each step ends with something that can be seen working.
       `PIRC_STORE` is given, true or false
       (`android/app/build.gradle.kts`, `ios/store-build.sh`), and any
       other value stops every build.
+      A build under another Apple developer account (decided
+      2026-11-14, so that a self-hoster can build the iOS app without
+      editing it throughout): the team, the bundle ID and the App Group
+      are set once, in `app/ios/Flutter/Identity.xcconfig`, which both
+      targets, their entitlements and their Info.plists take them from,
+      and the Swift code reads them back from the Info.plist; the store
+      build's identifiers stay as they were. Such a build has no
+      notifications: the gateway serves only `dev.pirc.app`, with the
+      publisher's keys, and the app gives it that ID whatever it was
+      built as.
       Built with the stores' own libraries in the app's plugin, StoreKit 2
       on iOS and Play Billing on Android, over 'dev.pirc.app/store'
       (`lib/app/store.dart`); rejected: Flutter's `in_app_purchase`, a

@@ -11,9 +11,18 @@ import StoreKit
 import UserNotifications
 
 // Shared with the app (Runner.entitlements): the App Group's defaults, with
-// the relay's URL and what was last shown, and the read-only key.
-let group = "group.dev.pirc.app"
-let keyGroup = "4PC6T9727Y.dev.pirc.shared"
+// the relay's URL and what was last shown, and the read-only key, as the
+// build was given them (ios/Flutter/Identity.xcconfig, through Info.plist).
+let group = info("PircAppGroup")
+let keyGroup = "\(info("PircTeam")).dev.pirc.shared"
+
+private func info(_ key: String) -> String {
+  guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String, !value.isEmpty else {
+    fatalError("Info.plist has no \(key): the build takes it from ios/Flutter/Identity.xcconfig")
+  }
+  return value
+}
+
 // As the app's reviewRelay (lib/app/store.dart): allowed without the
 // subscription.
 let reviewRelay = "wss://review.pirc.dev"

@@ -29,5 +29,9 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).NotificationService</string>
 	</dict>
+	<key>PircAppGroup</key>
+	<string>$(PIRC_APP_GROUP)</string>
+	<key>PircTeam</key>
+	<string>$(PIRC_TEAM)</string>
 </dict>
 </plist>

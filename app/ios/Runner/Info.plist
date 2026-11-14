@@ -87,5 +87,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>PircAppGroup</key>
+	<string>$(PIRC_APP_GROUP)</string>
+	<key>PircTeam</key>
+	<string>$(PIRC_TEAM)</string>
 </dict>
 </plist>

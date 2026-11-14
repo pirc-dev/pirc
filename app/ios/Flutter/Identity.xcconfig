@@ -1,0 +1,8 @@
+// Who the iOS app is built as: the publisher's team, bundle ID and App
+// Group. A build of your own, under your own Apple developer account,
+// changes these three and nothing else (app/README.md, "Building it
+// yourself"). Runner and the notification extension take them from here,
+// and their entitlements and Info.plists from those.
+PIRC_TEAM = 4PC6T9727Y
+PIRC_BUNDLE_ID = dev.pirc.app
+PIRC_APP_GROUP = group.dev.pirc.app

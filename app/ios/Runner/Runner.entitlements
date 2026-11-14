@@ -6,11 +6,11 @@
 	<string>development</string>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.dev.pirc.app</string>
+		<string>$(PIRC_APP_GROUP)</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)dev.pirc.app</string>
+		<string>$(AppIdentifierPrefix)$(PIRC_BUNDLE_ID)</string>
 		<string>$(AppIdentifierPrefix)dev.pirc.shared</string>
 	</array>
 </dict>
