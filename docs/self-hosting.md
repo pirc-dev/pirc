@@ -299,9 +299,8 @@ is `/usr/local/var/log/pirc-relay.log`. After changing the plist, run
 ## The extension
 
 The extension is published as a pi package in its own repository,
-`https://github.com/pirc-dev/pirc-extension`. Its default branch follows
-this repository: it gets a new build whenever a change here changes the
-extension. Releases are tags there. pi installs it with `git` and `npm`,
+`https://github.com/pirc-dev/pirc-extension`. Its default branch moves
+only when a release is published, and each release is a tag there. pi installs it with `git` and `npm`,
 so a host needs both. It is tested with pi 1.0.0 and the current pi on
 every change, and expects pi 1.0.0 or later in 1.x; outside that,
 `/pirc status` says so. Install it pinned to a release:
@@ -316,11 +315,11 @@ host once, as below. To upgrade, install the newer tag the same way:
 relay at least as new as the extension.
 
 Installed without a tag, it follows the default branch instead:
-`pi update git:github.com/pirc-dev/pirc-extension` installs whatever was
-published there last, and runs `npm install` on it, before you have read
-it. The extension runs in pi, with pi's access to your machine, so that is
-the publisher's next change running there unseen, possibly ahead of your
-relay. Pin it, unless following along is what you want.
+`pi update git:github.com/pirc-dev/pirc-extension` installs the latest
+release as soon as it is published, and runs `npm install` on it, before
+you have read it. The extension runs in pi, with pi's access to your
+machine, so that is the publisher's next release running there unseen,
+possibly ahead of your relay. Pin it, unless following along is what you want.
 `pi remove git:github.com/pirc-dev/pirc-extension` uninstalls it.
 
 Without git, each release's downloads include the package,

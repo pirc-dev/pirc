@@ -14,6 +14,9 @@ release that needs its parts upgraded together says so here.
 - The guide and the extension's README say what installing the extension
   without a tag means: the next thing published runs on your machine at
   `pi update`, unread. Pin it to a release.
+- The extension's repository on GitHub gets releases only: its default
+  branch no longer moves with each change, so an install without a tag
+  runs the latest release, not the latest build.
 
 ## 0.3.6 (2026-11-14)
 
