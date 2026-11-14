@@ -31,3 +31,22 @@ These are by design, not vulnerabilities; [`docs/design.md`](docs/design.md)
   sends it only an opaque handle, and the notification it sends carries
   fixed text.
   A relay works without it, but its phones are then not woken.
+
+## Checking a release
+
+From 0.3.7, each release's tag, `vX.Y.Z`, is signed with ssh by a key
+listed in [`allowed_signers`](allowed_signers). In a clone:
+
+```sh
+git -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag vX.Y.Z
+```
+
+prints `Good "git" signature for igor@soarez.org`. The file comes from the
+same repository as the tag, so it proves only that a key it lists made
+the tag; GitHub marking the tag Verified, against the keys on the
+publisher's account, is a second source. A release's downloads are built
+from its tag: check them with its `SHA256SUMS` (`shasum -a 256 -c
+SHA256SUMS`). The extension's own repository, pirc-extension, does not
+sign its tags: to install a checked extension, install it from the
+release's `pirc-extension-X.Y.Z.tar.gz` once it matches (the guide's "The
+extension" says how).

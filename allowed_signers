@@ -1,0 +1,6 @@
+# The keys PiRC's release tags are signed with, for git verify-tag
+# (SECURITY.md, "Checking a release"; sh/release.sh refuses a tag that does
+# not verify against this file). One line per key, in ssh-keygen's
+# allowed-signers format.
+igor@soarez.org namespaces="git" sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBPgkACLKM0N3y8mYqUffq8lOJ6HxkbLWVNa5qv1CPQbO2AUDMWkCwq4Ujlym55ZNo0P72FzT843lCo/peSvOREoAAAAEc3NoOg== sz-castle-sign
+igor@soarez.org namespaces="git" sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBADnofb4U2iQTw/h1//2TgAcJ05My0mB5NMU38VYK6jo2DW44OcrsnMR2ckq/J+oxNsDN7qwQBTxvARPTr7k2IgAAAAEc3NoOg== sz-anaconda-sign

@@ -17,6 +17,9 @@ release that needs its parts upgraded together says so here.
 - The extension's repository on GitHub gets releases only: its default
   branch no longer moves with each change, so an install without a tag
   runs the latest release, not the latest build.
+- Release tags are signed, from this release on, by a key listed in
+  `allowed_signers`; `SECURITY.md` says how to check one with
+  `git verify-tag`.
 
 ## 0.3.6 (2026-11-14)
 

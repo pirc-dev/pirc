@@ -14,6 +14,17 @@
 # without its section, nor with lines still under Unreleased
 # (sh/changelog.sh), and sh/publish-release.sh makes the section its notes.
 #
+# The tag is signed, and a release is not built from one that does not
+# verify against allowed_signers, at HEAD, with ssh (SECURITY.md, "Checking
+# a release"). The key is in castle's Secure Enclave, so the tag is made
+# there and released on pimenta, and reaches PiRC's repository only once
+# this has passed:
+#
+#   git tag -s vX.Y.Z -m "PiRC X.Y.Z"           on castle
+#   git push <pimenta's ~/pirc/release> vX.Y.Z  that checkout, not the repository
+#   sh/release.sh                               there, at the tag
+#   git push origin vX.Y.Z                      from there, once it passes
+#
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are
 # written, and a missing tool fails the release rather than skipping it.
@@ -74,6 +85,13 @@ fi
 if ! $snapshot; then
   sh/changelog.sh "$version" >/dev/null || die "add a section for ${version} to CHANGELOG.md, at the tag"
   [ -z "$(sh/changelog.sh --unreleased)" ] || die "CHANGELOG.md still has lines under Unreleased: move them into ${version}'s section before tagging"
+  tag="v${version}"
+  [ "$(git cat-file -t "refs/tags/${tag}" 2>/dev/null)" = tag ] || die "${tag} is not a signed tag: make it with git tag -s"
+  # git would check a GPG signature with GPG instead, whatever the file says.
+  [[ $(git for-each-ref --format='%(contents:signature)' "refs/tags/${tag}") == "-----BEGIN SSH SIGNATURE-----"* ]] \
+    || die "${tag} has no ssh signature: make it with git tag -s, with gpg.format ssh"
+  git -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag "$tag" 2>/dev/null \
+    || die "${tag}'s signature does not verify against allowed_signers: $(git -c gpg.ssh.allowedSignersFile=allowed_signers verify-tag "$tag" 2>&1 | tr '\n' ' ')"
 fi
 
 out="dist/pirc-${version}"

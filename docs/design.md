@@ -2432,7 +2432,16 @@ Each step ends with something that can be seen working.
        Unreleased above it (decided 2026-11-14): `sh/release.sh` refuses
        to build without the version's section or with lines still under
        Unreleased, and `sh/publish-release.sh` makes the section the
-       release's notes. The README and the self-hosting
+       release's notes. From 0.3.7 (decided 2026-11-14) the tag is signed
+       with ssh, by a key in `allowed_signers`, and `sh/release.sh`
+       refuses one that does not verify against it, with no fallback. The
+       key is in castle's Secure Enclave and pimenta has none, so the tag
+       is made on castle (`git tag -s`), pushed to pimenta's
+       `~/pirc/release` checkout rather than to the repository, released
+       there, and pushed to the repository from there only once
+       `sh/release.sh` has passed. pirc-extension's tags stay unsigned
+       (`git tag -a`); `SECURITY.md` says how to check a release, theirs
+       included. The README and the self-hosting
        guide start from the download, building from source kept as the
        alternative. A snapshot's Linux relays and web bundle ran on arm64
        and amd64 machines. The macOS relay was signed only as Go links
