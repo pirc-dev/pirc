@@ -351,7 +351,13 @@ follow the server if it moves. For TLS, choose one, as for the relay:
   first) and set its two `LoadCredential=` paths. The web app reads them when it starts, so
   restart it after every renewal.
 - **A proxy that terminates TLS**, in front of the web app on loopback,
-  with `PIRC_WEB_PLAINTEXT=true`.
+  with `PIRC_WEB_PLAINTEXT=true`. List the proxy's address in
+  `PIRC_WEB_TRUSTED_PROXIES` (here `127.0.0.1`), and have it set
+  `X-Forwarded-For`, as Caddy does and nginx does with
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`: the web
+  app limits sign-in attempts by address, and without the list every
+  browser is the proxy's address, so one script's attempts would lock out
+  everyone. It believes the header as the relay does (above).
 
 Then register it with the relay, start it, and add the first passkey:
 

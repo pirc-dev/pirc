@@ -83,7 +83,9 @@ key, which every browser shares.
   every browser at once.
 - **Limits**: request bodies of 64 KiB while signing in and 1 MiB after,
   but for a prompt, which may carry its images (about 12 MiB); 20
-  pairing or sign-in attempts a minute per address; HSTS on HTTPS.
+  pairing or sign-in attempts a minute per address, behind a proxy the
+  client's as the proxy gives it, from a proxy listed in
+  `PIRC_WEB_TRUSTED_PROXIES` only (`server/proxy.ts`); HSTS on HTTPS.
 
 Passkeys are tied to the app's host name, so it should be a name that can
 follow the server if it moves: moving to another name means making every

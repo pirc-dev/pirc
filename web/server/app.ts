@@ -16,6 +16,7 @@ import { IMAGE_BYTES_MAX, IMAGE_TYPES, IMAGES_MAX, PAGE_REQUEST_ID, type Command
 import { outcome, type Result } from "../core/results.ts";
 import { Auth, AuthError } from "./auth.ts";
 import type { Notifier } from "./notify.ts";
+import { clientAddr, type Proxies } from "./proxy.ts";
 import { badSubscription, type PushStore, type Subscription } from "./push.ts";
 import { wanted, Watchers, type EventLog } from "./stream.ts";
 
@@ -54,6 +55,8 @@ export interface AppOptions {
   // The relay's URL as this server reaches it, given with a token for a
   // new device.
   relay?: string;
+  // The proxies in front, whose X-Forwarded-For is believed (proxy.ts).
+  trustedProxies?: Proxies;
 }
 
 const CSP = [
@@ -240,12 +243,16 @@ export function createApp(o: AppOptions): Hono {
   const heartbeat = o.heartbeatMs ?? HEARTBEAT_MS;
   const watchers = o.watchers ?? new Watchers();
 
+  // The client's address, behind trusted proxies the one they saw: what
+  // the sign-in limit counts by, and the logs show.
   const remote = (c: Context) => {
+    let peer: string | undefined;
     try {
-      return getConnInfo(c).remote.address ?? "?";
+      peer = getConnInfo(c).remote.address;
     } catch {
-      return "?";
+      peer = undefined;
     }
+    return clientAddr(peer, c.req.header("x-forwarded-for"), o.trustedProxies);
   };
 
   // Every request: our own host name (a page on another site resolving its

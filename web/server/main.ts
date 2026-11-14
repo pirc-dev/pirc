@@ -2,7 +2,7 @@
 // pirc-web: PiRC's web app (docs/web.md).
 //
 //   pirc-web enrol <relay-url> <token>          register with a PiRC relay
-//   pirc-web serve --origin URL --listen host:port (--tls-cert F --tls-key F | --plaintext)
+//   pirc-web serve --origin URL --listen host:port (--tls-cert F --tls-key F | --plaintext) [--trusted-proxies LIST]
 //   pirc-web pair [--label NAME]                print a link that adds a passkey
 //   pirc-web list                               passkeys
 //   pirc-web revoke <passkey ID or label>       remove a passkey, signing it out
@@ -15,7 +15,9 @@
 //
 // serve's flags can also be set in the environment, for a service's
 // environment file: PIRC_WEB_ORIGIN, PIRC_WEB_LISTEN, PIRC_WEB_TLS_CERT,
-// PIRC_WEB_TLS_KEY, PIRC_WEB_PLAINTEXT (true or false) and PIRC_WEB_PAGE.
+// PIRC_WEB_TLS_KEY, PIRC_WEB_PLAINTEXT (true or false), PIRC_WEB_PAGE and
+// PIRC_WEB_TRUSTED_PROXIES (proxies in front, whose X-Forwarded-For says
+// the client's address: addresses and CIDR prefixes, comma-separated).
 // A flag wins over its variable; an empty variable counts as unset. The
 // origin is the app's address as browsers see it ("https://pirc.example"):
 // passkeys are tied to its host name, and requests from any other are
@@ -36,6 +38,7 @@ import type { RelayView } from "../core/view.ts";
 import { createApp } from "./app.ts";
 import { Auth, AuthError, AuthStore } from "./auth.ts";
 import { Notifier } from "./notify.ts";
+import { parseProxies, type Proxies } from "./proxy.ts";
 import { PushStore } from "./push.ts";
 import { EventLog, Watchers } from "./stream.ts";
 
@@ -114,6 +117,7 @@ async function main(): Promise<void> {
       "tls-cert": { type: "string" },
       "tls-key": { type: "string" },
       plaintext: { type: "boolean" },
+      "trusted-proxies": { type: "string" },
       page: { type: "string" },
       label: { type: "string" },
     },
@@ -164,6 +168,14 @@ async function main(): Promise<void> {
   }
 }
 
+function proxiesArg(s: string | undefined): Proxies {
+  try {
+    return parseProxies(s);
+  } catch (e) {
+    return die(`${(e as Error).message} (--trusted-proxies, PIRC_WEB_TRUSTED_PROXIES)`);
+  }
+}
+
 function serveCmd(dir: string, store: AuthStore, v: Record<string, string | boolean | undefined>): void {
   const config = readConfig(dir);
   if (!config.relay) die("not enrolled with a relay: run pirc-web enrol <relay-url> <token>");
@@ -177,6 +189,7 @@ function serveCmd(dir: string, store: AuthStore, v: Record<string, string | bool
     (v.plaintext as boolean | undefined) ?? cli.envBool("PIRC_WEB_PLAINTEXT"),
   );
   const page = pageDir((v.page as string | undefined) ?? cli.env("PIRC_WEB_PAGE"));
+  const trustedProxies = proxiesArg((v["trusted-proxies"] as string | undefined) ?? cli.env("PIRC_WEB_TRUSTED_PROXIES"));
   if (config.origin !== origin) writeConfig(dir, { ...config, origin });
 
   const logLine = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
@@ -211,7 +224,8 @@ function serveCmd(dir: string, store: AuthStore, v: Record<string, string | bool
     logLine,
   });
   notifier.start();
-  const app = createApp({ auth, client, log, pageDir: page, logLine, watchers, push: { store: pushStore, notifier }, relay: config.relay });
+  if (trustedProxies.wide.length) logLine(`trusted proxies ${trustedProxies.wide.join(", ")} cover more than one address: any peer in them can claim any client address`);
+  const app = createApp({ auth, client, log, pageDir: page, logLine, watchers, push: { store: pushStore, notifier }, relay: config.relay, trustedProxies });
   const options = { fetch: app.fetch, hostname: listen.host, port: listen.port };
   const server = tls
     ? serve({ ...options, createServer: createSecureServer, serverOptions: { ...tls, allowHTTP1: true } })
