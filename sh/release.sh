@@ -8,6 +8,10 @@
 #   sh/release.sh              the release tagged vX.Y.Z at HEAD
 #   sh/release.sh --snapshot   a test build of HEAD, versioned X.Y.Z-dev+<commit>
 #
+# Before tagging, add the version's section to CHANGELOG.md: what it
+# changes for the people running it. A release is not built without one
+# (sh/changelog.sh), and sh/publish-release.sh makes it the release's notes.
+#
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are
 # written, and a missing tool fails the release rather than skipping it.
@@ -63,6 +67,11 @@ if [[ $version == *-dev+* ]] && ! $snapshot; then
   die "HEAD has no vX.Y.Z tag; tag it, or pass --snapshot for a test build"
 fi
 [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-dev\+[0-9a-f]+)?$ ]] || die "not a release version: $version"
+# A release says what it changes: its section of CHANGELOG.md, which
+# sh/publish-release.sh puts in its notes, is there before anything is built.
+if ! $snapshot; then
+  sh/changelog.sh "$version" >/dev/null || die "add a section for ${version} to CHANGELOG.md, at the tag"
+fi
 
 out="dist/pirc-${version}"
 rm -rf "$out"

@@ -37,6 +37,10 @@ commit=$(git rev-parse "v${version}^{commit}") || die "no tag v${version} here"
 remote=$(gh api "repos/${repository}/commits/v${version}" --jq .sha) || die "no tag v${version} on GitHub"
 [ "$remote" = "$commit" ] || die "v${version} on GitHub is ${remote}, here ${commit}"
 
-notes="PiRC ${version}: the relay for Linux and macOS, the web app and the pi extension.
+# What it changes, as CHANGELOG.md says at the tag, above how to install.
+changes=$(git show "v${version}:CHANGELOG.md" | sh/changelog.sh "$version" -) || die "CHANGELOG.md at v${version} has no section for it"
+notes="${changes}
+
+PiRC ${version}: the relay for Linux and macOS, the web app and the pi extension.
 Installing them: https://pirc.dev/self-hosting/. Check a download against SHA256SUMS with \`sha256sum -c --ignore-missing SHA256SUMS\` (on macOS, \`shasum -a 256 -c --ignore-missing SHA256SUMS\`)."
 gh release create "v${version}" --repo "$repository" --verify-tag --title "PiRC ${version}" --notes "$notes" "${files[@]}"

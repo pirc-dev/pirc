@@ -474,6 +474,16 @@ web app together, the relay first: each is tested only with the others
 built from the same commit. A peer the relay cannot speak to is
 refused with `VERSION_UNSUPPORTED`, and `/pirc status` says so.
 
+How mixed versions behave: the relay admits any peer that speaks
+`v1alpha1`, whatever its release, so an older extension or app still
+connects. Within `v1alpha1` the protocol may still change incompatibly,
+and nothing checks that it does not; so far, from 0.3.0 on, every change
+has only added to it, and a part older than a feature simply lacks it
+(the [changelog](../CHANGELOG.md) says which release brings what, and
+when a release needs the others upgraded with it). The protocol becomes `v1` when it stops
+changing, with every change checked for compatibility from then on; no
+date is set.
+
 To upgrade the relay, download the new release (or build it again),
 replace the binary and restart it
 (`systemctl restart pirc-relay`, or `sudo launchctl kickstart -k
