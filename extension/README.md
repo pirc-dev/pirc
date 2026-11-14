@@ -25,10 +25,15 @@ pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 ```
 
 To upgrade, upgrade your relay first, then install the newer tag the same
-way. `pi update` keeps a pinned install where it is. Installing without a
-tag follows this repository's default branch, and
-`pi update git:github.com/pirc-dev/pirc-extension` then moves it to the
-latest build, possibly ahead of your relay.
+way. `pi update` keeps a pinned install where it is.
+
+Installing without a tag follows this repository's default branch
+instead: `pi update git:github.com/pirc-dev/pirc-extension` then installs
+whatever was published there last, and runs `npm install` on it, before
+you have read it. The extension runs in pi, with pi's access to your
+machine, so that is the publisher's next change running there unseen,
+possibly ahead of your relay. Pin it, unless following along is what you
+want.
 
 ## Enrol
 

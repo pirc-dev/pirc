@@ -312,10 +312,15 @@ pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 
 It loads into every interactive pi session started from then on; enrol the
 host once, as below. To upgrade, install the newer tag the same way:
-`pi update` keeps a pinned install where it is. Installed without a tag,
-it follows the default branch, and
-`pi update git:github.com/pirc-dev/pirc-extension` moves it to the latest
-build. Pinned or not, keep the relay at least as new as the extension.
+`pi update` keeps a pinned install where it is. Pinned or not, keep the
+relay at least as new as the extension.
+
+Installed without a tag, it follows the default branch instead:
+`pi update git:github.com/pirc-dev/pirc-extension` installs whatever was
+published there last, and runs `npm install` on it, before you have read
+it. The extension runs in pi, with pi's access to your machine, so that is
+the publisher's next change running there unseen, possibly ahead of your
+relay. Pin it, unless following along is what you want.
 `pi remove git:github.com/pirc-dev/pirc-extension` uninstalls it.
 
 Without git, each release's downloads include the package,

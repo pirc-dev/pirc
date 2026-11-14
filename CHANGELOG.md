@@ -11,6 +11,9 @@ release that needs its parts upgraded together says so here.
 - The extension is tested with pi 1.0.0 and the current pi on every
   change, and expects pi 1.0.0 or later in 1.x; outside that,
   `/pirc status` says so.
+- The guide and the extension's README say what installing the extension
+  without a tag means: the next thing published runs on your machine at
+  `pi update`, unread. Pin it to a release.
 
 ## 0.3.6 (2026-11-14)
 
