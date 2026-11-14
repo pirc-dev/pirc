@@ -2129,8 +2129,10 @@ Each step ends with something that can be seen working.
       and the Swift code reads them back from the Info.plist; the store
       build's identifiers stay as they were. Such a build has no
       notifications: the gateway serves only `dev.pirc.app`, with the
-      publisher's keys, and the app gives it that ID whatever it was
-      built as.
+      publisher's keys, so an app whose bundle ID or package name is
+      another neither asks for them nor registers with the gateway
+      (decided 2026-11-14). None of the publisher's own builds adds a
+      suffix to the ID, so none loses them.
       Built with the stores' own libraries in the app's plugin, StoreKit 2
       on iOS and Play Billing on Android, over 'dev.pirc.app/store'
       (`lib/app/store.dart`); rejected: Flutter's `in_app_purchase`, a

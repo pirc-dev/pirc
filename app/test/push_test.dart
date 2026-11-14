@@ -45,6 +45,13 @@ const apns = {'platform': 'apns', 'token': 'abababababababababababababababababab
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test("only the publisher's app has notifications: the gateway wakes no other", () {
+    expect(pushes('dev.pirc.app'), isTrue);
+    for (final id in ['org.example.pirc', 'dev.pirc.app.debug', 'dev.pirc', '', null]) {
+      expect(pushes(id), isFalse, reason: '$id');
+    }
+  });
+
   group('keeping the registration in step', () {
     late List<Frame> asked;
     late List<PushToken> registered;

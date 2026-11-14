@@ -1,5 +1,7 @@
 // The app's version, for lib/ui/settings_screen.dart's Licences over
-// 'dev.pirc.app/about': as the build gave it, "1.0.0 (3)". And the notices
+// 'dev.pirc.app/about': as the build gave it, "1.0.0 (3)"; its package
+// name, for lib/main.dart, which gives the publisher's app alone
+// notifications. And the notices
 // of the Android libraries, which the app's build writes into its assets
 // (android/app/build.gradle.kts), for lib/app/notices.dart.
 package dev.pirc.platform
@@ -14,6 +16,7 @@ import java.io.FileNotFoundException
 class About(private val context: Context) : MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "id" -> result.success(context.packageName)
             "version" -> {
                 val info = if (Build.VERSION.SDK_INT >= 33) {
                     context.packageManager.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))

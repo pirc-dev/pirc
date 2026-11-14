@@ -217,8 +217,9 @@ extension (`<team>.dev.pirc.shared`, which stays as it is).
    register the App Group, add it under Identifiers in Apple's developer
    site and assign it to both app IDs.
 
-A build from source has no paywall (Store builds, above). It has no
-notifications either: PiRC's push gateway, `push.pirc.dev`, wakes only
-the publisher's app (`dev.pirc.app`), with the publisher's push keys, and
-nothing arrives for an app built under another bundle ID. Everything else
-works: joining a relay, sessions, questions, photos.
+A build from source has no paywall (Store builds, above). Under another
+bundle ID it has no notifications either: PiRC's push gateway,
+`push.pirc.dev`, wakes only the publisher's app (`dev.pirc.app`), with the
+publisher's push keys, so such a build does not offer them, and neither
+asks for them nor registers with the gateway (`pushes`, `lib/push/push.dart`).
+Everything else works: joining a relay, sessions, questions, photos.

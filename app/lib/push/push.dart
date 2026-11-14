@@ -14,6 +14,11 @@ const gateway = String.fromEnvironment('PIRC_GATEWAY', defaultValue: 'https://pu
 
 // The app's ID, as the gateway serves it, and its version, only counted.
 const appId = 'dev.pirc.app';
+
+// Whether an app built with this ID has notifications: the publisher's
+// alone, which the gateway wakes; another build (app/README.md, "Building
+// it yourself, on iOS") neither explains them nor registers.
+bool pushes(String? id) => id == appId;
 const appVersion = String.fromEnvironment('PIRC_VERSION', defaultValue: '0.1.0');
 
 // Whether notifications may be shown.

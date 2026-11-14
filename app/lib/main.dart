@@ -16,7 +16,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final files = PrivateFiles();
   addAndroidNotices();
-  runApp(PircApp(store: ChannelKeyStore(), prefs: ChannelPrefs(), camera: true, push: PushPlatform(), links: LinkPlatform(), subscription: _subscription(), cache: await keptChats(files), drafts: await keptDrafts(files)));
+  final id = await const MethodChannel('dev.pirc.app/about').invokeMethod<String>('id');
+  if (!pushes(id)) debugPrint('push: none, built as $id, not $appId');
+  runApp(PircApp(store: ChannelKeyStore(), prefs: ChannelPrefs(), camera: true, push: pushes(id) ? PushPlatform() : null, links: LinkPlatform(), subscription: _subscription(), cache: await keptChats(files), drafts: await keptDrafts(files)));
 }
 
 // The App Store's subscription, or Google Play's, in a store build only.
