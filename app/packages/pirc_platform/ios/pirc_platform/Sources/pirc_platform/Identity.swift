@@ -1,11 +1,11 @@
 // Who the app was built as, from its Info.plist, which the build fills in
-// from ios/Flutter/Identity.xcconfig: the team, which prefixes the
-// Keychain's access groups, and the App Group. The bundle ID is the
-// app's own.
+// from ios/Flutter/Identity.xcconfig: the App ID prefix, as the
+// entitlements' Keychain groups have it ("<team>." on current accounts,
+// older ones may differ), and the App Group. The bundle ID is the app's own.
 import Foundation
 
 enum Identity {
-  static let team = info("PircTeam")
+  static let keyPrefix = info("PircKeyPrefix")
   static let appGroup = info("PircAppGroup")
   static let bundle = Bundle.main.bundleIdentifier!
 

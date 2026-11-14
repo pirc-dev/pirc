@@ -31,7 +31,7 @@
 	</dict>
 	<key>PircAppGroup</key>
 	<string>$(PIRC_APP_GROUP)</string>
-	<key>PircTeam</key>
-	<string>$(PIRC_TEAM)</string>
+	<key>PircKeyPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 </dict>
 </plist>

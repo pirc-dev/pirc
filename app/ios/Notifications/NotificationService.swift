@@ -14,7 +14,7 @@ import UserNotifications
 // the relay's URL and what was last shown, and the read-only key, as the
 // build was given them (ios/Flutter/Identity.xcconfig, through Info.plist).
 let group = info("PircAppGroup")
-let keyGroup = "\(info("PircTeam")).dev.pirc.shared"
+let keyGroup = info("PircKeyPrefix") + "dev.pirc.shared"
 
 private func info(_ key: String) -> String {
   guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String, !value.isEmpty else {
