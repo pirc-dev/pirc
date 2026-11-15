@@ -32,34 +32,36 @@ not yet end-to-end encrypted. Run it yourself, on a machine you trust.
 
 ## Getting started
 
-You need a machine to run the relay on, reachable by your other machines
-and your phone, with a TLS certificate or a private network such as
-WireGuard or Tailscale.
+The shortest way needs one machine with Docker and a public DNS name, with
+ports 80 and 443 open. Without Docker, on macOS, or on a private network
+such as Tailscale, follow [`docs/self-hosting.md`](docs/self-hosting.md)
+instead.
 
-1. **The relay**: download it from the
-   [releases](https://github.com/pirc-dev/pirc/releases), for Linux or
-   macOS, and run it as a service, as
-   [`docs/self-hosting.md`](docs/self-hosting.md) says.
-2. **The extension**, on every machine that runs pi:
-   `pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z`, with the
-   latest release's tag; pi needs `git` and `npm` for it. Then, on the
-   relay, as the relay's user (the guide's `pirc-relay` alias, so that the
-   token goes into the registry the relay reads),
-   `pirc-relay add-host --url <relay-url> --label <name>` prints the
-   `/pirc enrol` line to run in that pi. (A machine can also ask to join
-   with `/pirc enrol <relay-url>` alone, and be approved on the relay or
-   in a client.)
-3. **Your phone**: `pirc-relay add-client --url <relay-url> --label phone`
-   prints a `pirc://join` link and its QR code. Scan it with PiRC's app,
-   built from [`app/README.md`](app/README.md) until it is in the App
-   Store and Google Play. Once one client has joined, it can invite the
-   others.
-4. **The web app**, if you want one: [`docs/web.md`](docs/web.md).
+1. **Start the relay and the web app.** In `docker/`, in a clone of this
+   repository checked out at the latest
+   [release](https://github.com/pirc-dev/pirc/releases)'s tag, run the
+   commands in
+   [With Docker Compose](docs/self-hosting.md#with-docker-compose). The
+   last one prints a link: open it and make a passkey. The web app is now
+   your first client.
+2. **Install the extension** on every machine that runs pi. pi needs `git`
+   and `npm` for it:
 
-Phones are woken for notifications through PiRC's push gateway,
-`https://push.pirc.dev`, which passes no content: the phone then reads its
-relay and writes the notification itself
-([`docs/gateway.md`](docs/gateway.md)).
+   ```sh
+   pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
+   ```
+
+   Use the latest release's tag.
+3. **Join each machine.** In pi, run `/pirc enrol wss://<your name>`. The
+   machine appears at the top of the web app's session list, asking to
+   join. Approve it once its key matches the one `/pirc status` shows in
+   pi.
+4. **Add your phone.** In the web app's Settings, "Add an app" shows a
+   code. Scan it with PiRC's app ([`app/README.md`](app/README.md)).
+
+Phones are woken through PiRC's push gateway, `push.pirc.dev`. It learns
+which relay woke which phone, and when, and nothing about your sessions
+([`SECURITY.md`](SECURITY.md)).
 
 ## Status
 
