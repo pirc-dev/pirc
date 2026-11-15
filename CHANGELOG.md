@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- The web app shows a session's model and provider first under its
+  title, ahead of where it runs and its folder, so a long folder no longer
+  hides them.
+
 ## 0.3.7 (2026-11-15)
 
 - The extension is tested with pi 1.0.0 and the current pi on every

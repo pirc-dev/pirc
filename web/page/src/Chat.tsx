@@ -309,15 +309,18 @@ function useSpend(s: SessionView | undefined, replies: number): React.ReactNode 
   return <span className="flex-none text-[13px] text-ink3 tabular-nums cockpit:font-mono cockpit:text-xs" title="Context used · cost so far">{text}</span>;
 }
 
-// Where it runs, its folder, then the model in ink and the thinking level.
+// The model in ink, its provider and the thinking level, then where it runs
+// and its folder: the line truncates at its end, so a long folder is cut
+// rather than the model.
 function Meta(p: { session: SessionView }) {
   const s = p.session;
   const model = s.model && (s.model.name || s.model.id);
+  const rest = [s.model?.provider, s.thinking, where(s), s.cwd].filter(Boolean).join(" · ");
   return (
     <>
-      {[where(s), s.cwd].filter(Boolean).join(" · ")}
-      {model && <> · <b className="font-semibold text-ink">{model}</b></>}
-      {s.thinking && ` · ${s.thinking}`}
+      {model && <b className="font-semibold text-ink">{model}</b>}
+      {model && rest && " · "}
+      {rest}
     </>
   );
 }
