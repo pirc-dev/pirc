@@ -12,6 +12,8 @@ release that needs its parts upgraded together says so here.
   session runs and the last part of its folder, then its model, provider
   and thinking level, with the context used and the cost at the right. The
   full folder is in the session's menu.
+- The iOS and Android apps' session header has the same two lines, from
+  their next store build.
 
 ## 0.3.7 (2026-11-15)
 

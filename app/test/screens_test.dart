@@ -852,25 +852,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets("the header names the model first, so that a long folder is what is cut", (tester) async {
+  testWidgets("under the title, where it runs and the folder's last part, then the model with the context and cost", (tester) async {
     final model = await docs(tester);
     final long = '/home/me/x/worktrees/${'a-very-long-folder-name/' * 6}site';
     model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(
       name: 'docs', cwd: long, hostname: 'laptop.local',
-      model: Model(provider: 'anthropic', id: 'claude-sonnet-5-5', name: 'Sonnet 5.5'), thinkingLevel: ThinkingLevel.THINKING_LEVEL_MEDIUM,
+      model: Model(provider: 'openrouter', id: 'x/y', name: 'A model with a name far too long to fit on one line beside the cost'), thinkingLevel: ThinkingLevel.THINKING_LEVEL_MEDIUM,
     )))));
     await tester.pump();
-    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().endsWith(long));
+    expect(find.text('laptop · site'), findsOneWidget, reason: 'the last part of the folder only');
+    expect(find.textContaining(long), findsNothing);
+    final line = find.text('A model with a name far too long to fit on one line beside the cost · openrouter · medium');
     expect(line, findsOneWidget);
-    expect(tester.widget<RichText>(line).text.toPlainText(), startsWith('Sonnet 5.5 · anthropic · medium · '));
-    final painter = TextPainter(text: tester.widget<RichText>(line).text, textDirection: TextDirection.ltr, maxLines: 1)..layout(maxWidth: tester.getSize(line).width);
-    expect(painter.didExceedMaxLines, isTrue, reason: 'the folder is cut');
-    expect(painter.getPositionForOffset(Offset(tester.getSize(line).width - 1, 0)).offset, greaterThan('Sonnet 5.5 · anthropic · medium'.length), reason: 'the model, provider and thinking level fit');
+    final cost = find.text('61% · \$1.84');
+    expect(cost, findsOneWidget);
+    expect(tester.getRect(cost).right, lessThanOrEqualTo(tester.getSize(find.byType(ChatScreen)).width - 16), reason: 'the cost is whole, at the right');
+    expect(tester.getRect(line).right, lessThan(tester.getRect(cost).left), reason: 'the model is cut before it');
+    expect(tester.getRect(line).left, tester.getRect(find.text('laptop · site')).left);
+    expect(tester.getRect(line).left, tester.getRect(find.text('docs')).left, reason: 'in line with the title');
+    expect(tester.getRect(cost).top, greaterThan(tester.getRect(find.text('docs')).bottom), reason: 'not on the title row');
 
-    // No model: the line starts with where it runs, with no stray separator.
-    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local')))));
-    await tester.pump();
-    expect(find.byWidgetPredicate((w) => w is RichText && RegExp(r'^[^ ·].* · /home/me/src/site$').hasMatch(w.text.toPlainText())), findsOneWidget);
+    await openActions(tester);
+    expect(find.text('laptop · $long'), findsOneWidget, reason: 'the whole folder, in the actions');
   });
 
   testWidgets("the session's actions, and its thinking level changed from them", (tester) async {

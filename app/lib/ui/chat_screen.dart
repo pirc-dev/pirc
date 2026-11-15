@@ -457,7 +457,8 @@ class _ToEnd extends StatelessWidget {
   }
 }
 
-// Back, the status, the title, and the model with where it runs.
+// Back, the status and the title; under it, where it runs, then the model
+// with the context and cost at the right.
 class _Header extends StatelessWidget {
   const _Header({required this.session, required this.news, this.spend, this.actions, this.back = true});
   final SessionView? session;
@@ -474,9 +475,11 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final look = Look.of(context);
     final s = session;
-    final model = s?.model == null ? null : (s!.model!.name.isNotEmpty ? s.model!.name : s.model!.id);
-    final rest = s == null ? '' : [s.model?.provider ?? '', s.thinking ?? '', where(s), s.cwd].where((x) => x.isNotEmpty).join(' · ');
-    final meta = look.text(size: 12, color: look.ink2, spacing: 0);
+    final m = s?.model;
+    // The last part of the folder only: the whole of it is in the actions.
+    final place = s == null ? '' : [where(s), s.cwd.isEmpty ? '' : folder(s.cwd)].where((x) => x.isNotEmpty).join(' · ');
+    final model = [m == null ? '' : (m.name.isNotEmpty ? m.name : m.id), m?.provider ?? '', s?.thinking ?? ''].where((x) => x.isNotEmpty).join(' · ');
+    final small = look.text(size: 11.5, color: look.ink3, spacing: 0);
     final more = actions == null
         ? null
         : Semantics(
@@ -507,29 +510,30 @@ class _Header extends StatelessWidget {
           child: Row(children: [
             if (s != null) ...[StatusBadge(statusOf(s, news), compacting: s.compacting), const SizedBox(width: 8)],
             Expanded(child: Text(s == null ? 'Session ended' : title(s), style: look.text(size: 18, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (s != null && spend != null) ...[
-              const SizedBox(width: 8),
-              Semantics(
-                label: 'Context used · cost so far: $spend',
-                excludeSemantics: true,
-                child: Text(spend!, style: look.text(size: 13, color: look.ink3, spacing: 0).copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-              ),
-            ],
             if (!back && more != null) ...[const SizedBox(width: 4), more],
           ]),
         ),
-        if (s != null)
+        // In line with the title; each line cut at its end, the context
+        // and cost never.
+        if (place.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(56, 2, 16, 0),
-            child: Text.rich(
-              // The model first, so that a long folder, last, is what is cut.
-              TextSpan(style: meta, children: [
-                if (model != null) TextSpan(text: model, style: meta.copyWith(color: look.ink, fontWeight: FontWeight.w600)),
-                if (rest.isNotEmpty) TextSpan(text: model == null ? rest : ' · $rest'),
-              ]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(place, style: look.text(size: 12, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        if (s != null && (model.isNotEmpty || spend != null))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 2, 16, 0),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Expanded(child: Text(model, style: small, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              if (spend != null) ...[
+                const SizedBox(width: 8),
+                Semantics(
+                  label: 'Context used · cost so far: $spend',
+                  excludeSemantics: true,
+                  child: Text(spend!, style: small.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
+              ],
+            ]),
           ),
       ]),
     );

@@ -174,7 +174,7 @@ class _ActionsState extends State<SessionActions> {
     final look = Look.of(context);
     final busy = s.working || s.compacting;
     final model = s.model;
-    return Sheet(title: title(s), sub: where(s), done: 'Done', children: [
+    return Sheet(title: title(s), sub: [where(s), s.cwd].where((x) => x.isNotEmpty).join(' · '), done: 'Done', children: [
       SheetGroup(children: [
         SheetRow(
           label: 'Model',
