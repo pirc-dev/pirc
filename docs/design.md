@@ -348,7 +348,10 @@ The questions, as settled:
    publishes an opaque announcement per session, and the relay stores the
    latest one and replays it to clients without reading it, so a hosted relay
    will not see session names either. End-to-end encryption between client and
-   host arrives with the hosted relay, as a change to payloads only.
+   host arrives with the hosted relay. A design for it is proposed, and
+   open, in `docs/e2e.md` (2026-11-15): it changes the payloads, and the
+   relay's frames for the account, which becomes a list only clients can
+   change.
 
    **Transport security**: TLS is the relay's default. Plain `ws://` is an
    explicit relay setting, for networks that already encrypt (WireGuard,
@@ -2033,7 +2036,8 @@ Each step ends with something that can be seen working.
       `flutter build appbundle`) and uploads with Apple's and Google's
       tools or fastlane, with no hosted service of its own.
 14. **Hosted relay**: multi-tenancy, end-to-end encryption and device-signed
-    registration (section 5).
+    registration (section 5). End-to-end encryption and the
+    device-signed list are proposed in `docs/e2e.md`, open (2026-11-15).
 15. **Open**: licence, public repository, pirc.dev, store listings.
     Planned 2026-11-07, for self-hosters first: it does not wait for the
     hosted relay (step 14), which comes after as its own release, and
