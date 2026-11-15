@@ -8,6 +8,8 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+## 0.3.7 (2026-11-15)
+
 - The extension is tested with pi 1.0.0 and the current pi on every
   change, and expects pi 1.0.0 or later in 1.x; outside that,
   `/pirc status` says so.
