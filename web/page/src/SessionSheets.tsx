@@ -156,7 +156,7 @@ export function Actions(p: {
     );
   }
   return (
-    <Sheet key="menu" title={title(s)} sub={where(s)} done="Done" close={p.close}>
+    <Sheet key="menu" title={title(s)} sub={[where(s), s.cwd].filter(Boolean).join(" · ")} done="Done" close={p.close}>
       <SheetGroup>
         <SheetRow
           label="Model"

@@ -9,7 +9,7 @@ import { free, useKey, useKeys } from "./keys.ts";
 import { useLayer } from "./layer.ts";
 import { answered, type Pending as SentPending, quiet, settle, userIds } from "../../core/pending.ts";
 import { markSeen } from "./seen.ts";
-import { title, where } from "./names.ts";
+import { folder, title, where } from "./names.ts";
 import { Status } from "./Status.tsx";
 import { useHold } from "./update.ts";
 import { type Run } from "./chat.ts";
@@ -191,7 +191,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
                   <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
                     <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} className="w-4 text-[15px]" />
                     <h1 className="min-w-0 flex-1 truncate font-read text-[17px] font-medium cards:font-ui cards:font-[650] native:font-semibold cockpit:font-mono cockpit:text-[15px] cockpit:font-bold">{title(s)}</h1>
-                    {spend}
+                    {spend && <Spend text={spend} className="text-[13px]" />}
                   </div>
                 )
                 : fold
@@ -206,9 +206,8 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
                 <div className="flex items-baseline gap-2 px-4">
                   {s && <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} className="w-4 text-[17px]" />}
                   <h1 className="min-w-0 flex-1 truncate font-read text-2xl font-medium tracking-[-0.01em] cards:text-xl cards:font-[650] native:text-lg native:font-semibold cockpit:font-mono cockpit:text-base cockpit:font-bold">{s ? title(s) : "Session ended"}</h1>
-                  {spend}
                 </div>
-                {s && <p className="truncate pt-0.5 pr-4 pl-10 text-[12.5px] text-ink2 cards:font-mono cards:text-xs cards:text-ink3 native:pl-[54px] native:font-ui native:text-xs native:text-ink2 cockpit:font-mono cockpit:text-[11.5px] cockpit:text-ink3"><Meta session={s} /></p>}
+                {s && <Meta session={s} spend={spend} />}
               </div>
               {p.wide && actions}
             </div>
@@ -284,7 +283,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
 // How full the context is and what the session has cost, asked of pi when
 // the chat opens, after each reply and when the model changes. Nothing
 // while it is not known. Asked here, once, for wherever the header shows it.
-function useSpend(s: SessionView | undefined, replies: number): React.ReactNode {
+function useSpend(s: SessionView | undefined, replies: number): string | undefined {
   const [text, setText] = useState<string>();
   const model = s?.model && `${s.model.provider}/${s.model.id}`;
   const idle = s && !s.working && !s.compacting;
@@ -305,22 +304,31 @@ function useSpend(s: SessionView | undefined, replies: number): React.ReactNode 
       current = false;
     };
   }, [id, model, idle, replies]);
-  if (!text || !s) return null;
-  return <span className="flex-none text-[13px] text-ink3 tabular-nums cockpit:font-mono cockpit:text-xs" title="Context used · cost so far">{text}</span>;
+  return s ? text : undefined;
 }
 
-// The model in ink, its provider and the thinking level, then where it runs
-// and its folder: the line truncates at its end, so a long folder is cut
-// rather than the model.
-function Meta(p: { session: SessionView }) {
+function Spend(p: { text: string; className: string }) {
+  return <span className={`flex-none text-ink3 tabular-nums cockpit:font-mono ${p.className}`} title="Context used · cost so far">{p.text}</span>;
+}
+
+// Under the title, where it runs and the last part of its folder, then the
+// model, its provider and the thinking level, with the context and cost at
+// the right. Each line truncates at its end; the context and cost do not.
+// The whole folder is in the session's menu.
+function Meta(p: { session: SessionView; spend: string | undefined }) {
   const s = p.session;
-  const model = s.model && (s.model.name || s.model.id);
-  const rest = [s.model?.provider, s.thinking, where(s), s.cwd].filter(Boolean).join(" · ");
+  const place = [where(s), s.cwd && folder(s.cwd)].filter(Boolean).join(" · ");
+  const model = [s.model && (s.model.name || s.model.id), s.model?.provider, s.thinking].filter(Boolean).join(" · ");
+  const line = "pr-4 pl-10 native:pl-[54px] cards:font-mono cockpit:font-mono";
   return (
     <>
-      {model && <b className="font-semibold text-ink">{model}</b>}
-      {model && rest && " · "}
-      {rest}
+      {place && <p className={`truncate pt-0.5 text-[12.5px] text-ink2 cards:text-xs cards:text-ink3 native:font-ui native:text-xs native:text-ink2 cockpit:text-[11.5px] cockpit:text-ink3 ${line}`} title={s.cwd}>{place}</p>}
+      {(model || p.spend) && (
+        <div className={`flex items-baseline gap-2 text-xs text-ink3 cards:text-[11.5px] native:font-ui cockpit:text-[11px] ${line}`}>
+          <p className="min-w-0 flex-1 truncate">{model}</p>
+          {p.spend && <Spend text={p.spend} className="text-xs cards:text-[11.5px] cockpit:text-[11px]" />}
+        </div>
+      )}
     </>
   );
 }

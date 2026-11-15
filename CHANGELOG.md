@@ -8,9 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
-- The web app shows a session's model and provider first under its
-  title, ahead of where it runs and its folder, so a long folder no longer
-  hides them.
+- The web app's session header has two lines under the title: where the
+  session runs and the last part of its folder, then its model, provider
+  and thinking level, with the context used and the cost at the right. The
+  full folder is in the session's menu.
 
 ## 0.3.7 (2026-11-15)
 
