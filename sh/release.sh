@@ -16,12 +16,12 @@
 #
 # The tag is signed, and a release is not built from one that does not
 # verify against allowed_signers, at HEAD, with ssh (SECURITY.md, "Checking
-# a release"). The key is in castle's Secure Enclave, so the tag is made
-# there and released on pimenta, and reaches PiRC's repository only once
-# this has passed:
+# a release"). The signing key need not be on the machine that builds
+# the release, so the tag is made where the key is, and reaches PiRC's
+# repository only once this has passed:
 #
-#   git tag -s vX.Y.Z -m "PiRC X.Y.Z"           on castle
-#   git push <pimenta's ~/pirc/release> vX.Y.Z  that checkout, not the repository
+#   git tag -s vX.Y.Z -m "PiRC X.Y.Z"           where the key is
+#   git push <release checkout> vX.Y.Z          that checkout, not the repository
 #   sh/release.sh                               there, at the tag
 #   git push origin vX.Y.Z                      from there, once it passes
 #
