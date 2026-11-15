@@ -58,6 +58,9 @@ instead.
    pi.
 4. **Add your phone.** In the web app's Settings, "Add an app" shows a
    code. Scan it with PiRC's app ([`app/README.md`](app/README.md)).
+   Until the stores have it, the iPhone and iPad app is in
+   [beta on TestFlight](https://testflight.apple.com/join/VczHzn9z): free,
+   in exchange for your feedback at support@pirc.dev.
 
 Phones are woken through PiRC's push gateway, `push.pirc.dev`. It learns
 which relay woke which phone, and when, and nothing about your sessions
