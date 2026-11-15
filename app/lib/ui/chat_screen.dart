@@ -457,7 +457,7 @@ class _ToEnd extends StatelessWidget {
   }
 }
 
-// Back, the status, the title, and where it runs with the model.
+// Back, the status, the title, and the model with where it runs.
 class _Header extends StatelessWidget {
   const _Header({required this.session, required this.news, this.spend, this.actions, this.back = true});
   final SessionView? session;
@@ -475,6 +475,7 @@ class _Header extends StatelessWidget {
     final look = Look.of(context);
     final s = session;
     final model = s?.model == null ? null : (s!.model!.name.isNotEmpty ? s.model!.name : s.model!.id);
+    final rest = s == null ? '' : [s.model?.provider ?? '', s.thinking ?? '', where(s), s.cwd].where((x) => x.isNotEmpty).join(' · ');
     final meta = look.text(size: 12, color: look.ink2, spacing: 0);
     final more = actions == null
         ? null
@@ -521,10 +522,10 @@ class _Header extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(56, 2, 16, 0),
             child: Text.rich(
+              // The model first, so that a long folder, last, is what is cut.
               TextSpan(style: meta, children: [
-                TextSpan(text: [where(s), s.cwd].where((x) => x.isNotEmpty).join(' · ')),
-                if (model != null) ...[const TextSpan(text: ' · '), TextSpan(text: model, style: meta.copyWith(color: look.ink, fontWeight: FontWeight.w600))],
-                if (s.thinking != null) TextSpan(text: ' · ${s.thinking}'),
+                if (model != null) TextSpan(text: model, style: meta.copyWith(color: look.ink, fontWeight: FontWeight.w600)),
+                if (rest.isNotEmpty) TextSpan(text: model == null ? rest : ' · $rest'),
               ]),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

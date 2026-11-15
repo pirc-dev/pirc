@@ -852,6 +852,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets("the header names the model first, so that a long folder is what is cut", (tester) async {
+    final model = await docs(tester);
+    final long = '/home/me/x/worktrees/${'a-very-long-folder-name/' * 6}site';
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(
+      name: 'docs', cwd: long, hostname: 'laptop.local',
+      model: Model(provider: 'anthropic', id: 'claude-sonnet-5-5', name: 'Sonnet 5.5'), thinkingLevel: ThinkingLevel.THINKING_LEVEL_MEDIUM,
+    )))));
+    await tester.pump();
+    final line = find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().endsWith(long));
+    expect(line, findsOneWidget);
+    expect(tester.widget<RichText>(line).text.toPlainText(), startsWith('Sonnet 5.5 · anthropic · medium · '));
+    final painter = TextPainter(text: tester.widget<RichText>(line).text, textDirection: TextDirection.ltr, maxLines: 1)..layout(maxWidth: tester.getSize(line).width);
+    expect(painter.didExceedMaxLines, isTrue, reason: 'the folder is cut');
+    expect(painter.getPositionForOffset(Offset(tester.getSize(line).width - 1, 0)).offset, greaterThan('Sonnet 5.5 · anthropic · medium'.length), reason: 'the model, provider and thinking level fit');
+
+    // No model: the line starts with where it runs, with no stray separator.
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local')))));
+    await tester.pump();
+    expect(find.byWidgetPredicate((w) => w is RichText && RegExp(r'^[^ ·].* · /home/me/src/site$').hasMatch(w.text.toPlainText())), findsOneWidget);
+  });
+
   testWidgets("the session's actions, and its thinking level changed from them", (tester) async {
     final model = await docs(tester);
     expect(find.text('61% · \$1.84'), findsOneWidget, reason: "the header's figures");
