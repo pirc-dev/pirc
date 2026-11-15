@@ -6,7 +6,7 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
-## Unreleased
+## 0.3.8 (2026-11-15)
 
 - The extension is on npm, as `pirc-extension`, and in pi's package
   gallery: `pi install npm:pirc-extension@X.Y.Z` installs it with `npm`
