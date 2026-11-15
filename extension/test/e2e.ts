@@ -706,6 +706,24 @@ try {
   assert.match(relay.cmd("pending"), /e2e-pi2 /, "enrolled again, it asks");
   assert.doesNotMatch(readFileSync(join(T, "pi2-host.json"), "utf8"), /"removed":/);
 
+  step("installed twice, the copy pi loads first runs, and the other says which to remove");
+  // A second install, of another version, where pi keeps git checkouts.
+  const copy = join(T, "pi3-agent-copy", "git", "github.com", "pirc-dev", "pirc-extension");
+  cpSync(pkg, copy, { recursive: true });
+  // The package runs as updated, above.
+  const running = `${version}-updated`;
+  const copied = readFileSync(join(copy, "pirc.js"), "utf8");
+  assert.ok(copied.includes(JSON.stringify(running)), "the copy's bundle names its version");
+  writeFileSync(join(copy, "pirc.js"), copied.replaceAll(JSON.stringify(running), JSON.stringify(`${version}-copy`)));
+  const pi3 = await startPi(h, relay, relay.cmd("add-host", "--label", "e2e-pi3"), "pi3", [copy]);
+  const pi3Entry = await next("pi3's session", (f) => (f.body.case === "sessionUpdated" && f.body.value.entry!.hostLabel === "e2e-pi3" ? f.body.value.entry : undefined), 30_000);
+  assert.equal(fromBinary(SessionAnnouncementSchema, pi3Entry!.payload).extensionVersion, running, "the copy loaded first runs");
+  for (let i = 0; i < 50 && !pi3.screen().includes("installed twice"); i++) await sleep(200);
+  assert.match(pi3.screen().replace(/\s+/g, " "), /pi remove git:github\.com\/pirc-dev\/pirc-extension/);
+  pi3.keys("/pirc status", "Enter");
+  for (let i = 0; i < 50 && !pi3.screen().includes("e2e-pi3"); i++) await sleep(200);
+  assert.match(pi3.screen(), /e2e-pi3/, "/pirc is still pi's command");
+
   if (observeError) throw observeError;
   console.log("ok: end to end");
 } catch (e) {

@@ -44,14 +44,14 @@ instead.
    [With Docker Compose](docs/self-hosting.md#with-docker-compose). The
    last one prints a link: open it and make a passkey. The web app is now
    your first client.
-2. **Install the extension** on every machine that runs pi. pi needs `git`
-   and `npm` for it:
+2. **Install the extension** on every machine that runs pi, from npm:
 
    ```sh
-   pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
+   pi install npm:pirc-extension@X.Y.Z
    ```
 
-   Use the latest release's tag.
+   Use the latest release's version. Installed from git before, `pi remove
+   git:github.com/pirc-dev/pirc-extension` first.
 3. **Join each machine.** In pi, run `/pirc enrol wss://<your name>`. The
    machine appears at the top of the web app's session list, asking to
    join. Approve it once its key matches the one `/pirc status` shows in

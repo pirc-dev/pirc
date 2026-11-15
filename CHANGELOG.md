@@ -8,6 +8,13 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- The extension is on npm, as `pirc-extension`, and in pi's package
+  gallery: `pi install npm:pirc-extension@X.Y.Z` installs it with `npm`
+  alone, no `git` needed. It is published from the release's own archive;
+  `SECURITY.md` says how to check it. From git before, run
+  `pi remove git:github.com/pirc-dev/pirc-extension` first: installed both
+  ways, the copy pi loads second now does nothing but say which install
+  to remove, where until now both loaded and pi lost the `/pirc` command.
 - The web app's session header has two lines under the title: where the
   session runs and the last part of its folder, then its model, provider
   and thinking level, with the context used and the cost at the right. The

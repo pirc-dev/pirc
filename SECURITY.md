@@ -50,3 +50,17 @@ SHA256SUMS`). The extension's own repository, pirc-extension, does not
 sign its tags: to install a checked extension, install it from the
 release's `pirc-extension-X.Y.Z.tar.gz` once it matches (the guide's "The
 extension" says how).
+
+From 0.3.8 the extension is on npm, as `pirc-extension`, published from
+that same archive, byte for byte, so npm's integrity for a version is the
+archive's own. With an archive that matches `SHA256SUMS`, these print the
+same line:
+
+```sh
+npm view pirc-extension@X.Y.Z dist.integrity
+echo "sha512-$(openssl dgst -sha512 -binary pirc-extension-X.Y.Z.tar.gz | base64)"
+```
+
+Every version after 0.3.8, which the publisher uploaded by hand, is
+published by a GitHub Action in this repository (`.github/workflows/npm.yml`)
+and carries npm's provenance, which `npm audit signatures` checks.

@@ -1,0 +1,68 @@
+# The extension on npm, as `pirc-extension`, for pi's package gallery and
+# `pi install npm:pirc-extension@X.Y.Z` (docs/self-hosting.md, "The
+# extension"): once a release is published, its own extension archive is
+# fetched, checked against its SHA256SUMS and published as it is, byte for
+# byte, so that npm's integrity for the version is the archive's own
+# (SECURITY.md, "Checking a release"). npm trusts this workflow, in the
+# npm environment, to publish the package (trusted publishing), so no
+# token is kept anywhere, and adds its provenance. The release itself is
+# not changed. The package's first version was published by hand, since
+# npm sets up a trusted publisher only for a package that exists.
+name: npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# One release at a time, in the order published, so that latest is never
+# moved back by a slower run.
+concurrency:
+  group: npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: the release's extension archive, checked against its SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${TAG#v}
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS \
+            --pattern "pirc-extension-${version}.tar.gz"
+          grep -E "  pirc-extension-${version}\.tar\.gz$" SHA256SUMS > checked
+          [ "$(wc -l < checked)" -eq 1 ] || { echo "SHA256SUMS does not list the extension's archive"; exit 1; }
+          sha256sum --check --strict checked
+          [ "$(tar -xzOf "pirc-extension-${version}.tar.gz" "pirc-extension-${version}/package.json" | jq -r '.name + " " + .version')" = "pirc-extension ${version}" ] \
+            || { echo "the archive's package is not pirc-extension ${version}"; exit 1; }
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          # latest only for GitHub's latest release, not a fix to an older one,
+          # which gets release-X.Y: npm takes no tag that reads as a version.
+          if [ "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$TAG" ]; then
+            echo "DIST_TAG=latest" >> "$GITHUB_ENV"
+          else
+            echo "DIST_TAG=release-${version%.*}" >> "$GITHUB_ENV"
+          fi
+      - name: publish
+        run: |
+          # Trusted publishing needs npm 11.5.1 or later.
+          npm --version
+          node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$(npm --version)" \
+            || { echo "npm $(npm --version) is too old for trusted publishing"; exit 1; }
+          npm publish "./pirc-extension-${VERSION}.tar.gz" --access public --tag "$DIST_TAG" --provenance

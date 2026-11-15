@@ -17,24 +17,33 @@ the parts of pi it draws images with. Its source is in PiRC's repository,
 It is tested with pi 1.0.0 and the current pi on every change, and expects
 pi 1.0.0 or later in 1.x; outside that, `/pirc status` says so.
 
-pi installs it from this repository with `git` and `npm`. Pin it to a
-release:
+From 0.3.8 it is on npm, as `pirc-extension`, published from each
+release's own archive. Pin it to a release:
+
+```sh
+pi install npm:pirc-extension@X.Y.Z
+```
+
+To upgrade, upgrade your relay first, then install the newer version the
+same way. `pi update` keeps a pinned install where it is.
+
+Or from this repository, with `git` and `npm`:
 
 ```sh
 pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 ```
 
-To upgrade, upgrade your relay first, then install the newer tag the same
-way. `pi update` keeps a pinned install where it is.
+pi counts the two as different packages, so installed both ways it loads
+two copies; the one loaded second does nothing but say so. To move from git
+to npm, `pi remove git:github.com/pirc-dev/pirc-extension` first.
 
-Installing without a tag follows this repository's default branch
-instead, which moves only when a release is published:
-`pi update git:github.com/pirc-dev/pirc-extension` then installs the
-latest release as soon as it is out, and runs `npm install` on it, before
-you have read it. The extension runs in pi, with pi's access to your
-machine, so that is the publisher's next release running there unseen,
-possibly ahead of your relay. Pin it, unless following along is what you
-want.
+Installing without a version follows the latest release instead, on npm
+or on this repository's default branch, which moves only when a release
+is published: `pi update` then installs the latest release as soon as it
+is out, before you have read it. The extension runs in pi, with pi's
+access to your machine, so that is the publisher's next release running
+there unseen, possibly ahead of your relay. Pin it, unless following along
+is what you want.
 
 ## Enrol
 

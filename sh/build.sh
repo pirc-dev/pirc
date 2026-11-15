@@ -117,9 +117,13 @@ $linked"
         description: "PiRC: puts every interactive pi session on a PiRC relay",
         license: "MIT",
         homepage: "https://pirc.dev",
+        // npm checks this against the repository a release is published
+        // from, with provenance (.github/workflows/npm.yml).
+        repository: { type: "git", url: "git+https://github.com/pirc-dev/pirc.git", directory: "extension" },
         type: "module",
         keywords: ["pi-package"],
-        pi: { extensions: ["./pi-parts.js", "./loader.js"] },
+        // The picture the pi package gallery shows (pi.dev/packages).
+        pi: { extensions: ["./pi-parts.js", "./loader.js"], image: "https://pirc.dev/shots/web-dark.webp" },
         peerDependencies: src.peerDependencies,
       };
       require("fs").writeFileSync(out, JSON.stringify(pkg, null, 2) + "\n");

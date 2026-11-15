@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { relayURL } from "@pirc/relay-client";
 
 import { saveRelay } from "./config.ts";
+import { claimLoad, packageRoot } from "./copies.ts";
 import { Host } from "./host.ts";
 import { errorText, SESSION_COMMANDS } from "./live.ts";
 import { LAUNCHER_EVENT } from "./launch.ts";
@@ -32,24 +33,39 @@ interface ProcessState {
   stopLauncher?: () => void;
   // Why clients' photos cannot be shown in pi's chat, once said.
   photosProblem?: string;
+  // That PiRC is installed twice, once said (copies.ts).
+  twiceSaid?: boolean;
 }
 // A release is known by its version; a build from source is new at every
 // load, so that /reload always runs the code as it now is.
 const LOAD = typeof PIRC_VERSION === "string" ? PIRC_VERSION : `dev ${randomBytes(4).toString("hex")}`;
 const KEY = Symbol.for("pirc.extension");
 const proc = ((globalThis as Record<symbol, unknown>)[KEY] ??= {}) as ProcessState;
-// /reload after an update loads new code into a process whose host the old
-// code made (any version, also those from before LOAD was kept): the new
-// code takes its session over, else it would run on the old code until pi
-// restarts.
-if (!proc.host || proc.load !== LOAD) {
-  proc.host = Host.succeeding(proc.host, randomBytes(8).toString("hex"), { pi: piVersion(), extension: EXTENSION_VERSION });
-  proc.load = LOAD;
-}
 
 const USAGE = "usage: /pirc [status | enrol <relay-url> [token] | reconnect]";
 
 export default async function (pi: ExtensionAPI): Promise<void> {
+  // Another install of PiRC that pi loaded first runs instead (copies.ts),
+  // and has the host: this copy only says so, once a process.
+  const twice = claimLoad(pi.events, packageRoot(import.meta.url));
+  if (twice) {
+    pi.on("session_start", (_e, ctx: ExtensionContext) => {
+      if (ctx.mode !== "tui" || proc.twiceSaid) return;
+      proc.twiceSaid = true;
+      proc.host?.log(twice);
+      ctx.ui.notify(twice, "error");
+    });
+    return;
+  }
+  // /reload after an update loads new code into a process whose host the
+  // old code made (any version, also those from before LOAD was kept): the
+  // new code takes its session over, else it would run on the old code
+  // until pi restarts. In the factory, not when the module is evaluated,
+  // so that a copy that does not run never takes the host.
+  if (!proc.host || proc.load !== LOAD) {
+    proc.host = Host.succeeding(proc.host, randomBytes(8).toString("hex"), { pi: piVersion(), extension: EXTENSION_VERSION });
+    proc.load = LOAD;
+  }
   // Only interactive sessions are put on the relay; `pi -p` runs are not.
   let active = false;
 

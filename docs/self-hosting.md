@@ -298,29 +298,43 @@ is `/usr/local/var/log/pirc-relay.log`. After changing the plist, run
 
 ## The extension
 
-The extension is published as a pi package in its own repository,
-`https://github.com/pirc-dev/pirc-extension`. Its default branch moves
-only when a release is published, and each release is a tag there. pi installs it with `git` and `npm`,
-so a host needs both. It is tested with pi 1.0.0 and the current pi on
-every change, and expects pi 1.0.0 or later in 1.x; outside that,
+The extension is a pi package. From 0.3.8 it is on npm, as
+`pirc-extension`, published from each release's own
+`pirc-extension-X.Y.Z.tar.gz` (`SECURITY.md`, "Checking a release"), so a
+host needs `npm`. It is tested with pi 1.0.0 and the current pi on every
+change, and expects pi 1.0.0 or later in 1.x; outside that,
 `/pirc status` says so. Install it pinned to a release:
+
+```sh
+pi install npm:pirc-extension@X.Y.Z
+```
+
+It loads into every interactive pi session started from then on; enrol the
+host once, as below. To upgrade, install the newer version the same way:
+`pi update` keeps a pinned install where it is. Pinned or not, keep the
+relay at least as new as the extension. `pi remove npm:pirc-extension`
+uninstalls it.
+
+It is also in its own repository,
+`https://github.com/pirc-dev/pirc-extension`, whose default branch moves
+only when a release is published, each release a tag there; from it, pi
+needs `git` and `npm`:
 
 ```sh
 pi install git:github.com/pirc-dev/pirc-extension@vX.Y.Z
 ```
 
-It loads into every interactive pi session started from then on; enrol the
-host once, as below. To upgrade, install the newer tag the same way:
-`pi update` keeps a pinned install where it is. Pinned or not, keep the
-relay at least as new as the extension.
+pi counts the two as different packages, so a host with both loads two
+copies, and the one loaded second does nothing but say which to remove.
+To move from git to npm, `pi remove git:github.com/pirc-dev/pirc-extension`
+first.
 
-Installed without a tag, it follows the default branch instead:
-`pi update git:github.com/pirc-dev/pirc-extension` installs the latest
-release as soon as it is published, and runs `npm install` on it, before
-you have read it. The extension runs in pi, with pi's access to your
-machine, so that is the publisher's next release running there unseen,
-possibly ahead of your relay. Pin it, unless following along is what you want.
-`pi remove git:github.com/pirc-dev/pirc-extension` uninstalls it.
+Installed without a version, it follows the latest release instead, on
+npm or on the repository's default branch: `pi update` installs it as
+soon as it is published, before you have read it. The extension runs in
+pi, with pi's access to your machine, so that is the publisher's next
+release running there unseen, possibly ahead of your relay. Pin it, unless
+following along is what you want.
 
 Without git, each release's downloads include the package,
 `pirc-extension-X.Y.Z.tar.gz`: `pi install <unpacked directory>` installs
