@@ -21,9 +21,16 @@
 # repository only once this has passed:
 #
 #   git tag -s vX.Y.Z -m "PiRC X.Y.Z"           where the key is
-#   git push <release checkout> vX.Y.Z          that checkout, not the repository
+#   git push release vX.Y.Z                     to the release checkout, not the repository
 #   sh/release.sh                               there, at the tag
 #   git push origin vX.Y.Z                      from there, once it passes
+#
+# "release" is a remote, named once where the key is, with the release
+# checkout's tags fetched to remote-tracking refs: a pre-push hook that
+# checks only what the remote lacks then finds the tags it already has.
+#
+#   git remote add release <release checkout>
+#   git fetch release 'refs/tags/*:refs/remotes/release/tags/*'   before each push
 #
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are
