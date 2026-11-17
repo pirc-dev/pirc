@@ -25,6 +25,7 @@ import 'package:pirc/app/outside.dart';
 import 'package:pirc/app/settings.dart';
 import 'package:pirc/app/store.dart';
 import 'package:pirc/core/protocol.dart';
+import 'package:pirc/gen/pirc/v1alpha1/session.pb.dart' as pb show Notification;
 import 'package:pirc/core/view.dart';
 import 'package:pirc/join.dart';
 import 'package:pirc/keys/key_holder.dart';
@@ -1387,6 +1388,30 @@ void main() {
       await tester.pump(const Duration(seconds: 46));
     }, skip: !drawsGoldens);
   });
+
+  testWidgets("pi's notifications, in the chat where they were shown: info quiet, a warning and an error in their colours", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i3')));
+    await tester.pump();
+    for (final (i, level, text) in [
+      (2, NotificationLevel.NOTIFICATION_LEVEL_INFO, 'Checking the remote'),
+      (3, NotificationLevel.NOTIFICATION_LEVEL_WARNING, 'Auto mode blocked bash: git push --force'),
+      (4, NotificationLevel.NOTIFICATION_LEVEL_ERROR, 'The classifier failed'),
+    ]) {
+      model.client.onFrame(Frame(routed: Routed(
+        session: SessionRef(hostKey: hostKey, sessionId: 's-i3', instanceId: 'i3'),
+        payload: SessionMessage(event: SessionEvent(seq: Int64(i), at: ts(now), item: ConversationItem(turnId: 't', at: ts(now), notification: pb.Notification(id: 'n$i', level: level, text: text)))).writeToBuffer(),
+      )));
+    }
+    await tester.pump();
+    for (final t in ['Checking the remote', 'Auto mode blocked bash: git push --force', 'The classifier failed']) {
+      expect(find.text(t), findsOneWidget);
+    }
+    expect(find.bySemanticsLabel(RegExp('^Warning')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^Error')), findsOneWidget);
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/notifications_light.png'));
+  }, skip: !drawsGoldens);
 
   testWidgets('a message sent while pi works steers, unless Queue is chosen', (tester) async {
     await phone(tester);

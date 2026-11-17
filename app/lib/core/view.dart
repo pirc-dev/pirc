@@ -301,6 +301,7 @@ sealed class ChatItem {
         'tool' => ToolItem.fromJson(j),
         'compaction' => CompactionItem.fromJson(j),
         'branchSummary' => BranchSummaryItem.fromJson(j),
+        'notification' => NotificationItem.fromJson(j),
         _ => throw FormatException('unknown chat item kind ${j['kind']}'),
       };
 
@@ -501,6 +502,26 @@ class BranchSummaryItem extends ChatItem {
 
   @override
   Json toJson() => {..._base('branchSummary'), 'summary': summary};
+}
+
+// One of pi's notifications, where it was shown: "info", "warning" or
+// "error". pi does not keep them, so there is no entry.
+class NotificationItem extends ChatItem {
+  const NotificationItem({required super.id, required super.turnId, required super.at, required this.level, required this.text});
+
+  final String level;
+  final String text;
+
+  factory NotificationItem.fromJson(Json j) => NotificationItem(
+        id: j['id'] as String,
+        turnId: j['turnId'] as String,
+        at: _int(j['at'])!,
+        level: j['level'] as String,
+        text: j['text'] as String,
+      );
+
+  @override
+  Json toJson() => {..._base('notification'), 'level': level, 'text': text};
 }
 
 class UsageView {

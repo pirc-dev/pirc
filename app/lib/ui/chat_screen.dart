@@ -407,6 +407,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item)),
         ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary),
         ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary),
+        ItemPart(item: NotificationItem item) => _Notified(item),
       };
 }
 
@@ -828,6 +829,63 @@ class _ThinkingState extends State<_Thinking> {
         ),
     ]);
   }
+}
+
+// One of pi's notifications, where it was shown: a quiet line for info,
+// in the work colour for a warning, the block colour for an error.
+class _Notified extends StatelessWidget {
+  const _Notified(this.item);
+  final NotificationItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final look = Look.of(context);
+    final color = switch (item.level) { 'warning' => look.work, 'error' => look.block, _ => look.ink3 };
+    final line = Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
+      // Drawn, as the other marks are: · info, ⚠ warning, ✕ error.
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Semantics(
+          label: switch (item.level) { 'warning' => 'Warning', 'error' => 'Error', _ => 'Note' },
+          child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _NotifiedMark(item.level, color))),
+        ),
+      ),
+      Expanded(child: Text(item.text, style: look.text(size: 13.5, color: color, spacing: 0))),
+    ]);
+    return item.level == 'info' ? line : Semantics(liveRegion: true, child: line);
+  }
+}
+
+class _NotifiedMark extends CustomPainter {
+  _NotifiedMark(this.level, this.color);
+  final String level;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide * 0.32;
+    final line = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    switch (level) {
+      case 'warning':
+        canvas.drawPath(Path()..moveTo(c.dx, c.dy - r * 1.15)..lineTo(c.dx + r * 1.2, c.dy + r * 0.95)..lineTo(c.dx - r * 1.2, c.dy + r * 0.95)..close(), line);
+        canvas.drawLine(Offset(c.dx, c.dy - r * 0.35), Offset(c.dx, c.dy + r * 0.2), line);
+        canvas.drawCircle(Offset(c.dx, c.dy + r * 0.6), 0.9, Paint()..color = color);
+      case 'error':
+        canvas.drawLine(c + Offset(-r, -r), c + Offset(r, r), line);
+        canvas.drawLine(c + Offset(r, -r), c + Offset(-r, r), line);
+      default:
+        canvas.drawCircle(c, 1.6, Paint()..color = color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_NotifiedMark old) => old.level != level || old.color != color;
 }
 
 // A summary pi wrote, folded under a line.

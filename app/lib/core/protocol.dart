@@ -9,7 +9,9 @@ export '../gen/pirc/v1alpha1/common.pb.dart';
 export '../gen/pirc/v1alpha1/common.pbenum.dart';
 export '../gen/pirc/v1alpha1/relay.pb.dart';
 export '../gen/pirc/v1alpha1/relay.pbenum.dart';
-export '../gen/pirc/v1alpha1/session.pb.dart';
+// Notification as Flutter's widgets name theirs; the message's is reached
+// through ConversationItem.notification.
+export '../gen/pirc/v1alpha1/session.pb.dart' hide Notification;
 export '../gen/pirc/v1alpha1/session.pbenum.dart';
 export 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart' show Timestamp;
 

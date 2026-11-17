@@ -689,6 +689,19 @@ class Client {
           at: at,
           summary: it.branchSummary.summary,
         );
+      case ConversationItem_Body.notification:
+        final v = it.notification;
+        item = NotificationItem(
+          id: 'n-${v.id}',
+          turnId: it.turnId,
+          at: at,
+          level: switch (v.level) {
+            NotificationLevel.NOTIFICATION_LEVEL_WARNING => 'warning',
+            NotificationLevel.NOTIFICATION_LEVEL_ERROR => 'error',
+            _ => 'info',
+          },
+          text: v.text,
+        );
       default:
         return;
     }
