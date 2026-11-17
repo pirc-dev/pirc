@@ -29,20 +29,23 @@ class FakeSource {
 }
 g.EventSource = FakeSource;
 
-// Snapshots answer when the test says.
+// Snapshots answer when the test says; an answer with status is an error.
 const pending: ((body: unknown) => void)[] = [];
+const asked: string[] = [];
 g.fetch = async (url: string) => {
+  if (!url.startsWith("/api/auth")) asked.push(url);
   const body = url.startsWith("/api/auth")
     ? { signedIn: true }
     : await new Promise((resolve) => pending.push(resolve));
-  return { ok: true, status: 200, json: async () => body };
+  const status = (body as { status?: number }).status ?? 200;
+  return { ok: status < 400, status, statusText: "failed", json: async () => body };
 };
 const snapshot = (id: string) => ({ id, relay: { state: "ready" }, sessions: [], chat: { items: [], truncated: false, loading: false } });
 const settle = () => new Promise((r) => setImmediate(r));
 const open = () => FakeSource.all.filter((s) => s.readyState !== FakeSource.CLOSED);
 const resume = () => docListeners.visibilitychange.forEach((l) => l({}));
 
-const { Live } = await import("../page/src/live.ts");
+const { kept, Live } = await import("../page/src/live.ts");
 
 test("waking while a snapshot loads leaves one stream", async () => {
   FakeSource.all = [];
@@ -105,4 +108,90 @@ test("resuming replaces the stream rather than adding one", async () => {
   resume();
   resume();
   assert.equal(open().length, 1);
+});
+
+const user = (id: string) => ({ kind: "user" as const, id, turnId: id, at: 0, text: id, images: [] });
+const ids = (n: number, from: number) => Array.from({ length: n }, (_, i) => `m${from + i}`);
+
+// A Live watching chat "abc", whose snapshot holds m100 to m199 of more.
+async function watching() {
+  FakeSource.all = [];
+  for (const k of Object.keys(docListeners)) delete docListeners[k];
+  const live = new Live();
+  void live.start();
+  await settle();
+  pending.shift()!(snapshot("run.0"));
+  void live.watch("abc");
+  await settle();
+  pending.shift()!({ ...snapshot("run.1"), chat: { items: ids(100, 100).map(user), truncated: false, loading: false, earlier: true } });
+  await settle();
+  asked.splice(0);
+  const event = (seq: number, e: unknown) => open()[0].onmessage!({ data: JSON.stringify({ id: "abc", ...e as object }), lastEventId: `run.${seq}` });
+  return { live, event, chat: () => live.state.chat!.items.map((x) => x.id) };
+}
+
+test("earlier items are put first; a change to one not loaded waits for it, and an answer older than that change is asked again", async () => {
+  const { live, event, chat } = await watching();
+  // Not loaded: left out. Loaded: replaced. New: appended.
+  event(2, { type: "chatItem", item: { ...user("m50"), text: "changed" }, old: true });
+  event(3, { type: "chatItem", item: { ...user("m150"), text: "changed" }, old: true });
+  event(4, { type: "chatItem", item: user("m200") });
+  assert.equal(live.state.chat!.items.length, 101);
+  assert.equal((live.state.chat!.items[50] as { text: string }).text, "changed");
+  const loading = live.older();
+  await settle();
+  assert.deepEqual(asked.splice(0), ["/api/chat/abc/older?before=m100"]);
+  assert.equal(live.state.older.loading, true);
+  // Made before the change to m50: asked for again.
+  pending.shift()!({ id: "run.1", items: ids(100, 0).map(user), earlier: false });
+  await settle();
+  assert.deepEqual(asked.splice(0), ["/api/chat/abc/older?before=m100"]);
+  pending.shift()!({ id: "run.4", items: ids(100, 0).map((x) => (x === "m50" ? { ...user(x), text: "changed" } : user(x))), earlier: false });
+  await loading;
+  assert.deepEqual(chat(), [...ids(201, 0)]);
+  assert.equal(live.state.chat!.earlier, false);
+  assert.deepEqual(live.state.older, { loading: false });
+  assert.equal((live.state.chat!.items[50] as { text: string }).text, "changed");
+});
+
+test("an answer that comes after the chat was reset is dropped", async () => {
+  const { live, event, chat } = await watching();
+  const loading = live.older();
+  await settle();
+  event(2, { type: "chatReset", chat: { items: ["n1", "n2"].map(user), truncated: false, loading: false } });
+  pending.shift()!({ id: "run.1", items: ids(100, 0).map(user), earlier: false });
+  await loading;
+  assert.deepEqual(chat(), ["n1", "n2"]);
+  assert.deepEqual(live.state.older, { loading: false });
+});
+
+test("a failed load says why, and is tried again when asked; a chat that no longer has the item is loaded again", async () => {
+  const { live } = await watching();
+  const failing = live.older();
+  await settle();
+  pending.shift()!({ status: 502, error: "the relay is out of reach" });
+  await failing;
+  assert.deepEqual(live.state.older, { loading: false, error: "the relay is out of reach" });
+  asked.splice(0);
+  const again = live.older();
+  await settle();
+  assert.deepEqual(asked.splice(0), ["/api/chat/abc/older?before=m100"]);
+  pending.shift()!({ status: 409, error: "the chat no longer has that message" });
+  await again;
+  await settle();
+  assert.deepEqual(asked.splice(0), ["/api/snapshot?chat=abc"]);
+  pending.shift()!(snapshot("run.9"));
+  await settle();
+});
+
+test("a reset to a chat's latest items keeps the earlier ones loaded when they lead to it; another chat replaces them", () => {
+  const was = { items: ids(150, 50).map(user), truncated: false, loading: false, earlier: true };
+  const now = { items: ids(101, 100).map(user), truncated: false, loading: false, earlier: true };
+  const merged = kept(was, now);
+  assert.deepEqual(merged.items.map((x) => x.id), ids(151, 50));
+  assert.equal(merged.earlier, true);
+  const other = { items: ["n1"].map(user), truncated: false, loading: false, earlier: true };
+  assert.equal(kept(was, other), other);
+  const whole = { items: ids(3, 0).map(user), truncated: false, loading: false };
+  assert.equal(kept(was, whole), whole);
 });

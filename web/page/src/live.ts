@@ -4,7 +4,7 @@
 // shown again, since phones drop connections in the background. Commands
 // are requests, each answering with the stream position it took effect at.
 import type { Answer, Body, CommandName, RelayAnswer, TokenAnswer } from "../../core/api.ts";
-import { applyToChat, type ChatView, type DeviceView, type PendingHostView, type RelayView, type SessionView, type ViewEvent } from "../../core/view.ts";
+import { applyToChat, CHAT_LIMIT, type ChatItem, type ChatView, type DeviceView, type PendingHostView, type RelayView, type SessionView, type ViewEvent } from "../../core/view.ts";
 
 export interface State {
   // Whether the server has a sign-in for this browser; undefined while
@@ -22,6 +22,8 @@ export interface State {
   chat: ChatView | undefined;
   // The stream: connected, or reconnecting.
   stream: "connecting" | "open" | "closed";
+  // Loading the chat's earlier items (older): under way, or why it failed.
+  older: { loading: boolean; error?: string };
 }
 
 type Listener = () => void;
@@ -49,8 +51,27 @@ function position(id: string | undefined): { run: string; seq: number } | undefi
   return m ? { run: m[1], seq: Number(m[2]) } : undefined;
 }
 
+// Whether stream position a is after b, in the same run of the server.
+function later(a: string | undefined, b: string): boolean {
+  const x = position(a);
+  const y = position(b);
+  return Boolean(x && y && x.run === y.run && x.seq > y.seq);
+}
+
+// A chat reset to its latest items (server/stream.ts) keeps the earlier
+// ones the page had loaded, when they lead to it: pi's history fetched
+// again after a reconnect or a gap, which a reader scrolled up through it
+// would otherwise lose their place in. Another chat replaces it.
+export function kept(was: ChatView, now: ChatView): ChatView {
+  const first = now.items[0];
+  if (!now.earlier || !first) return now;
+  const i = was.items.findIndex((x) => x.id === first.id);
+  if (i <= 0) return now;
+  return { ...now, items: [...was.items.slice(0, i), ...now.items], earlier: was.earlier };
+}
+
 export class Live {
-  state: State = { signedIn: undefined, relay: { state: "connecting" }, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed" };
+  state: State = { signedIn: undefined, relay: { state: "connecting" }, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed", older: { loading: false } };
   private listeners = new Set<Listener>();
   private source: EventSource | undefined;
   // The last event applied.
@@ -61,6 +82,12 @@ export class Live {
   // The current load; an earlier one finishing late is discarded.
   private loading = 0;
   private inFlight = false;
+  // Goes up whenever the chat is replaced, by a snapshot or a chatReset: an
+  // answer for earlier items asked before then is dropped.
+  private replaced = 0;
+  // The stream's position at the last change the page left out, to an item
+  // it had not loaded (apply).
+  private leftOut: string | undefined;
 
   constructor() {
     // Hidden, the page lets its stream go: the server counts a chat as
@@ -101,13 +128,15 @@ export class Live {
 
   signedOut(): void {
     this.close();
-    this.set({ signedIn: false, sessions: [], pendingHosts: [], devices: [], chat: undefined });
+    this.replaced++;
+    this.set({ signedIn: false, sessions: [], pendingHosts: [], devices: [], chat: undefined, older: { loading: false } });
   }
 
   // Watches a chat (or none): its snapshot, and a stream with its events.
   watch(chatId: string | undefined): Promise<void> {
     if (chatId === this.state.chatId && this.source) return Promise.resolve();
-    this.set({ chatId, chat: undefined });
+    this.replaced++;
+    this.set({ chatId, chat: undefined, older: { loading: false } });
     return this.load();
   }
 
@@ -123,7 +152,8 @@ export class Live {
       );
       if (mine !== this.loading || chatId !== this.state.chatId) return;
       this.last = snap.id;
-      this.set({ relay: snap.relay, sessions: snap.sessions, pendingHosts: snap.pendingHosts ?? [], devices: snap.devices ?? [], chat: snap.chat ?? undefined });
+      this.replaced++;
+      this.set({ older: { loading: false }, relay: snap.relay, sessions: snap.sessions, pendingHosts: snap.pendingHosts ?? [], devices: snap.devices ?? [], chat: snap.chat ?? undefined });
       this.open();
     } catch (e) {
       if (mine === this.loading) this.failed(e);
@@ -209,9 +239,60 @@ export class Live {
         return this.set({ pendingHosts: e.hosts });
       case "devices":
         return this.set({ devices: e.devices });
-      default:
+      default: {
         if (e.id !== s.chatId) return;
-        return this.set({ chat: applyToChat(s.chat ?? { items: [], truncated: false, loading: true }, e) });
+        const chat = s.chat ?? { items: [], truncated: false, loading: true };
+        if (e.type === "chatReset") {
+          this.replaced++;
+          return this.set({ chat: kept(chat, e.chat), older: { loading: false } });
+        }
+        // A change to an item before those loaded: it comes with them.
+        if (e.type === "chatItem" && e.old && chat.earlier && !chat.items.some((x) => x.id === e.item.id)) {
+          this.leftOut = this.last;
+          return;
+        }
+        return this.set({ chat: applyToChat(chat, e) });
+      }
+    }
+  }
+
+  // Loads the chat's items before those it has, which the server sends a
+  // page a hundred at a time (server/stream.ts, tailOf), and puts them
+  // first. A failure is shown, for the reader to try again.
+  async older(): Promise<void> {
+    const { chatId, chat } = this.state;
+    const first = chat?.items[0];
+    if (!chatId || !chat?.earlier || !first || this.state.older.loading) return;
+    const mine = this.replaced;
+    const current = () => mine === this.replaced && this.state.chat?.items[0]?.id === first.id;
+    this.set({ older: { loading: true } });
+    let error: string | undefined;
+    try {
+      for (let tries = 0; ; tries++) {
+        const r = await call<{ id: string; items: ChatItem[]; earlier: boolean }>(
+          `/api/chat/${encodeURIComponent(chatId)}/older?before=${encodeURIComponent(first.id)}`,
+        );
+        if (!current()) return;
+        // One of them changed after the answer was made: ask again.
+        if (later(this.leftOut, r.id)) {
+          if (tries < 3) continue;
+          throw new Error("they kept changing as they loaded");
+        }
+        const now = this.state.chat!;
+        const have = new Set(now.items.map((x) => x.id));
+        const twice = r.items.filter((x) => have.has(x.id)).length;
+        if (twice) throw new Error(`the server sent ${twice} the page has already`);
+        const items = [...r.items, ...now.items];
+        this.set({ chat: { ...now, items: items.slice(-CHAT_LIMIT), earlier: r.earlier } });
+        return;
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return this.signedOut();
+      // The chat was reset: load it again.
+      if (e instanceof ApiError && e.status === 409) return void this.load();
+      if (current()) error = (e as Error).message;
+    } finally {
+      if (mine === this.replaced) this.set({ older: error ? { loading: false, error } : { loading: false } });
     }
   }
 

@@ -3,6 +3,7 @@
 // the event stream and commands.
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -14,7 +15,7 @@ import { createApp } from "../server/app.ts";
 import { Auth, AuthStore, IDLE_MS } from "../server/auth.ts";
 import { Notifier } from "../server/notify.ts";
 import { PushStore } from "../server/push.ts";
-import { EventLog, Watchers } from "../server/stream.ts";
+import { EventLog, TAIL, Watchers } from "../server/stream.ts";
 import { SoftAuthenticator } from "./authenticator.ts";
 import { frameIn, frameOut } from "./exchange.ts";
 
@@ -31,7 +32,7 @@ function setup() {
   const log = new EventLog("run1");
   const sent: Frame[] = [];
   let n = 0;
-  const client = new Client({ send: (f) => (sent.push(f), true), onEvent: (e) => log.push(e), newId: () => `id-${++n}`, publicKey: new Uint8Array(32).fill(2) });
+  const client = new Client({ send: (f) => (sent.push(f), true), onEvent: (e, replaced) => log.push(e, replaced), newId: () => `id-${++n}`, publicKey: new Uint8Array(32).fill(2) });
   const watchers = new Watchers();
   const push = new PushStore(join(mkdtempSync(join(tmpdir(), "pirc-web-")), "push.json"));
   const notifier = new Notifier({ log, client, store: push, passkeys: () => store.passkeys().map((p) => p.id), watching: (c) => watchers.has(c), subject: ORIGIN });
@@ -502,4 +503,85 @@ test("a browser subscribes for the passkey signed in, and unsubscribes; a page's
   assert.ok(t.watchers.has("c1"));
   await r.body!.cancel();
   assert.ok(!t.watchers.has("c1"));
+});
+
+// A chat of 282 items: 131 user messages, each its own turn, then a turn of
+// one more and 150 tool calls.
+async function longChat(t: ReturnType<typeof setup>) {
+  t.client.onState({ state: "ready" });
+  t.client.onFrame(frameIn({ sessionList: { sessions: [{ session: REF, hostLabel: "laptop", announcement: { cwd: "/src/app", hostname: "laptop.local" } }] } }));
+  const at = "2026-10-25T10:00:00Z";
+  const items = [
+    ...Array.from({ length: 131 }, (_, i) => ({ entryId: `u${i}`, turnId: `u${i}`, at, userMessage: { text: `message ${i}` } })),
+    { entryId: "u131", turnId: "u131", at: "2026-10-25T10:05:00Z", userMessage: { text: "the long one" } },
+    ...Array.from({ length: 150 }, (_, i) => ({ entryId: `t${i}`, turnId: "u131", at, toolCall: { toolCallId: `tc${i}`, toolName: "bash", argumentsJson: "{}" } })),
+  ];
+  t.client.onFrame(frameIn({ routed: { session: REF, message: { history: { requestId: "id-1", seq: "0", items } } } }));
+  await new Promise((r) => setImmediate(r));
+}
+
+type Older = { id: string; items: { id: string }[]; earlier: boolean };
+
+test("a page is sent a chat's latest items, and older ones a hundred at a time back to the first", async () => {
+  const t = setup();
+  await t.pair(new SoftAuthenticator());
+  await longChat(t);
+  assert.equal(t.client.chat(VID)!.items.length, 282);
+  const snap = await (await t.req(`/api/snapshot?chat=${VID}`)).json() as { chat: { items: { id: string }[]; earlier: boolean; turnAt: number } };
+  assert.equal(snap.chat.items.length, TAIL);
+  assert.equal(snap.chat.items[0].id, "tc50");
+  assert.equal(snap.chat.earlier, true);
+  // The turn under way started with a message not sent.
+  assert.equal(snap.chat.turnAt, Date.parse("2026-10-25T10:05:00Z"));
+
+  const first = await (await t.req(`/api/chat/${VID}/older?before=tc50`)).json() as Older;
+  assert.deepEqual([first.items.length, first.items[0].id, first.items.at(-1)!.id, first.earlier], [100, "e-u82", "tc49", true]);
+  assert.equal(first.id, `run1.${t.log.seq}`);
+  const last = await (await t.req(`/api/chat/${VID}/older?before=e-u82`)).json() as Older;
+  assert.deepEqual([last.items.length, last.items[0].id, last.earlier], [82, "e-u0", false]);
+  assert.deepEqual(await (await t.req(`/api/chat/${VID}/older?before=e-u0`)).json(), { id: `run1.${t.log.seq}`, items: [], earlier: false });
+
+  // An item the chat no longer has, a chat there is not, signed out.
+  assert.equal((await t.req(`/api/chat/${VID}/older?before=nothing`)).status, 409);
+  assert.equal((await t.req("/api/chat/nobody/older?before=tc50")).status, 404);
+  t.advance(IDLE_MS);
+  assert.equal((await t.req(`/api/chat/${VID}/older?before=tc50`)).status, 401);
+});
+
+test("on the stream, a chat's reset carries its latest items, and a change to an item it had is marked old", async () => {
+  const t = setup();
+  await t.pair(new SoftAuthenticator());
+  const snap = await (await t.req("/api/snapshot")).json() as { id: string };
+  const stream = t.req(`/api/events?chat=${VID}&after=${snap.id}`);
+  await longChat(t);
+  const at = "2026-10-25T10:10:00Z";
+  // A result for an early call, then a new message.
+  t.client.onFrame(frameIn({ routed: { session: REF, message: { event: { seq: "1", at, item: { entryId: "r10", turnId: "u131", toolResult: { toolCallId: "tc10", text: "done" } } } } } }));
+  t.client.onFrame(frameIn({ routed: { session: REF, message: { event: { seq: "2", at, item: { entryId: "u132", turnId: "u132", userMessage: { text: "next" } } } } } }));
+  const got = (await events(await stream, 12)).map((e) => JSON.parse(e.data)).filter((e) => e.type.startsWith("chat"));
+  const reset = got.find((e) => e.type === "chatReset");
+  assert.deepEqual([reset.chat.items.length, reset.chat.earlier], [TAIL, true]);
+  const items = got.filter((e) => e.type === "chatItem");
+  assert.deepEqual(items.map((e) => [e.item.id, e.old]), [["tc10", true], ["e-u132", undefined]]);
+  // The server's own chat is whole.
+  assert.equal(t.client.chat(VID)!.items.length, 283);
+});
+
+test("a snapshot and older items are compressed when the browser takes it; the event stream never is", async () => {
+  const t = setup();
+  await t.pair(new SoftAuthenticator());
+  await longChat(t);
+  const gzip = { headers: { "accept-encoding": "gzip, deflate, br" } };
+  const snap = await t.req(`/api/snapshot?chat=${VID}`, gzip);
+  assert.equal(snap.headers.get("content-encoding"), "gzip");
+  assert.match(snap.headers.get("vary") ?? "", /accept-encoding/i);
+  const body = JSON.parse(gunzipSync(Buffer.from(await snap.arrayBuffer())).toString()) as { id: string; chat: { items: unknown[] } };
+  assert.equal(body.chat.items.length, TAIL);
+  const older = await t.req(`/api/chat/${VID}/older?before=tc50`, gzip);
+  assert.equal(older.headers.get("content-encoding"), "gzip");
+  const stream = await t.req(`/api/events?chat=${VID}&after=${body.id}`, gzip);
+  assert.equal(stream.headers.get("content-encoding"), null);
+  await stream.body!.cancel();
+  // Not asked for, not sent.
+  assert.equal((await t.req(`/api/snapshot?chat=${VID}`)).headers.get("content-encoding"), null);
 });

@@ -196,7 +196,7 @@ function serveCmd(dir: string, store: AuthStore, v: Record<string, string | bool
   const log = new EventLog(randomUUID().slice(0, 8));
   let conn: RelayConnection | undefined;
   const key = loadOrCreateKey(join(dir, "client.key"));
-  const client = new Client({ send: (f) => conn?.send(f) ?? false, onEvent: (e) => log.push(e), publicKey: key.publicKey });
+  const client = new Client({ send: (f) => conn?.send(f) ?? false, onEvent: (e, replaced) => log.push(e, replaced), publicKey: key.publicKey });
   conn = new RelayConnection({
     url: config.relay!,
     role: "client",

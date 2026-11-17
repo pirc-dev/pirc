@@ -56,8 +56,10 @@ export interface Clock {
 export interface ClientOptions {
   // Sends a frame to the relay; false when it could not (not connected).
   send(f: Frame): boolean;
-  // Every change, in order.
-  onEvent(e: ViewEvent): void;
+  // Every change, in order. replaced: a chatItem took the place of one the
+  // chat had (not part of the event: the web app's server marks it for
+  // its pages).
+  onEvent(e: ViewEvent, replaced?: boolean): void;
   // Request IDs: unique, and not guessable by a host (another host could
   // otherwise answer for a session: the reply is also checked against the
   // session it came from).
@@ -669,8 +671,9 @@ export class Client {
   }
 
   private emitChat(s: Live, e: ViewEvent): void {
+    const replaced = e.type === "chatItem" && s.chat.items.some((x) => x.id === e.item.id);
     s.chat = applyToChat(s.chat, e);
-    this.o.onEvent(e);
+    this.o.onEvent(e, replaced);
     if (e.type === "chatItem") this.updateLast(s);
   }
 

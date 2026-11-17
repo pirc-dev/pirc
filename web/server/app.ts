@@ -7,6 +7,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { compress } from "hono/compress";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
 import { Delivery, thinkingLevel } from "@pirc/protocol";
@@ -18,7 +19,7 @@ import { Auth, AuthError } from "./auth.ts";
 import type { Notifier } from "./notify.ts";
 import { clientAddr, type Proxies } from "./proxy.ts";
 import { badSubscription, type PushStore, type Subscription } from "./push.ts";
-import { wanted, Watchers, type EventLog } from "./stream.ts";
+import { olderThan, tailOf, wanted, Watchers, type EventLog } from "./stream.ts";
 
 // A heartbeat on the event stream, within any proxy's read timeout; it also
 // ends a stream whose sign-in has lapsed while nothing else happens.
@@ -284,6 +285,11 @@ export function createApp(o: AppOptions): Hono {
   const promptLimit = bodyLimit({ maxSize: PROMPT_BODY, onError: tooLarge });
   const commandLimit = bodyLimit({ maxSize: COMMAND_BODY, onError: tooLarge });
   app.use("/api/*", (c, next) => (/^\/api\/sessions\/[^/]+\/prompt$/.test(c.req.path) ? promptLimit : commandLimit)(c, next));
+  // A chat's items are JSON of a few hundred kilobytes: compressed, for a
+  // phone on a slow network. Not the event stream, which compressing would
+  // hold back.
+  app.use("/api/snapshot", compress());
+  app.use("/api/chat/*", compress());
 
   const startSession = (c: Context, secret: string) => {
     setCookie(c, COOKIE, secret, { httpOnly: true, secure, sameSite: "Strict", path: "/" });
@@ -368,13 +374,28 @@ export function createApp(o: AppOptions): Hono {
 
   app.post("/api/alive", signedIn(true), (c) => c.json({ ok: true }));
 
+  // With the chat asked for, its latest items (stream.ts, tailOf).
   app.get("/api/snapshot", signedIn(false), (c) => {
-    const chat = c.req.query("chat");
+    const id = c.req.query("chat");
+    const chat = id ? o.client.chat(id) : undefined;
     return c.json({
       id: o.log.id(o.log.seq),
       ...o.client.snapshot(),
-      ...(chat ? { chat: o.client.chat(chat) ?? null } : {}),
+      ...(id ? { chat: chat ? tailOf(chat) : null } : {}),
     });
+  });
+
+  // A chat's items before the one with ID before, as the page asks for
+  // them when its reader scrolls up (stream.ts, tailOf); id is the stream's
+  // position they are as of. 409 when the chat no longer has that item: it
+  // was reset, and the page loads it again.
+  app.get("/api/chat/:id/older", signedIn(false), (c) => {
+    const chat = o.client.chat(c.req.param("id"));
+    if (!chat) return c.json({ error: "no such session" }, 404);
+    const before = c.req.query("before") ?? "";
+    const older = olderThan(chat, before);
+    if (!older) return c.json({ error: "the chat no longer has that message" }, 409);
+    return c.json({ id: o.log.id(o.log.seq), ...older });
   });
 
   // Written here rather than with Hono's streamSSE, whose

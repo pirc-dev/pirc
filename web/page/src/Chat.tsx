@@ -1,5 +1,5 @@
 // One session's chat: its items, the composer, and the session's actions.
-import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import Markdown from "react-markdown";
 import type { AssistantItem, ChatItem, ChatView, SessionView, UserItem } from "../../core/view.ts";
 import { live } from "./live.ts";
@@ -107,8 +107,16 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   const nextKey = useRef(0);
   const change = (key: number, f: (x: Pending) => Pending | undefined) =>
     setPending((ps) => settle(ps.flatMap((x) => (x.key === key ? (f(x) ?? []) : [x])), itemsNow.current));
+  // Earlier items loaded (live.older) were not there when a message was
+  // sent: none of them is pi's copy of it.
+  const firstSeen = useRef(items?.[0]?.id);
   useEffect(() => {
-    if (items) setPending((ps) => settle(ps, items));
+    if (!items) return;
+    const was = firstSeen.current;
+    firstSeen.current = items[0]?.id;
+    const at = was === undefined ? -1 : items.findIndex((x) => x.id === was);
+    const loaded = at > 0 ? userIds(items.slice(0, at)) : undefined;
+    setPending((ps) => settle(loaded?.size ? ps.map((x) => ({ ...x, before: new Set([...x.before, ...loaded]) })) : ps, items));
   }, [items]);
   // Open, its latest message has been read.
   const lastAt = s?.last?.at;
@@ -156,7 +164,8 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   };
   // The turn under way started at its user message, by the host's clock.
   const last = items?.at(-1);
-  const since = last?.turnId ? items?.find((x) => x.kind === "user" && x.turnId === last.turnId)?.at : undefined;
+  // Its user message may be before the items loaded: the server says when.
+  const since = last?.turnId ? items?.find((x) => x.kind === "user" && x.turnId === last.turnId)?.at ?? p.chat?.turnAt : undefined;
   // Esc stops pi, as in its terminal; not while it asks a question, which
   // has its own answers, nor from a field (Esc leaves the box first).
   const keys = useKeys();
@@ -165,7 +174,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
     e.preventDefault();
     void run("abort", {});
   });
-  const spend = useSpend(s, items?.filter((x) => x.kind === "assistant").length ?? 0);
+  const spend = useSpend(s, items?.findLast((x) => x.kind === "assistant")?.id);
   const actions = s && (
     <button className="grid size-11 flex-none place-items-center text-xl" aria-label="Session actions" onClick={() => {
       menu.show();
@@ -283,7 +292,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
 // How full the context is and what the session has cost, asked of pi when
 // the chat opens, after each reply and when the model changes. Nothing
 // while it is not known. Asked here, once, for wherever the header shows it.
-function useSpend(s: SessionView | undefined, replies: number): string | undefined {
+function useSpend(s: SessionView | undefined, reply: string | undefined): string | undefined {
   const [text, setText] = useState<string>();
   const model = s?.model && `${s.model.provider}/${s.model.id}`;
   const idle = s && !s.working && !s.compacting;
@@ -303,7 +312,7 @@ function useSpend(s: SessionView | undefined, replies: number): string | undefin
     return () => {
       current = false;
     };
-  }, [id, model, idle, replies]);
+  }, [id, model, idle, reply]);
   return s ? text : undefined;
 }
 
@@ -424,12 +433,55 @@ function Items(p: {
     atEnd.current = true;
     el.scrollTop = el.scrollHeight;
   };
+  // Earlier items are loaded as the reader nears the top (live.older).
+  // Put above, they would push what the reader is on down: what was on
+  // screen stays where it was. Measured as this render starts, before
+  // React changes the page.
+  const firstId = p.chat?.items[0]?.id;
+  const firstWas = useRef(firstId);
+  const anchor = useRef<{ el: Element; top: number } | undefined>(undefined);
+  if (firstId !== firstWas.current) {
+    firstWas.current = firstId;
+    anchor.current = atEnd.current ? undefined : onScreen(box.current);
+  }
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    anchor.current = undefined;
+    const el = box.current;
+    if (a?.el.isConnected && el) el.scrollTop += a.el.getBoundingClientRect().top - a.top;
+  }, [firstId]);
+  const older = useSyncExternalStore(live.subscribe, () => live.state.older);
+  const top = useRef<HTMLDivElement>(null);
+  const earlier = Boolean(p.chat?.earlier);
+  // Made again after each load, so that a top still in reach loads more.
+  useEffect(() => {
+    const el = top.current;
+    const root = box.current;
+    if (!earlier || !el || !root || older.loading || older.error) return;
+    const seen = new IntersectionObserver((es) => {
+      if (es.some((e) => e.isIntersecting)) void live.older();
+    }, { root, rootMargin: "300% 0px 0px 0px" });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [earlier, older, firstId]);
   if (!p.chat) return <div className="flex-1" />;
   return (
     <div className="relative flex min-h-0 flex-1 flex-col native:bg-card">
       <div ref={box} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 native:px-3.5 cockpit:px-3.5" style={p.top ? { paddingTop: p.top + 16 } : undefined}>
         <div className="mx-auto flex max-w-[40rem] flex-col gap-4">
-          {p.chat.truncated && <Note>Earlier messages are not shown</Note>}
+          {earlier
+            ? (
+              <div ref={top} data-older="" className="flex flex-col items-center gap-1">
+                {older.error
+                  ? <>
+                    <Note>Earlier messages could not be loaded</Note>
+                    <p className="text-center text-[13px] text-block">{older.error}</p>
+                    <button className="min-h-11 px-3 text-[15px] font-semibold text-accent" onClick={() => void live.older()}>Try again</button>
+                  </>
+                  : <Note>Loading earlier messages</Note>}
+              </div>
+            )
+            : p.chat.truncated && <Note>Earlier messages are not shown</Note>}
           {p.chat.loading && p.chat.items.length === 0 && <Loading />}
           {runs(p.chat.items).map((run) =>
             // A run of tool calls keeps its wrapper as it shrinks, so that a
@@ -471,6 +523,20 @@ function Loading() {
       <Note>Loading the conversation</Note>
     </div>
   );
+}
+
+// The first of the chat's parts the reader sees, and where: what stays in
+// place when earlier ones are put above it.
+function onScreen(box: HTMLElement | null): { el: Element; top: number } | undefined {
+  const inner = box?.firstElementChild;
+  if (!box || !inner) return undefined;
+  const edge = box.getBoundingClientRect().top;
+  for (const el of inner.children) {
+    if (el.hasAttribute("data-older")) continue;
+    const r = el.getBoundingClientRect();
+    if (r.bottom > edge) return { el, top: r.top };
+  }
+  return undefined;
 }
 
 // A line between messages, in small capitals.

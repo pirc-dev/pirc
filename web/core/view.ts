@@ -215,6 +215,13 @@ export interface ChatView {
   truncated: boolean;
   // The history is being fetched: items may be stale until a chatReset.
   loading: boolean;
+  // The web app's server sends a page a chat's latest items, and older
+  // ones as it asks (server/stream.ts): set when the server has items
+  // before this copy's first.
+  earlier?: boolean;
+  // Then also when the turn under way started, when its user message is
+  // among those left out.
+  turnAt?: number;
 }
 
 // The relay connection as the page shows it.
@@ -257,7 +264,8 @@ export interface PendingHostView {
 }
 
 // A change, in the order it happened. Applying every event in order to a
-// snapshot gives the same state as a later snapshot.
+// snapshot gives the same state as a later snapshot; for a web page's
+// chat, the same latest items (server/stream.ts).
 export type ViewEvent =
   | { type: "relay"; relay: RelayView }
   // The hosts awaiting approval, all of them, oldest first.
@@ -268,8 +276,10 @@ export type ViewEvent =
   | { type: "sessionGone"; id: string }
   // The chat is replaced: from history, or emptied for a new session.
   | { type: "chatReset"; id: string; chat: ChatView }
-  // An item appeared or changed; replaces any with the same ID.
-  | { type: "chatItem"; id: string; item: ChatItem }
+  // An item appeared or changed; replaces any with the same ID. old: it
+  // replaces one the chat had, which a page holding only the latest items
+  // may not have (set by the web app's server, server/stream.ts).
+  | { type: "chatItem"; id: string; item: ChatItem; old?: true }
   // Text appended to a block of an assistant item still being written,
   // which is created if it is not there yet.
   | { type: "chatDelta"; id: string; itemId: string; turnId: string; at: number; block: number; kind: "text" | "thinking"; text: string }

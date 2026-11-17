@@ -148,8 +148,21 @@ agent and coding-agent remote UIs, terminal and notebook UIs):
 - **Bounds**: the server keeps the last 5000 events, or 16 MiB, for pages
   catching up; a page that stops reading (a phone gone off the network
   without closing) has its stream ended after 2000 unread events, and
-  catches up when back. A chat keeps its latest 1000 items, on the server
-  and the page alike. A compaction's command waits at most 15 minutes.
+  catches up when back. A chat keeps its latest 1000 items on the server.
+  A compaction's command waits at most 15 minutes.
+- **A chat's latest items first** (2026-11-17): a page is sent a chat's
+  latest 100 items, in its snapshot and in a reset on the stream, and asks
+  for those before them, 100 at a time (`/api/chat/<id>/older`), as its
+  reader nears the top; what was on screen stays where it was. A long
+  chat's 1000 items were 1.3 MB of JSON, and seconds of drawing on a
+  phone. A change to an item the page has not loaded is marked `old`, and
+  the page leaves it for when it loads that item; an answer made before
+  such a change is asked for again, and one that comes after the chat was
+  reset is dropped. A reset whose items follow on from those the page has
+  loaded keeps them, so a reader scrolled up keeps their place. A failed
+  load says why, with a button to try again. The snapshot and older items
+  are compressed (gzip or brotli, as the browser takes); the event stream
+  is not, which would hold events back.
 - **New versions** (decided 2026-10-27): a page left open keeps running
   the version it loaded, and nothing reloads a page already open, so a
   deploy reached nobody who kept the app open. The page now asks for its

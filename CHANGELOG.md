@@ -6,6 +6,12 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- The web app opens a long session quickly: it loads the latest 100
+  messages and tool calls, and earlier ones as you scroll up, keeping your
+  place. What it loads is sent compressed.
+
 ## 0.3.8 (2026-11-15)
 
 - The extension is on npm, as `pirc-extension`, and in pi's package

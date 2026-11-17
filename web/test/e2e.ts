@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:http2";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 
 import { Harness, repo, sleep, startPi, startRelay, step } from "../../test/harness.ts";
 import type { Outcome } from "../core/results.ts";
@@ -550,6 +551,19 @@ try {
     }
     // Under the token's name, not the one the machine gives (e2e-invited).
     assert.ok(joined, "the invited machine's session did not appear");
+  }
+
+  step("a snapshot comes compressed over HTTP/2, and the event stream does not");
+  {
+    const gzip = { origin, cookie, "accept-encoding": "gzip, br" };
+    const r = await h2fetch(`/api/snapshot?chat=${encodeURIComponent(id)}`, { headers: gzip });
+    assert.equal(r.headers.get("content-encoding"), "gzip");
+    const body = JSON.parse(gunzipSync(Buffer.from(await r.arrayBuffer())).toString()) as { chat: ChatView };
+    assert.ok(body.chat.items.length > 0);
+    const events = await h2fetch(`/api/events?chat=${encodeURIComponent(id)}&after=`, { headers: gzip });
+    assert.equal(events.status, 200);
+    assert.equal(events.headers.get("content-encoding"), null);
+    await events.body!.cancel();
   }
 
   step("the server is still up, after streaming over HTTP/2");
