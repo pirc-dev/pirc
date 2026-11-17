@@ -2037,7 +2037,65 @@ Each step ends with something that can be seen working.
       tools or fastlane, with no hosted service of its own.
 14. **Hosted relay**: multi-tenancy, end-to-end encryption and device-signed
     registration (section 5). End-to-end encryption and the
-    device-signed list are proposed in `docs/e2e.md`, open (2026-11-15).
+    device-signed list are proposed in `docs/e2e.md`, open (2026-11-15),
+    revised after two independent reviews (2026-11-16 and 2026-11-17).
+
+    **Decided** (2026-11-16, one at a time with the owner):
+    1. **Price.** The hosted relay comes with the app's subscription: an
+       account is free while any of its phones has a live subscription or
+       trial, and the browsers on it are included. An account with no
+       phone, only browsers, pays: a free trial, then a subscription on the
+       web, through Stripe or a merchant of record, with the hosted web
+       client. The app's price (step 15) is unchanged.
+    2. **Signing up and joining** are anonymous and one tap, with no email
+       or password: a phone creates the account, and every other device
+       joins with a code it shows, typed into a device already on the
+       account (`/pirc join` on a machine). The code, its checking and the
+       account's device list are in `e2e.md`, sections 3, 5 and 6. Abuse is
+       held off by:
+       - App Attest or Play Integrity when a phone creates or joins an
+         account, and the subscription check above, per account. These
+         stop abuse only; they never stand in for the device list.
+       - A domain of its own for the relay, not pirc.dev, so that abuse
+         reported against it does not reach the site or the push gateway.
+       - Caps per account and per address, sized so that the server
+         in 3 holds 500 accounts.
+       - A switch that closes sign-ups (new accounts then need an invite
+         code), account deletion from the app, and an abuse@ address.
+
+       Test builds need a test key, since simulators and emulators fail
+       attestation.
+    3. **Where it runs.** On a server the publisher already runs, shared
+       with other services, at first; a dedicated server later. It runs
+       release tags only, not master, with an off-site backup every hour
+       and an outside check that emails when it stops answering. Its
+       availability is best effort, and the terms say so.
+    4. **Terms and privacy.** The publisher writes the hosted relay's terms
+       and its privacy policy itself, from templates, without a lawyer.
+       Read as:
+       - the EU's requirement of a representative in the Union not
+         applying, under its exemption for occasional processing that is
+         unlikely to risk people's rights; the owner takes that risk until
+         told otherwise;
+       - the UK's Online Safety Act not applying, since the relay carries
+         end-to-end encrypted traffic between one person's own devices and
+         offers no way to share with others;
+       - addresses kept in logs for 14 days;
+       - the hosting provider's data processing agreement in place.
+
+       For hosted accounts the subscription is checked, so the line in
+       step 15 that the app sends PiRC nothing about the subscription holds
+       for self-hosted relays only, and the privacy policy is to say so.
+    5. **When it moves to a server of its own**, at the first of:
+       - an abuse complaint that reaches the hosting provider;
+       - more than 1 TB of traffic a month, or more than 20% of the
+         shared server's CPU, sustained;
+       - 500 accounts.
+
+    **Open**: who serves the hosted web client's page (`e2e.md`,
+    section 11). Since every client can run commands on every host, the
+    page's server can too; serving it apart from the relay, as fixed files
+    on a static host, was proposed on 2026-11-17 and is not yet decided.
 15. **Open**: licence, public repository, pirc.dev, store listings.
     Planned 2026-11-07, for self-hosters first: it does not wait for the
     hosted relay (step 14), which comes after as its own release, and
@@ -2240,7 +2298,8 @@ Each step ends with something that can be seen working.
       or a payment is set right. Rejected: a server of ours asking Google's
       API for each purchase's dates and state, which would see every
       subscriber, and break the privacy policy's word that the app sends
-      PiRC nothing about the subscription. Each purchase is acknowledged
+      PiRC nothing about the subscription (on self-hosted relays; for hosted
+      accounts see step 14). Each purchase is acknowledged
       to Play when bought and at every status, since Play refunds one not
       acknowledged within 3 days. Play has no restore: the account's
       purchases come with each status. The paywall names Google Play and
