@@ -11,9 +11,12 @@ release that needs its parts upgraded together says so here.
 - The web app opens a long session quickly: it loads the latest 100
   messages and tool calls, and earlier ones as you scroll up, keeping your
   place. What it loads is sent compressed.
-- In the iOS and Android apps, Dismiss under a question takes a tap a
-  little above or below the word, as the buttons beside it do, from their
-  next store build.
+- In the iOS and Android apps, from their next store build, a question pi
+  asks takes the message box's place until it is answered: its text laid
+  out as written, a note for pi that goes with your answer, full-width No
+  and Yes, and Dismiss, which closes it and stops pi. The tool call it is
+  about says "Waiting for you". A question is shown in blue with "?", not
+  as an error, and the session list counts each session once.
 
 ## 0.3.8 (2026-11-15)
 

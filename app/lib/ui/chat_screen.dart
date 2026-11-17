@@ -26,6 +26,7 @@ import 'actions.dart';
 import 'look.dart';
 import 'images.dart';
 import 'markdown.dart';
+import 'question.dart';
 import 'selectable.dart';
 import 'sheet.dart';
 
@@ -387,6 +388,13 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // Whether pi waits for an answer on this tool call: the chat's last one,
+  // unfinished, while an answerable question waits.
+  bool _waiting(ToolItem t) {
+    if (t.result != null || !(widget.model.session(widget.id)?.questions ?? const []).any((q) => q.answerable)) return false;
+    return identical(widget.model.chat(widget.id)?.items.whereType<ToolItem>().lastOrNull, t);
+  }
+
   Widget _part(Part p) => switch (p) {
         ToolsPart(:final tools) => _Folded(tools, now: widget.model.now),
         ItemPart(item: UserItem item) => _Bubble(
@@ -396,7 +404,7 @@ class _ChatScreenState extends State<ChatScreen> {
             offer: item.entryId == null || widget.model.session(widget.id) == null ? null : () => _from(item),
           ),
         ItemPart(item: AssistantItem item) => _Reply(item),
-        ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now),
+        ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item)),
         ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary),
         ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary),
       };
@@ -896,7 +904,8 @@ String argLines(ToolItem t) {
 // A tool's time shows once it is a second or more.
 const _shownMs = 1000;
 
-// ✕ failed, ● running, ✓ finished: drawn, as the status badges are.
+// ✕ failed, ● running (in the accent while it waits for you), ✓ finished:
+// drawn, as the status badges are.
 class _Mark extends StatelessWidget {
   const _Mark(this.kind);
   final String kind;
@@ -904,7 +913,7 @@ class _Mark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    final color = switch (kind) { 'failed' => look.block, 'running' => look.work, _ => look.done };
+    final color = switch (kind) { 'failed' => look.block, 'running' => look.work, 'waiting' => look.accent, _ => look.done };
     return SizedBox(width: 14, height: 14, child: CustomPaint(painter: _MarkPainter(kind, color)));
   }
 }
@@ -928,7 +937,7 @@ class _MarkPainter extends CustomPainter {
       case 'failed':
         canvas.drawLine(c + Offset(-r, -r), c + Offset(r, r), line);
         canvas.drawLine(c + Offset(r, -r), c + Offset(-r, r), line);
-      case 'running':
+      case 'running' || 'waiting':
         canvas.drawCircle(c, r * 0.9, Paint()..color = color);
       default:
         canvas.drawPath(Path()..moveTo(c.dx - r, c.dy)..lineTo(c.dx - r * 0.3, c.dy + r * 0.7)..lineTo(c.dx + r, c.dy - r * 0.75), line);
@@ -943,10 +952,12 @@ class _MarkPainter extends CustomPainter {
 // output, and is open while it runs and shows output. An edit shows its
 // changes.
 class _Tool extends StatefulWidget {
-  const _Tool(this.t, {required this.now});
+  const _Tool(this.t, {required this.now, this.waiting = false});
   final ToolItem t;
   // The host's clock, for how long a running tool has run.
   final int Function() now;
+  // pi waits for an answer to run it, or not.
+  final bool waiting;
 
   @override
   State<_Tool> createState() => _ToolState();
@@ -1000,13 +1011,14 @@ class _ToolState extends State<_Tool> {
             constraints: const BoxConstraints(minHeight: 40),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
-              _Mark(r?.isError == true ? 'failed' : running ? 'running' : 'done'),
+              _Mark(r?.isError == true ? 'failed' : widget.waiting ? 'waiting' : running ? 'running' : 'done'),
               const SizedBox(width: 8),
               Text(t.name.isEmpty ? 'tool' : t.name, style: look.text(size: 14, weight: FontWeight.w600, spacing: 0)),
               const SizedBox(width: 8),
               Expanded(child: Text(toolSummary(t).split('\n').first, style: look.mono(size: 12.5, color: look.ink2), maxLines: 1, overflow: TextOverflow.ellipsis)),
               if (r?.exitCode != null && r!.exitCode != 0) ...[const SizedBox(width: 8), Text('exit ${r.exitCode}', style: look.mono(size: 12.5, color: look.block, weight: FontWeight.w600))],
-              if (ms != null && ms >= _shownMs) ...[const SizedBox(width: 8), Text(took(ms), style: look.mono(size: 12.5, color: look.ink3))],
+              if (widget.waiting) ...[const SizedBox(width: 8), Text('Waiting for you', style: look.text(size: 12, weight: FontWeight.w600, color: look.accent, spacing: 0))]
+              else if (ms != null && ms >= _shownMs) ...[const SizedBox(width: 8), Text(took(ms), style: look.mono(size: 12.5, color: look.ink3))],
             ]),
           ),
         ),
@@ -1080,128 +1092,6 @@ class _FoldedState extends State<_Folded> {
       ),
       if (_open) for (final t in widget.tools) _Tool(t, now: widget.now),
     ]);
-  }
-}
-
-// One of pi's dialogs, above the composer: a select's options, a confirm's
-// yes and no, an input's box, each with Dismiss; an editor or a custom
-// dialog only said to be waiting in pi's terminal.
-class _Ask extends StatefulWidget {
-  const _Ask(this.q, {super.key, required this.more, required this.model, required this.id});
-  final QuestionView q;
-  final int more;
-  final PircModel model;
-  final String id;
-
-  @override
-  State<_Ask> createState() => _AskState();
-}
-
-class _AskState extends State<_Ask> {
-  final _text = TextEditingController();
-  var _sending = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  Future<void> _answer({int? option, bool? confirmed, String? text, bool dismissed = false}) async {
-    setState(() => _sending = true);
-    final o = await widget.model.answer(widget.id, widget.q.id, option: option, confirmed: confirmed, text: text, dismissed: dismissed);
-    if (mounted) {
-      setState(() {
-        _sending = false;
-        _error = o.ok ? null : o.message;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final look = Look.of(context);
-    final q = widget.q;
-    final lines = q.title.split('\n');
-    final rest = [...lines.skip(1), ...?q.message?.split('\n')];
-    Widget choice(String label, VoidCallback f, {bool primary = false, bool left = false}) => CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          minimumSize: const Size(0, 44),
-          color: primary ? look.accent : look.card,
-          borderRadius: BorderRadius.circular(12),
-          onPressed: _sending ? null : f,
-          child: Align(
-            alignment: left ? Alignment.centerLeft : Alignment.center,
-            widthFactor: left ? null : 1,
-            child: Text(label, style: look.text(size: 15, weight: left ? FontWeight.w500 : FontWeight.w600, color: primary ? look.onAccent : look.ink, spacing: 0)),
-          ),
-        );
-    // Dismiss is a whole 44 points tall, as a finger needs: 6 more above
-    // and below its text than it shows, taken from the gap over it and the
-    // card's padding under it, so the card looks the same.
-    final dismiss = q.answerable;
-    return Semantics(
-      label: 'pi asks',
-      container: true,
-      child: Container(
-        padding: EdgeInsets.fromLTRB(14, 12, 14, dismiss && _error == null ? 6 : 12),
-        decoration: BoxDecoration(color: look.blockWash, borderRadius: BorderRadius.circular(16)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 10, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(padding: const EdgeInsets.only(top: 3), child: const _Mark('failed')),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // The question; the app's own words under it are not.
-                Selectable(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(lines.first.isNotEmpty ? lines.first : (q.answerable ? 'pi asks' : "A dialog in pi's terminal"), style: look.text(size: 15, weight: FontWeight.w600, spacing: 0)),
-                    for (final l in rest) Text(l, style: look.text(size: 14.5, color: look.ink2, spacing: 0)),
-                  ]),
-                ),
-                if (!q.answerable) Text("Waiting in pi's terminal; it can be answered only there.", style: look.text(size: 13.5, color: look.ink3, spacing: 0)),
-                if (widget.more > 0) Text('${widget.more} more after this one', style: look.text(size: 13.5, color: look.ink3, spacing: 0)),
-              ]),
-            ),
-          ]),
-          if (dismiss)
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
-              if (q.kind == 'select')
-                Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
-                  for (final (i, o) in (q.options ?? const <String>[]).indexed) choice(o, () => _answer(option: i), left: true),
-                ]),
-              if (q.kind == 'confirm')
-                Row(spacing: 8, children: [choice('Yes', () => _answer(confirmed: true), primary: true), choice('No', () => _answer(confirmed: false))]),
-              if (q.kind == 'input')
-                Row(spacing: 8, children: [
-                  Expanded(
-                    child: CupertinoTextField(
-                      controller: _text,
-                      placeholder: q.placeholder,
-                      style: look.text(size: 15),
-                      placeholderStyle: look.text(size: 15, color: look.ink3),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                      decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: look.rule)),
-                      onSubmitted: (v) => _answer(text: v),
-                    ),
-                  ),
-                  choice('Send', () => _answer(text: _text.text), primary: true),
-                ]),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  minimumSize: const Size(44, 44),
-                  onPressed: _sending ? null : () => _answer(dismissed: true),
-                  child: Text('Dismiss', style: look.text(size: 14, color: look.ink2, spacing: 0)),
-                ),
-              ),
-            ]),
-          if (_error != null) Text(_error!, style: look.text(size: 13.5, color: look.block, spacing: 0)),
-        ]),
-      ),
-    );
   }
 }
 
@@ -1355,89 +1245,94 @@ class _ComposerState extends State<_Composer> {
     return LayoutBuilder(
       builder: (context, c) => Container(
         decoration: BoxDecoration(color: look.page, border: Border(top: BorderSide(color: look.rule, width: 0.5))),
-        padding: EdgeInsets.fromLTRB(widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, 10, widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, 10 + MediaQuery.paddingOf(context).bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
-          if (questions.isNotEmpty) _Ask(questions.first, key: ValueKey(questions.first.id), more: questions.length - 1, model: widget.model, id: s.id),
-          if (busy)
-            Row(children: [
-              StatusGlyph(Status.working, size: 9),
-              const SizedBox(width: 10),
-              _TurnTime(model: widget.model, id: s.id, compacting: s.compacting),
-              const Spacer(),
-              _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
-              const SizedBox(width: 6),
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                minimumSize: const Size(0, 36),
-                color: look.blockWash,
-                borderRadius: BorderRadius.circular(12),
-                onPressed: () => widget.model.stop(s.id),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(width: 9, height: 9, decoration: BoxDecoration(color: look.block, borderRadius: BorderRadius.circular(1.5))),
-                  const SizedBox(width: 8),
-                  Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
+        padding: EdgeInsets.fromLTRB(
+            widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, questions.isNotEmpty ? 2 : 10, widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, 10 + MediaQuery.paddingOf(context).bottom),
+        // While pi asks, the question in the composer's place: a message
+        // could not reach pi until it is answered. The text written so far
+        // waits in its controller.
+        child: questions.isNotEmpty
+            ? QuestionDock(q: questions.first, key: ValueKey(questions.first.id), more: questions.length - 1, model: widget.model, session: s)
+            : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
+                if (busy)
+                  Row(children: [
+                    StatusGlyph(Status.working, size: 9),
+                    const SizedBox(width: 10),
+                    _TurnTime(model: widget.model, id: s.id, compacting: s.compacting),
+                    const Spacer(),
+                    _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
+                    const SizedBox(width: 6),
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minimumSize: const Size(0, 36),
+                      color: look.blockWash,
+                      borderRadius: BorderRadius.circular(12),
+                      onPressed: () => widget.model.stop(s.id),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Container(width: 9, height: 9, decoration: BoxDecoration(color: look.block, borderRadius: BorderRadius.circular(1.5))),
+                        const SizedBox(width: 8),
+                        Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
+                      ]),
+                    ),
+                  ]),
+                if (images.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 8),
+                    child: Align(alignment: Alignment.centerLeft, child: Thumbs(images: [for (final i in images) i.data], onRemove: (i) => widget.images.value = [...images]..removeAt(i))),
+                  ),
+                if (_problem != null || (images.isNotEmpty && _blind))
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(_problem ?? 'The current model does not take images; pi will leave them out or the model will refuse them.', style: look.text(size: 13.5, color: look.block, spacing: 0)),
+                  ),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Semantics(
+                    button: true,
+                    label: 'Add an image',
+                    excludeSemantics: true,
+                    enabled: images.length < imagesMax,
+                    onTap: images.length >= imagesMax ? null : _add,
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(38, 38),
+                      onPressed: images.length >= imagesMax ? null : _add,
+                      child: Icon(CupertinoIcons.photo, size: 24, color: images.length >= imagesMax ? look.ink3 : look.ink2),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: CupertinoTextField(
+                      controller: widget.text,
+                      placeholder: busy ? 'Steer, or queue a follow-up' : 'Message',
+                      placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
+                      style: look.text(size: 16, height: 1.35, spacing: 0),
+                      minLines: 1,
+                      maxLines: 6,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(19), border: Border.all(color: look.rule)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Semantics(
+                    key: const ValueKey('send'),
+                    button: true,
+                    label: busy ? (_steer ? 'Steer' : 'Queue') : 'Send',
+                    enabled: !empty,
+                    child: GestureDetector(
+                      onTap: empty ? null : send,
+                      child: Container(
+                        height: 38,
+                        width: busy ? null : 38,
+                        padding: busy ? const EdgeInsets.symmetric(horizontal: 18) : null,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(color: empty ? look.wash2 : look.accent, borderRadius: BorderRadius.circular(busy ? 12 : 19)),
+                        child: busy
+                            ? Text(_steer ? 'Steer' : 'Queue', style: look.text(size: 15, weight: FontWeight.w600, color: empty ? look.ink3 : look.onAccent, spacing: 0))
+                            : Icon(CupertinoIcons.arrow_up, size: 20, color: empty ? look.ink3 : look.onAccent),
+                      ),
+                    ),
+                  ),
                 ]),
-              ),
-            ]),
-          if (images.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, right: 8),
-              child: Align(alignment: Alignment.centerLeft, child: Thumbs(images: [for (final i in images) i.data], onRemove: (i) => widget.images.value = [...images]..removeAt(i))),
-            ),
-          if (_problem != null || (images.isNotEmpty && _blind))
-            Semantics(
-              liveRegion: true,
-              child: Text(_problem ?? 'The current model does not take images; pi will leave them out or the model will refuse them.', style: look.text(size: 13.5, color: look.block, spacing: 0)),
-            ),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Semantics(
-              button: true,
-              label: 'Add an image',
-              excludeSemantics: true,
-              enabled: images.length < imagesMax,
-              onTap: images.length >= imagesMax ? null : _add,
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(38, 38),
-                onPressed: images.length >= imagesMax ? null : _add,
-                child: Icon(CupertinoIcons.photo, size: 24, color: images.length >= imagesMax ? look.ink3 : look.ink2),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: CupertinoTextField(
-                controller: widget.text,
-                placeholder: busy ? 'Steer, or queue a follow-up' : 'Message',
-                placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
-                style: look.text(size: 16, height: 1.35, spacing: 0),
-                minLines: 1,
-                maxLines: 6,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(19), border: Border.all(color: look.rule)),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Semantics(
-              key: const ValueKey('send'),
-              button: true,
-              label: busy ? (_steer ? 'Steer' : 'Queue') : 'Send',
-              enabled: !empty,
-              child: GestureDetector(
-                onTap: empty ? null : send,
-                child: Container(
-                  height: 38,
-                  width: busy ? null : 38,
-                  padding: busy ? const EdgeInsets.symmetric(horizontal: 18) : null,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: empty ? look.wash2 : look.accent, borderRadius: BorderRadius.circular(busy ? 12 : 19)),
-                  child: busy
-                      ? Text(_steer ? 'Steer' : 'Queue', style: look.text(size: 15, weight: FontWeight.w600, color: empty ? look.ink3 : look.onAccent, spacing: 0))
-                      : Icon(CupertinoIcons.arrow_up, size: 20, color: empty ? look.ink3 : look.onAccent),
-                ),
-              ),
-            ),
-          ]),
-        ]),
+              ]),
       ),
     );
   }

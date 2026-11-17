@@ -1280,41 +1280,112 @@ void main() {
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: prompt.requestId)));
   }, skip: !drawsGoldens);
 
-  testWidgets('a question pi asks, answered from the chat', (tester) async {
-    await phone(tester);
-    final model = await fixture(tester);
-    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2')));
-    await tester.pump();
-    expect(find.text('Overwrite tests/fixtures.json?'), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_light.png'));
-    // Yes sends the answer to the session.
-    sent.clear();
-    await tester.tap(find.text('Yes'));
-    await tester.pump();
-    final answer = SessionMessage.fromBuffer(sent.single.routed.payload).answer;
-    expect((answer.questionId, answer.confirmed), ('q1', true));
-    // Unanswered here: its deadline passes.
-    await tester.pump(const Duration(seconds: 46));
-  }, skip: !drawsGoldens);
-
-  testWidgets("a question's Dismiss takes a finger's tap a little off its word", (tester) async {
-    await phone(tester);
-    final model = await fixture(tester);
-    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2')));
-    await tester.pump();
-    // 17 points above and below the word: outside the 32 points it had,
-    // where a tap on the simulator went unanswered, inside 44.
-    for (final dy in [-17.0, 17.0]) {
-      sent.clear();
-      await tester.tapAt(tester.getCenter(find.text('Dismiss')).translate(0, dy));
+  group("pi's questions, in the composer's place", () {
+    const automode = 'Rule: bash(git push *)\n\nAction:\nbash {\n  "command": "git push nowhere main"\n}\n\nAllow this action to continue to auto-mode classification?';
+    // release (i1), its check still running, asked a question.
+    Future<PircModel> asked(WidgetTester tester, Question q, {Brightness brightness = Brightness.light, String id = 'i1'}) async {
+      await phone(tester);
+      final model = await fixture(tester);
+      model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry(id, 'laptop', SessionAnnouncement(
+        name: 'release', cwd: '/home/me/src/pirc', hostname: 'laptop.local', working: true, launcher: 'tmux',
+        place: Place(kind: 'tmux', group: 'work', window: 'pirc'), questions: [q],
+      )))));
+      await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-$id'), brightness: brightness));
       await tester.pump();
-      final answer = SessionMessage.fromBuffer(sent.single.routed.payload).answer;
-      expect((answer.questionId, answer.dismissed), ('q1', true), reason: '$dy from the word');
-      model.client.onFrame(Frame(routed: Routed(session: sent.single.routed.session, payload: SessionMessage(error: Error(requestId: answer.requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'again')).writeToBuffer())));
-      await tester.pump();
+      return model;
     }
-    // Unanswered here: its deadline passes.
-    await tester.pump(const Duration(seconds: 46));
+
+    Question confirm({String id = 'q9'}) => Question(id: id, kind: QuestionKind.QUESTION_KIND_CONFIRM, title: 'Auto mode permission ask', message: automode, answerable: true, askedAt: ts(now));
+    Answer answered() => SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload).answer;
+
+    for (final b in [Brightness.light, Brightness.dark]) {
+      testWidgets('a confirm: its text as written, the tool waiting on it, Yes with a note, ${b.name}', (tester) async {
+        await asked(tester, confirm(), brightness: b);
+        expect(find.text('PI ASKS'), findsOneWidget);
+        expect(find.text('Auto mode permission ask'), findsOneWidget);
+        expect(find.textContaining('git push nowhere main'), findsWidgets);
+        expect(find.text('Waiting for you'), findsOneWidget, reason: 'the check it is about');
+        expect(find.text('Steer, or queue a follow-up'), findsNothing, reason: 'no message box while pi asks');
+        expect(find.text('Stop'), findsNothing);
+        await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_${b.name}.png'));
+        if (b == Brightness.dark) return;
+        await tester.enterText(find.byType(CupertinoTextField), 'Also search /var/log/nginx');
+        await tester.pump();
+        expect(find.text('pi gets the note with your answer.'), findsOneWidget);
+        await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_note_light.png'));
+        sent.clear();
+        await tester.tap(find.text('Yes'));
+        await tester.pump();
+        expect((answered().questionId, answered().confirmed, answered().note), ('q9', true, 'Also search /var/log/nginx'));
+        await tester.pump(const Duration(seconds: 46));
+      }, skip: !drawsGoldens);
+    }
+
+    testWidgets('No without a note; Dismiss, a whole 44 points, closes it; the message box back once it goes', (tester) async {
+      final model = await asked(tester, confirm());
+      sent.clear();
+      await tester.tap(find.text('No'));
+      await tester.pump();
+      expect((answered().confirmed, answered().note), (false, ''));
+      model.client.onFrame(Frame(routed: Routed(session: sent.last.routed.session, payload: SessionMessage(error: Error(requestId: answered().requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'that question is no longer asked')).writeToBuffer())));
+      await tester.pump();
+      expect(find.textContaining('no longer asked'), findsOneWidget);
+      // Dismiss, tapped 17 points above and below the word.
+      for (final dy in [-17.0, 17.0]) {
+        sent.clear();
+        await tester.tapAt(tester.getCenter(find.text('Dismiss')).translate(0, dy));
+        await tester.pump();
+        expect((answered().questionId, answered().dismissed), ('q9', true), reason: '$dy from the word');
+        model.client.onFrame(Frame(routed: Routed(session: sent.last.routed.session, payload: SessionMessage(error: Error(requestId: answered().requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'again')).writeToBuffer())));
+        await tester.pump();
+      }
+      // Answered elsewhere: the question leaves, the message box is back.
+      model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i1', 'laptop', SessionAnnouncement(name: 'release', cwd: '/home/me/src/pirc', hostname: 'laptop.local', working: true)))));
+      await tester.pump();
+      expect(find.text('PI ASKS'), findsNothing);
+      expect(find.text('Waiting for you'), findsNothing);
+      expect(find.text('Steer, or queue a follow-up'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 46));
+    });
+
+    testWidgets('a select: its options as buttons, the note with them', (tester) async {
+      await asked(tester, Question(id: 'q8', kind: QuestionKind.QUESTION_KIND_SELECT, title: 'tests/fixtures/cart.json is out of date. What should I do?',
+          options: ['Regenerate it', 'Fix the tests to match it', 'Leave both for now'], answerable: true, askedAt: ts(now)));
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_select_light.png'));
+      await tester.enterText(find.byType(CupertinoTextField), 'keep the old one as .bak');
+      sent.clear();
+      await tester.tap(find.text('Fix the tests to match it'));
+      await tester.pump();
+      expect((answered().option, answered().note), (1, 'keep the old one as .bak'));
+      await tester.pump(const Duration(seconds: 46));
+    }, skip: !drawsGoldens);
+
+    testWidgets("an input: its text the answer, no note", (tester) async {
+      await asked(tester, Question(id: 'q7', kind: QuestionKind.QUESTION_KIND_INPUT, title: 'Branch name?', placeholder: 'release/…', answerable: true, askedAt: ts(now)));
+      expect(find.byType(CupertinoTextField), findsOneWidget, reason: 'the answer, and no note');
+      await tester.enterText(find.byType(CupertinoTextField), 'release/2.4');
+      await tester.pump();
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_input_light.png'));
+      sent.clear();
+      await tester.tap(find.text('Send'));
+      await tester.pump();
+      expect((answered().text, answered().note), ('release/2.4', ''));
+      await tester.pump(const Duration(seconds: 46));
+    }, skip: !drawsGoldens);
+
+    testWidgets("only pi's terminal can answer: where pi runs, and Stop", (tester) async {
+      await asked(tester, Question(id: 'q6', kind: QuestionKind.QUESTION_KIND_EDITOR, title: 'Commit message', answerable: false, askedAt: ts(now)));
+      expect(find.text('PI ASKS IN ITS TERMINAL'), findsOneWidget);
+      expect(find.text("This needs pi's terminal to answer."), findsOneWidget);
+      expect(find.text('Dismiss'), findsNothing);
+      expect(find.text('Waiting for you'), findsNothing, reason: 'not for the app to answer');
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_terminal_light.png'));
+      sent.clear();
+      await tester.tap(find.text('Stop pi'));
+      await tester.pump();
+      expect(SessionMessage.fromBuffer(sent.last.routed.payload).hasAbort(), isTrue);
+      await tester.pump(const Duration(seconds: 46));
+    }, skip: !drawsGoldens);
   });
 
   testWidgets('a message sent while pi works steers, unless Queue is chosen', (tester) async {

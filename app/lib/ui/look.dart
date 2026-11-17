@@ -77,7 +77,7 @@ class Look {
   Color get separator => rule;
   Color get toolCard => wash;
   Color get working => work;
-  Color get asking => block;
+  Color get asking => accent;
   Color get failed => block;
 
   static const light = Look(
@@ -172,10 +172,29 @@ Status statusOf(SessionView s, Set<String> news) {
   return Status.idle;
 }
 
+// How many sessions ask, work and finished since last opened, each counted
+// once, by its status, so that with the idle they add up to all of them.
+({int asking, int working, int fresh}) counts(Iterable<SessionView> sessions, Set<String> news) {
+  var (asking, working, fresh) = (0, 0, 0);
+  for (final s in sessions) {
+    switch (statusOf(s, news)) {
+      case Status.asking:
+        asking++;
+      case Status.working:
+        working++;
+      case Status.done:
+        fresh++;
+      case Status.idle:
+    }
+  }
+  return (asking: asking, working: working, fresh: fresh);
+}
+
 // A status's colour, its tint, its symbol and what it says, as the web
-// page's Status: × asks, ◐ working, ✓ done, ○ idle.
+// page's Status: ? asks, ◐ working, ✓ done, ○ idle. A question is pi
+// waiting for you, not something gone wrong: the accent, not red.
 (Color, Color, String, String) statusLook(Look look, Status status, {bool compacting = false}) => switch (status) {
-      Status.asking => (look.block, look.blockWash, '×', 'Asks a question'),
+      Status.asking => (look.accent, look.accentSoft, '?', 'Asks a question'),
       Status.working => (look.work, look.workWash, '◐', compacting ? 'Compacting' : 'Working'),
       Status.done => (look.done, look.doneWash, '✓', 'Finished since last opened'),
       Status.idle => (look.idle, look.idleWash, '○', 'Idle'),
@@ -226,7 +245,7 @@ class StatusGlyph extends StatelessWidget {
   }
 }
 
-// × asks, ◐ working, ✓ done, ○ idle, in a box a third of the badge's size.
+// ? asks, ◐ working, ✓ done, ○ idle, in a box a third of the badge's size.
 class _Symbol extends CustomPainter {
   _Symbol(this.status, this.color);
   final Status status;
@@ -244,8 +263,16 @@ class _Symbol extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     switch (status) {
       case Status.asking:
-        canvas.drawLine(c + Offset(-r, -r) * 0.8, c + Offset(r, r) * 0.8, line);
-        canvas.drawLine(c + Offset(r, -r) * 0.8, c + Offset(-r, r) * 0.8, line);
+        // A hook over a stem, and the dot under it.
+        final q = r * 0.62;
+        canvas.drawPath(
+          Path()
+            ..moveTo(c.dx - q, c.dy - r * 0.55)
+            ..arcToPoint(Offset(c.dx + q, c.dy - r * 0.55), radius: Radius.circular(q))
+            ..cubicTo(c.dx + q, c.dy - r * 0.05, c.dx, c.dy - r * 0.1, c.dx, c.dy + r * 0.35),
+          line,
+        );
+        canvas.drawCircle(Offset(c.dx, c.dy + r * 0.95), line.strokeWidth * 0.75, Paint()..color = color);
       case Status.working:
         canvas.drawCircle(c, r, line);
         canvas.drawArc(Rect.fromCircle(center: c, radius: r), -1.5708, 3.1416, true, Paint()..color = color);

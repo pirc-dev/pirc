@@ -197,9 +197,12 @@ class PircModel extends ChangeNotifier {
   Future<Outcome> stop(String id) async => outcome(await client.ask(id, SessionMessage(abort: Abort(requestId: client.id()))));
 
   // Answers one of the session's questions: an option's index for a select,
-  // yes or no for a confirm, text for an input, or dismissed for any.
-  Future<Outcome> answer(String id, String questionId, {int? option, bool? confirmed, String? text, bool dismissed = false}) async {
+  // yes or no for a confirm, text for an input, or dismissed for any, which
+  // closes it and stops the turn. A note for pi goes with an option or a
+  // yes or no, in the same message, so that pi reads both in one step.
+  Future<Outcome> answer(String id, String questionId, {int? option, bool? confirmed, String? text, bool dismissed = false, String note = ''}) async {
     final a = Answer(requestId: client.id(), questionId: questionId);
+    if (note.isNotEmpty && (option != null || confirmed != null)) a.note = note;
     if (option != null) {
       a.option = option;
     } else if (confirmed != null) {

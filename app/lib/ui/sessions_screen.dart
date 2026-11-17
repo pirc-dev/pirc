@@ -152,9 +152,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
         }
         final query = _query.text.trim();
         final found = query.isEmpty ? const <({SessionView item, FuzzyMatch match})>[] : rank(query, sessions, _searched);
-        final working = sessions.where((s) => s.working || s.compacting).length;
-        final asking = sessions.where((s) => (s.questions ?? const []).isNotEmpty).length;
-        final fresh = sessions.where((s) => news.contains(s.id)).length;
+        final (:asking, :working, :fresh) = counts(sessions, news);
         Widget row(SessionView s, {bool window = true, Set<int>? matched}) =>
             _Row(s, news: news.contains(s.id), now: model.now(), window: window, matched: matched, open: _openChat, selected: widget.selected?.value == s.id);
         return CupertinoPageScaffold(
@@ -217,7 +215,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                     child: Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      if (asking > 0) Pill(count: asking, word: 'asking', color: look.block, wash: look.blockWash, big: true),
+                      if (asking > 0) Pill(count: asking, word: 'asking', color: look.accent, wash: look.accentSoft, big: true),
                       if (fresh > 0) Pill(count: fresh, word: 'done', color: look.done, wash: look.doneWash, big: true),
                       if (working > 0) Pill(count: working, word: 'working', color: look.work, wash: look.workWash, big: true),
                       Pill(count: sessions.length, word: 'in all', color: look.ink2, wash: look.wash, big: true),
@@ -416,11 +414,9 @@ class _Counts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    final asking = sessions.where((s) => (s.questions ?? const []).isNotEmpty).length;
-    final fresh = sessions.where((s) => news.contains(s.id)).length;
-    final working = sessions.where((s) => s.working || s.compacting).length;
+    final (:asking, :working, :fresh) = counts(sessions, news);
     return Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
-      if (asking > 0) Pill(count: asking, word: 'asking', color: look.block, wash: look.blockWash),
+      if (asking > 0) Pill(count: asking, word: 'asking', color: look.accent, wash: look.accentSoft),
       if (fresh > 0) Pill(count: fresh, word: 'new', color: look.done, wash: look.doneWash),
       if (working > 0) Pill(count: working, word: 'working', color: look.work, wash: look.workWash),
       Text('${sessions.length}', style: look.text(size: 12.5, color: look.ink2, spacing: 0)),
