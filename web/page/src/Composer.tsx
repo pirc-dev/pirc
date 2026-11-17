@@ -90,7 +90,8 @@ export function Composer(p: {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [text]);
+    // Also when it comes back, after a question.
+  }, [text, Boolean(p.session.questions?.length)]);
   const empty = (!text.trim() && p.images.length === 0) || !p.ready;
   const picker = useRef<HTMLInputElement>(null);
   const [problem, setProblem] = useState<string>();
@@ -148,10 +149,22 @@ export function Composer(p: {
       ))}
     </div>
   );
+  const shell = "flex-none border-t border-rule bg-paper px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] cards:bg-card cards:px-3 native:bg-paper cockpit:px-3";
+  // While pi asks, the question is in the composer's place, Dismiss in
+  // Stop's; what was being written waits for it to go.
+  const asked = p.session.questions?.[0];
+  if (asked) {
+    return (
+      <div className={shell}>
+        <div className="@container mx-auto max-w-[40rem]">
+          <Ask key={asked.id} q={asked} more={p.session.questions!.length - 1} session={p.session} run={p.run} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="flex-none border-t border-rule bg-paper px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] cards:bg-card cards:px-3 native:bg-paper cockpit:px-3">
+    <div className={shell}>
       <div className="@container mx-auto flex max-w-[40rem] flex-col gap-2.5">
-        {p.session.questions?.[0] && <Ask key={p.session.questions[0].id} q={p.session.questions[0]} more={p.session.questions.length - 1} run={p.run} />}
         {busy && (
           <div className="flex items-center gap-2.5 text-[13.5px] text-ink2 cockpit:font-mono cockpit:text-xs">
             <span className="w-4 text-center font-mono font-semibold text-work" aria-hidden="true">◐</span>

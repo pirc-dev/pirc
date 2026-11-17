@@ -386,8 +386,8 @@ export class Host implements Sink {
     return this.dialogs.list();
   }
 
-  answer(a: Answer): string | undefined {
-    return this.dialogs.answer(a);
+  answer(a: Answer, giving?: () => void): string | undefined {
+    return this.dialogs.answer(a, giving);
   }
 
   maxPayloadBytes(): number {

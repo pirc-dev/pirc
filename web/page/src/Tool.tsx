@@ -1,5 +1,5 @@
 // A tool call and its result, and tool calls folded into one line.
-import { memo } from "react";
+import { createContext, memo, useContext } from "react";
 import type { ToolItem } from "../../core/view.ts";
 import { Icon } from "./icons.tsx";
 import { useNow } from "./time.ts";
@@ -14,6 +14,10 @@ function Running(p: { since: number }) {
   const ms = now - p.since;
   return ms >= SHOWN_MS ? <span className="flex-none text-ink3 tabular-nums">{took(ms)}</span> : null;
 }
+
+// The tool call a question of pi's holds up, by its item's ID: the last in
+// the chat, unfinished, while pi asks (Chat.tsx).
+export const Waiting = createContext<string | undefined>(undefined);
 
 const LINE = { add: "bg-done-wash text-done", del: "bg-block-wash text-block", hunk: "text-ink3", same: "text-ink2" } as const;
 
@@ -59,6 +63,7 @@ function argLines(t: ToolItem): string {
 export function Tool(p: { item: ToolItem }) {
   const t = p.item;
   const running = !t.result;
+  const waiting = useContext(Waiting) === t.id && running;
   const r = t.result;
   const out = r?.text ?? t.progress ?? "";
   // An edit shows its changes; its output says only that it was made.
@@ -68,11 +73,11 @@ export function Tool(p: { item: ToolItem }) {
   return (
     <details open={running && Boolean(t.progress)} className={`font-mono text-[12.5px] cards:overflow-hidden cards:rounded-xl cards:border cards:bg-card native:bg-paper cockpit:overflow-hidden cockpit:rounded-lg cockpit:border ${t.result?.isError ? "cards:border-block cockpit:border-block" : "cards:border-rule native:border-transparent cockpit:border-rule"}`}>
       <summary className="flex min-h-[30px] cursor-pointer list-none items-baseline gap-2.5 py-1 [&::-webkit-details-marker]:hidden cards:min-h-10 cards:items-center cards:gap-2 cards:px-3 cockpit:min-h-9 cockpit:items-center cockpit:gap-2 cockpit:px-2.5">
-        <span className={`w-3 flex-none text-center font-semibold ${t.result?.isError ? "text-block" : running ? "animate-pulse text-work" : "text-done"}`}>{t.result?.isError ? "✕" : running ? "●" : "✓"}</span>
+        <span className={`w-3 flex-none text-center font-semibold ${t.result?.isError ? "text-block" : waiting ? "text-accent" : running ? "animate-pulse text-work" : "text-done"}`}>{t.result?.isError ? "✕" : running ? "●" : "✓"}</span>
         <span className="flex-none font-semibold text-ink cards:font-ui cards:text-sm cockpit:font-bold">{t.name || "tool"}</span>
         <span className="min-w-0 flex-1 truncate text-ink2">{summary(t)}</span>
         {r?.exitCode !== undefined && r.exitCode !== 0 && <span className="flex-none font-semibold text-block">exit {r.exitCode}</span>}
-        {running ? <Running since={t.at} /> : r?.durationMs !== undefined && r.durationMs >= SHOWN_MS && <span className="flex-none text-ink3 tabular-nums">{took(r.durationMs)}</span>}
+        {waiting ? <span className="flex-none font-ui text-[12px] font-semibold text-accent">Waiting for you</span> : running ? <Running since={t.at} /> : r?.durationMs !== undefined && r.durationMs >= SHOWN_MS && <span className="flex-none text-ink3 tabular-nums">{took(r.durationMs)}</span>}
       </summary>
       <div className="mt-0.5 mb-2 ml-1.5 flex flex-col gap-1.5 border-l border-rule py-1 pl-4 cards:m-0 cards:border-t cards:border-l-0 cards:bg-wash cards:px-3 cards:py-2 native:border-t-0 native:bg-transparent native:pt-0 cockpit:m-0 cockpit:border-t cockpit:border-l-0 cockpit:bg-card cockpit:px-2.5 cockpit:py-2">
         {diff

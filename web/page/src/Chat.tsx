@@ -15,7 +15,7 @@ import { useHold } from "./update.ts";
 import { type Run } from "./chat.ts";
 import { type Part, partKey, runs, signature } from "../../core/chat.ts";
 import { useMarkdown } from "./Markdown.tsx";
-import { Folded, Tool } from "./Tool.tsx";
+import { Folded, Tool, Waiting } from "./Tool.tsx";
 import { Composer } from "./Composer.tsx";
 import { CopyButton } from "./Copy.tsx";
 import { loadDraft, saveDraft } from "./drafts.ts";
@@ -249,22 +249,24 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
         />
       )}
       <OfferFrom.Provider value={s ? offerFrom : undefined}>
-        <Items
-          chat={p.chat}
-          working={Boolean(s?.working || s?.compacting)}
-          compacting={Boolean(s?.compacting)}
-          asking={Boolean(s?.questions?.length)}
-          pending={pending}
-          retry={(x) => void send(x.text, x.images ?? [], x.delivery, x.key)}
-          edit={(x) => {
-            setPending((ps) => ps.filter((y) => y.key !== x.key));
-            setText(text.trim() ? `${x.text}\n\n${text}` : x.text);
-            if (x.images) setImages((was) => [...x.images!, ...was].slice(0, IMAGES_MAX));
-          }}
-          dismiss={(x) => setPending((ps) => ps.filter((y) => y.key !== x.key))}
-          top={p.wide ? 0 : overHeight}
-          fold={p.wide ? noFold : setFolded}
-        />
+        <Waiting.Provider value={s?.questions?.length && last?.kind === "tool" && !last.result ? last.id : undefined as string | undefined}>
+          <Items
+            chat={p.chat}
+            working={Boolean(s?.working || s?.compacting)}
+            compacting={Boolean(s?.compacting)}
+            asking={Boolean(s?.questions?.length)}
+            pending={pending}
+            retry={(x) => void send(x.text, x.images ?? [], x.delivery, x.key)}
+            edit={(x) => {
+              setPending((ps) => ps.filter((y) => y.key !== x.key));
+              setText(text.trim() ? `${x.text}\n\n${text}` : x.text);
+              if (x.images) setImages((was) => [...x.images!, ...was].slice(0, IMAGES_MAX));
+            }}
+            dismiss={(x) => setPending((ps) => ps.filter((y) => y.key !== x.key))}
+            top={p.wide ? 0 : overHeight}
+            fold={p.wide ? noFold : setFolded}
+          />
+        </Waiting.Provider>
       </OfferFrom.Provider>
       {s && (
         <Composer

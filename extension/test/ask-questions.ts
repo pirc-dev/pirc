@@ -3,11 +3,30 @@
 // kind of question in pi's terminal (ctx.ui) before the turn runs, and
 // write the answer to answers.log in pi's folder, so that a test can see
 // what the extension got.
+//
+// It also asks as a guard does (pi-automode): a bash call whose command
+// says "approve-" waits for a confirm from tool_call, with pi's signal
+// unless the command also says "nosignal", and is blocked on a no. And
+// /ask-from-command asks a confirm outside any turn.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
 export default function (pi: ExtensionAPI): void {
+  pi.on("tool_call", async (e, ctx) => {
+    const command = e.toolName === "bash" ? String((e.input as { command?: unknown }).command ?? "") : "";
+    if (!command.includes("approve-")) return undefined;
+    const ok = await ctx.ui.confirm("Run it?", command, command.includes("nosignal") ? undefined : { signal: ctx.signal });
+    appendFileSync(join(ctx.cwd, "answers.log"), `tool=${ok}\n`);
+    return ok ? undefined : { block: true, reason: "The guard was told no." };
+  });
+  pi.registerCommand("ask-from-command", {
+    description: "Asks a confirm outside a turn (PiRC's tests)",
+    handler: async (_args, ctx) => {
+      const ok = await ctx.ui.confirm("From a command?", "No turn runs.");
+      appendFileSync(join(ctx.cwd, "answers.log"), `command=${ok}\n`);
+    },
+  });
   pi.on("before_agent_start", async (e, ctx) => {
     // A run a custom message starts (pi 1.5) has no prompt.
     if (!("prompt" in e)) return;

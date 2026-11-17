@@ -11,6 +11,16 @@ release that needs its parts upgraded together says so here.
 - The web app opens a long session quickly: it loads the latest 100
   messages and tool calls, and earlier ones as you scroll up, keeping your
   place. What it loads is sent compressed.
+- Answering pi's questions, such as pi-automode's permission asks, in
+  the web app: the question takes the message box's place while it
+  waits, its text laid out as written, with code as code. Yes, No and a
+  list's options can carry a note for pi, which the model reads together
+  with what follows from your answer. Dismiss now closes the question and
+  stops pi, where before it was a second No; it works even when the
+  extension that asked gave pi no way to stop it. The command a question
+  holds up says "Waiting for you", and a session that asks is marked "?"
+  in the accent colour. The list counts each session once, so its counts
+  add up. Needs this release's extension.
 - In the iOS and Android apps, from their next store build, a question pi
   asks takes the message box's place until it is answered: its text laid
   out as written, a note for pi that goes with your answer, full-width No

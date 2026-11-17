@@ -7,7 +7,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { startFakeModel } from "../extension/test/fake-model.ts";
+import { startFakeModel, type ModelCall } from "../extension/test/fake-model.ts";
 
 export const repo = resolve(import.meta.dirname, "..");
 
@@ -122,6 +122,8 @@ export interface Pi {
   logFile: string;
   keys(...k: string[]): void;
   screen(): string;
+  // What the fake model was sent, one entry per request (fake-model.ts).
+  modelRequests: ModelCall[];
 }
 
 // An interactive pi in tmux, with the extension, enrolled on the relay with
@@ -198,5 +200,6 @@ export async function startPi(h: Harness, relay: Relay, hostToken: string, name 
     logFile,
     keys: (...k) => void execFileSync("tmux", tmux("send-keys", "-t", `=${session}:`, ...k)),
     screen: () => execFileSync("tmux", tmux("capture-pane", "-p", "-t", `=${session}:`), { encoding: "utf8" }),
+    modelRequests: model.requests,
   };
 }

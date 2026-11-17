@@ -77,9 +77,10 @@ export interface Sink {
   // What opens a new pi beside this one, if anything (launch.ts).
   launcher(): Launcher | undefined;
   // The dialogs pi is showing for extensions (questions.ts), and a
-  // client's answer to one: why it cannot be taken, if so.
+  // client's answer to one: why it cannot be taken, if so; giving runs
+  // just before the extension gets it.
   questions(): Question[];
-  answer(a: Answer): string | undefined;
+  answer(a: Answer, giving?: () => void): string | undefined;
   // The Launch that started this process, if one did.
   readonly launchId: string;
   // The largest payload a frame can carry now.
@@ -1116,9 +1117,28 @@ export class Live {
         return this.whenSettled(requestId, "launch", launcher.launch({ cwd: folder.path, command: piCommand(), env: launchEnv(process.env, requestId), name: launchName(body.value.name) }), respond, () => respond(accepted(requestId)));
       }
       case "answer": {
-        const { requestId } = body.value;
-        const why = this.sink.answer(body.value);
-        return respond(why ? errorReply(requestId, ErrorCode.INVALID, why) : accepted(requestId));
+        // The note, during a turn, is queued as a steer before the answer
+        // is given: pi then sends it with the result of what the question
+        // was about, in the model's next step; sent after, it can come a
+        // step late (docs/design.md, section 8). With no turn running (a
+        // command's question), it is a prompt of its own, once the answer
+        // is in.
+        // A turn is what pi's agent events say (working): pi 1.5 counts a
+        // command run from a prompt as not idle too, where a steer would
+        // wait for a model call that never comes.
+        const { requestId, value } = body.value;
+        const note = body.value.note.trim();
+        const turn = this.working;
+        const why = this.sink.answer(body.value, () => {
+          if (note && turn) this.pi.sendUserMessage(note, { deliverAs: "steer" });
+        });
+        if (why) return respond(errorReply(requestId, ErrorCode.INVALID, why));
+        // Dismiss stops the turn too: the question is closed already, so
+        // this works whether or not the asking extension gave it pi's
+        // signal.
+        if (value.case === "dismissed" && (turn || !this.ctx.isIdle())) this.ctx.abort();
+        if (note && !turn) setImmediate(this.guard("note", () => this.pi.sendUserMessage(note, { deliverAs: "followUp" })));
+        return respond(accepted(requestId));
       }
       case "statsRequest": {
         const usage = this.ctx.getContextUsage();

@@ -19,7 +19,7 @@ import { onSeen, withNews } from "./seen.ts";
 import { useHold } from "./update.ts";
 import { ago, details, title, where, windowOf } from "./names.ts";
 import { useNow } from "./time.ts";
-import { Status, tone } from "./Status.tsx";
+import { counted, Status, tone } from "./Status.tsx";
 
 // Which hosts and groups are open, kept in this browser only. Everything
 // starts closed.
@@ -157,9 +157,10 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
     // shown is derived from these.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [query, p.sessions, host, group]);
-  const working = shown.filter((s) => s.working || s.compacting).length;
-  const asking = shown.filter((s) => s.questions?.length).length;
-  const fresh = shown.filter((s) => news.has(s.id)).length;
+  // Each session once (counted), so that they add up.
+  const working = shown.filter((s) => counted(s, news.has(s.id)) === "working").length;
+  const asking = shown.filter((s) => counted(s, news.has(s.id)) === "asking").length;
+  const fresh = shown.filter((s) => counted(s, news.has(s.id)) === "done").length;
   const row = (s: SessionView, window?: string) => <Row key={s.id} session={s} window={window} open={p.open} news={news.has(s.id)} now={now} selected={s.id === p.selected} />;
   // Each with its window's name above its own, the most recent first.
   const listed = (sessions: SessionView[], className = "") => (
@@ -267,7 +268,7 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
         </div>
         {shown.length > 0 && (
           <p className="flex flex-wrap items-center gap-3 text-sm text-ink2 cards:gap-1.5 cockpit:font-mono cockpit:text-[13px]">
-            {asking > 0 && <span className={`${tone.blocked} ${pill} native:bg-block-wash`}><Sym>×</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{asking}</b><Word>asking</Word></span>}
+            {asking > 0 && <span className={`${tone.asking} ${pill} native:bg-accent-soft`}><Sym>?</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{asking}</b><Word>asking</Word></span>}
             {fresh > 0 && <span className={`${tone.done} ${pill} native:bg-done-wash`}><Sym>✓</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{fresh}</b><Word>done</Word></span>}
             {working > 0 && <span className={`${tone.working} ${pill} native:bg-work-wash`}><Sym>◐</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{working}</b><Word>working</Word></span>}
             <span className={`${pill} native:bg-wash`}><Sym>·</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0 cockpit:font-medium">{shown.length}</b><Word>in all</Word></span>
@@ -372,7 +373,7 @@ function Bar(p: { folded: boolean; title: string; asking: number; fresh: number;
       >
         <span className="min-w-0 truncate font-read text-lg cards:font-ui cards:text-[17px] cards:font-semibold cockpit:font-mono cockpit:text-[15px] cockpit:font-bold" aria-hidden="true">{p.title}</span>
         <span className="ml-auto flex flex-none gap-2.5 font-mono text-[13px] font-semibold tabular-nums native:absolute native:right-4 cockpit:font-medium" aria-hidden="true">
-          {p.asking > 0 && <span className={tone.blocked}>×{p.asking}</span>}
+          {p.asking > 0 && <span className={tone.asking}>?{p.asking}</span>}
           {p.fresh > 0 && <span className={tone.done}>✓{p.fresh}</span>}
           {p.working > 0 && <span className={tone.working}>◐{p.working}</span>}
         </span>
@@ -404,13 +405,13 @@ function Word(p: { children: string }) {
 // how many working, how many.
 // Native sets them on pills, Cockpit as symbols.
 function Counts(p: { sessions: SessionView[]; news: Set<string> }) {
-  const working = p.sessions.filter((s) => s.working || s.compacting).length;
-  const fresh = p.sessions.filter((s) => p.news.has(s.id)).length;
-  const asking = p.sessions.filter((s) => s.questions?.length).length;
+  const working = p.sessions.filter((s) => counted(s, p.news.has(s.id)) === "working").length;
+  const fresh = p.sessions.filter((s) => counted(s, p.news.has(s.id)) === "done").length;
+  const asking = p.sessions.filter((s) => counted(s, p.news.has(s.id)) === "asking").length;
   const pill = "native:rounded-full native:px-[7px] native:py-0.5 native:text-xs";
   return (
     <span className="flex flex-none gap-2.5 text-[12.5px] font-normal tracking-normal text-ink2 normal-case not-italic tabular-nums native:gap-1.5 cockpit:font-mono cockpit:text-xs">
-      {asking > 0 && <span className={`font-semibold ${tone.blocked} ${pill} native:bg-block-wash cockpit:font-medium`}><Sym>×</Sym>{asking}<Word> asking</Word></span>}
+      {asking > 0 && <span className={`font-semibold ${tone.asking} ${pill} native:bg-accent-soft cockpit:font-medium`}><Sym>?</Sym>{asking}<Word> asking</Word></span>}
       {fresh > 0 && <span className={`font-semibold ${tone.done} ${pill} native:bg-done-wash cockpit:font-medium`}><Sym>✓</Sym>{fresh}<Word> new</Word></span>}
       {working > 0 && <span className={`font-semibold ${tone.working} ${pill} native:bg-work-wash cockpit:font-medium`}><Sym>◐</Sym>{working}<Word> working</Word></span>}
       <span className="native:self-center"><Sym>· </Sym>{p.sessions.length}</span>

@@ -141,31 +141,40 @@ export class Questions {
   }
 
   // A client's answer: why it cannot be taken, or undefined once given.
-  answer(a: Answer): string | undefined {
+  // giving runs once the answer is known to fit, just before the extension
+  // gets it: where a note is queued for pi, so that the model reads it
+  // with what follows from the answer (live.ts).
+  answer(a: Answer, giving: () => void = () => {}): string | undefined {
     const p = this.pending.find((x) => x.question.id === a.questionId);
     if (!p) return "that question is no longer asked";
     if (!p.question.answerable || !p.answer) return "that question can be answered only in pi's terminal";
     const v = a.value;
+    const noted = a.note.trim() !== "";
+    if (noted && (v.case === "dismissed" || v.case === "text")) return "a note goes with an option or a yes or no";
+    let value: unknown;
     if (v.case === "dismissed") {
-      p.answer(p.question.kind === QuestionKind.CONFIRM ? false : undefined);
-      return undefined;
-    }
-    switch (p.question.kind) {
-      case QuestionKind.SELECT: {
-        if (v.case !== "option" || v.value >= (p.options?.length ?? 0)) return "a select is answered with one of its options";
-        p.answer(p.options![v.value]);
-        return undefined;
+      // What Escape gives: the extension carries on as refused.
+      value = p.question.kind === QuestionKind.CONFIRM ? false : undefined;
+    } else {
+      switch (p.question.kind) {
+        case QuestionKind.SELECT:
+          if (v.case !== "option" || v.value >= (p.options?.length ?? 0)) return "a select is answered with one of its options";
+          value = p.options![v.value];
+          break;
+        case QuestionKind.CONFIRM:
+          if (v.case !== "confirmed") return "a confirm is answered yes or no";
+          value = v.value;
+          break;
+        case QuestionKind.INPUT:
+          if (v.case !== "text") return "an input is answered with text";
+          value = v.value;
+          break;
+        default:
+          return "that question can be answered only in pi's terminal";
       }
-      case QuestionKind.CONFIRM:
-        if (v.case !== "confirmed") return "a confirm is answered yes or no";
-        p.answer(v.value);
-        return undefined;
-      case QuestionKind.INPUT:
-        if (v.case !== "text") return "an input is answered with text";
-        p.answer(v.value);
-        return undefined;
-      default:
-        return "that question can be answered only in pi's terminal";
     }
+    giving();
+    p.answer(value);
+    return undefined;
   }
 }

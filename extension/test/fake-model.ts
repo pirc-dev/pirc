@@ -11,6 +11,8 @@
 //   "wait"   two seconds before the text, as a slow model takes
 //   "table"  a five-column markdown table, for narrow screens
 //   "markdown"  a reply with headings, emphasis, code, a list and a link
+//   "approve <word>"  a bash call of `echo approve-<word>`, which the test
+//            extension ask-questions.ts asks about before it runs
 // and a summary for pi's compaction request, whatever it quotes; after
 // three seconds when the conversation says "takes time".
 import { createServer, type Server } from "node:http";
@@ -29,12 +31,18 @@ function lastUser(messages: Msg[]): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function startFakeModel(): Promise<{ url: string; server: Server }> {
+// Every request's messages, in order, so that a test can see what the
+// model was sent in each step.
+export type ModelCall = Msg[];
+
+export async function startFakeModel(): Promise<{ url: string; server: Server; requests: ModelCall[] }> {
   let calls = 0;
+  const requests: ModelCall[] = [];
   const server = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     const request = JSON.parse(body || "{}") as { messages?: Msg[] };
+    requests.push(request.messages ?? []);
     const said = lastUser(request.messages ?? []);
     // pi's compaction requests have its summariser's system prompt.
     const system = request.messages?.find((m) => m.role === "system")?.content;
@@ -113,6 +121,8 @@ export async function startFakeModel(): Promise<{ url: string; server: Server }>
       return end();
     };
     if (said.includes("run failing")) return call("bash", { command: "echo about to fail; exit 3" });
+    const approve = /\bapprove (\w+)/.exec(said);
+    if (approve) return call("bash", { command: `echo approve-${approve[1]}` });
     if (said.includes("make an edit")) return call("edit", { path: "notes.txt", edits: [{ oldText: "old line", newText: "new line" }] });
     if (said.includes("tool")) {
       send({ role: "assistant", tool_calls: [{ index: 0, id: `call_${++calls}`, type: "function", function: { name: "bash", arguments: "" } }] });
@@ -145,5 +155,5 @@ export async function startFakeModel(): Promise<{ url: string; server: Server }>
     end();
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, server };
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, server, requests };
 }

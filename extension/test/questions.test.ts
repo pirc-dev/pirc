@@ -109,3 +109,25 @@ test("a newer load wraps pi's own methods, not the older load's wrappers; a ui t
   q.install(frozen, () => q);
   assert.match(q.problem, /^questions cannot be answered from clients: /);
 });
+
+test("a note goes with an option or a yes or no, and is given its moment before the extension has the answer", async () => {
+  const { t, ui } = terminal();
+  const q = new Questions(() => {});
+  q.install(ui, () => q);
+  const order: string[] = [];
+  const asked = ui.confirm("Run it?", "ls").then((v) => order.push(`answer ${v}`));
+  const typed = ui.input("Name?");
+  const [c, i] = q.list();
+  const noted = (id: string, value: Answer["value"]) => create(AnswerSchema, { requestId: "r", questionId: id, value, note: "and then" });
+  const giving = () => order.push("note");
+  assert.equal(q.answer(noted(i.id, { case: "text", value: "x" }), giving), "a note goes with an option or a yes or no");
+  assert.equal(q.answer(noted(c.id, { case: "dismissed", value: true }), giving), "a note goes with an option or a yes or no");
+  assert.equal(q.answer(noted(c.id, { case: "option", value: 0 }), giving), "a confirm is answered yes or no");
+  assert.deepEqual(order, [], "giving ran for an answer refused");
+  assert.equal(q.answer(noted(c.id, { case: "confirmed", value: true }), giving), undefined);
+  await asked;
+  assert.deepEqual(order, ["note", "answer true"]);
+  assert.equal(q.answer(answer(i.id, { case: "dismissed", value: true })), undefined);
+  assert.equal(await typed, undefined);
+  assert.equal(t.open, 0);
+});

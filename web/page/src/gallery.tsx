@@ -289,15 +289,24 @@ const notify = new URLSearchParams(location.search).get("notify") ?? "off";
   }) as typeof api.call;
 }
 
-// The question on screen=asks, by &ask=select|confirm|input|editor.
+// The question on screen=asks, by &ask=guard|select|confirm|input|editor;
+// guard is pi-automode's, asked before a command runs, which the chat
+// shows waiting.
 const QUESTIONS: Record<string, QuestionView> = {
+  guard: { id: "q-guard", kind: "confirm", title: "Auto mode permission ask", message: 'Rule: bash(ssh *)\n\nAction:\nbash {\n  "command": "ssh web-2 \'grep -r 502 /srv/api/logs\'"\n}\n\nAllow this action to continue to auto-mode classification?', answerable: true, askedAt: 0 },
   select: { id: "q-select", kind: "select", title: "Which branch should the release be cut from?", options: ["main", "release/2.4", "hotfix/payments-timeout-on-retry-after-gateway-503"], answerable: true, askedAt: 0 },
   confirm: { id: "q-confirm", kind: "confirm", title: "Delete 14 files?", message: "build/ and dist/ go; nothing else is touched.", answerable: true, askedAt: 0 },
   input: { id: "q-input", kind: "input", title: "Name for the new branch", placeholder: "e.g. fix/login", answerable: true, askedAt: 0 },
   editor: { id: "q-editor", kind: "editor", title: "Edit the commit message", answerable: false, askedAt: 0 },
 };
-const asking = QUESTIONS[new URLSearchParams(location.search).get("ask") ?? "select"] ?? QUESTIONS.select;
-if (screen === "asks") sessions[3] = { ...sessions[3], working: true, questions: [asking, QUESTIONS.confirm] };
+const asked = new URLSearchParams(location.search).get("ask") ?? "guard";
+const asking = QUESTIONS[asked] ?? QUESTIONS.guard;
+if (screen === "asks") sessions[3] = { ...sessions[3], working: true, questions: [asking, ...(asked === "guard" ? [] : [QUESTIONS.confirm])] };
+// The chat a question holds up: its command, not yet run.
+const waiting: ChatItem[] = [
+  ...finished,
+  ...([user("find the 502s in the api logs"), tool("bash", { command: "ssh web-2 'grep -r 502 /srv/api/logs'" })] as ChatItem[]).map((x) => ({ ...x, turnId: "t3" })),
+];
 
 // As the app lays them out: on a phone the list or a chat, on a laptop
 // both. A session opened from the list shows the made-up chat.
@@ -324,7 +333,7 @@ function Gallery() {
   else if (screen === "chat" || screen === "working" || screen === "asks" || open !== undefined) {
     const picked = sessions.find((s) => s.id === open) ?? relay;
     const done = screen === "chat" || (open !== undefined && !picked.working);
-    chat = <Chat key={open ?? screen} id={picked.id} session={{ ...picked, working: !done }} chat={chatOf(done ? finished : working)} back={back} wide={wide} />;
+    chat = <Chat key={open ?? screen} id={picked.id} session={{ ...picked, working: !done }} chat={chatOf(done ? finished : screen === "asks" && open === undefined ? waiting : working)} back={back} wide={wide} />;
   }
   return (
     <Layout

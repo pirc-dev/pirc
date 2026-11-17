@@ -559,7 +559,17 @@ opens a pi beside it in a folder chosen or typed, its window named after
 the folder unless a name is typed, then its chat; Stop pi
 in the actions), pi's questions (done 2026-10-30: a dialog an extension
 shows in pi's terminal shows above the composer too, answered there or in
-the terminal; × marks a session that asks, in the list and the chat),
+the terminal; × marks a session that asks, in the list and the chat;
+redesigned 2026-11-17, `design.md` section 8: the question takes the
+composer's place while it waits, under "pi asks", its text kept as
+written, indented and bracketed blocks as code and "Name: value" lines as
+a label and value; a yes or no and a select's options go with an optional
+note for pi, Dismiss closes the question and stops pi, an input's text is
+the answer, and one only pi's terminal can answer says so, with where pi
+runs and Stop; the tool call it holds up says "Waiting for you"; ? in the
+accent colour marks a session that asks, not ×, and the list's counts
+count each session once, asking before working before done, so that they
+add up),
 better tool cards (done 2026-10-30: a tool's time, counting while it runs
 and shown from a second up; a command's exit status beside it when it
 failed; an edit's diff in place of its arguments), code (done 2026-10-30:

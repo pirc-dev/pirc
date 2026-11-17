@@ -350,10 +350,11 @@ try {
     };
     // The prompt is answered once its run starts, after the question.
     let prompted: Promise<void> = Promise.resolve();
-    const ask = async (kind: string) => {
+    const send = async (text: string) => {
       await prompted;
-      prompted = post<Outcome>(`/api/sessions/${encodeURIComponent(id)}/prompt`, { text: `ask ${kind}` }).then((r) => assert.ok(r.ok, JSON.stringify(r)));
+      prompted = post<Outcome>(`/api/sessions/${encodeURIComponent(id)}/prompt`, { text }).then((r) => assert.ok(r.ok, JSON.stringify(r)));
     };
+    const ask = (kind: string) => send(`ask ${kind}`);
 
     await ask("select");
     let q = await asked("select");
@@ -400,6 +401,60 @@ try {
     pi.keys("Escape");
     await settled(6);
     assert.equal(answers()[5], "editor=null");
+    await prompted;
+
+    // As a guard asks (pi-automode): from tool_call, the command waiting.
+    // A note goes to the model with the command's result, in the same
+    // step, after a yes and after a no.
+    const requests = pi.modelRequests;
+    const said = (m: { content?: unknown }) => JSON.stringify(m.content ?? "");
+    const guarded = async (word: string) => {
+      await send(`approve ${word}`);
+      return asked("confirm");
+    };
+    for (const [yes, note] of [[true, "Also list the second folder"], [false, "Then try the other folder"]] as const) {
+      q = await guarded(yes ? "one" : "two");
+      const before = requests.length;
+      assert.ok((await answer(q.id, { confirmed: yes, note })).ok);
+      await settled(answers().length + 1);
+      const next = requests[before];
+      const tool = next.findLastIndex((m) => m.role === "tool");
+      assert.ok(tool >= 0 && next.slice(tool + 1).some((m) => m.role === "user" && said(m).includes(note)),
+        `the note is not in the step with the result: ${JSON.stringify(next.slice(-3))}`);
+      assert.match(said(next[tool]), yes ? /approve-one/ : /The guard was told no/);
+    }
+    // A note goes with an option or a yes or no only.
+    q = await guarded("three");
+    const noted = await answer(q.id, { dismissed: true, note: "x" });
+    assert.equal(!noted.ok && noted.code, "INVALID", JSON.stringify(noted));
+    // Dismiss closes the question and stops the turn: the model takes no
+    // further step, with pi's signal and without it.
+    for (const word of ["three", "nosignal"]) {
+      if (word !== "three") q = await guarded(word);
+      const before = requests.length;
+      assert.ok((await answer(q.id, { dismissed: true })).ok);
+      await until("the question gone and pi stopped", () => !session?.questions?.length && !session?.working);
+      await prompted;
+      await sleep(500);
+      assert.equal(requests.length, before, `the model took another step after a dismiss (${word})`);
+      assert.equal(answers().at(-1), "tool=false");
+    }
+    // A command's question, outside any turn: dismissed, it closes; a
+    // note with a yes is a prompt of its own once the command has its
+    // answer.
+    await send("/ask-from-command");
+    q = await asked("confirm");
+    assert.ok((await answer(q.id, { dismissed: true })).ok);
+    await until("the command's question gone", () => !session?.questions?.length && !session?.working);
+    for (let i = 0; i < 50 && answers().at(-1) !== "command=false"; i++) await sleep(100);
+    assert.equal(answers().at(-1), "command=false", `${JSON.stringify(q)} ${JSON.stringify(answers())}\n${pi.screen()}`);
+    await send("/ask-from-command");
+    q = await asked("confirm");
+    const before = requests.length;
+    assert.ok((await answer(q.id, { confirmed: true, note: "Say hello afterwards" })).ok);
+    await settled(answers().length + 1);
+    assert.equal(answers().at(-1), "command=true");
+    assert.ok(requests.slice(before).some((r) => said(r.at(-1)!).includes("Say hello afterwards")), "the note was not sent as a prompt");
     await prompted;
   }
 
@@ -572,7 +627,7 @@ try {
 
   step("the prompts reached pi's terminal");
   // The last the app sent; earlier ones have scrolled away.
-  assert.match(pi.screen(), /ask editor/);
+  assert.match(pi.screen(), /Say hello afterwards/);
 
   step("revoking the passkey signs it out");
   cli("revoke", "e2e-phone");

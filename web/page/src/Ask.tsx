@@ -1,71 +1,144 @@
 // A question pi is asking in its terminal for an extension (core/view.ts,
-// QuestionView), above the composer: a select's options, a confirm's yes
-// and no, an input's box, each with Dismiss, as Escape in the terminal.
-// The terminal can still answer it; whichever answers first wins. An
-// editor or a custom dialog is only said to be waiting there.
+// QuestionView), in the composer's place while it waits (docs/design.md,
+// section 8): "pi asks", Dismiss, the question with its text kept as
+// written (asked.ts), then the answer. A confirm's No and Yes and a
+// select's options go with a note for pi, if one is written, which pi
+// reads with what follows from the answer; an input's own text is the
+// answer. Dismiss closes the question and stops the turn. The terminal can
+// still answer it; whichever answers first wins, and the composer comes
+// back once it is gone. An editor or a custom dialog can be answered only
+// in pi's terminal: it says so, with where pi runs and Stop.
 import { useState } from "react";
-import type { QuestionView } from "../../core/view.ts";
+import type { QuestionView, SessionView } from "../../core/view.ts";
+import { parts, type Part } from "./asked.ts";
 import type { Run } from "./chat.ts";
+import { where } from "./names.ts";
 
-const choice = "min-h-11 rounded-full px-4 text-[15px] font-semibold ring-1 ring-rule ring-inset text-ink disabled:opacity-40 hover:bg-wash cards:rounded-[12px] cards:bg-card native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
-const primary = "min-h-11 rounded-full px-4 text-[15px] font-semibold bg-ink text-paper disabled:opacity-40 cards:rounded-[12px] cards:bg-accent cards:text-on-accent native:rounded-xl cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent cockpit:font-ui";
+const choice = "min-h-12 w-full rounded-[13px] bg-wash2 px-4 text-[15.5px] font-semibold text-ink disabled:opacity-40 hover:bg-wash cards:bg-wash native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
+const primary = "min-h-12 w-full rounded-[13px] bg-accent px-4 text-[15.5px] font-semibold text-on-accent disabled:opacity-40 native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
+const field = "w-full min-w-0 rounded-[14px] border border-rule bg-paper px-3 py-2.5 text-base text-ink outline-none placeholder:text-ink3 focus:border-accent cards:bg-card native:rounded-xl cockpit:rounded-[10px] cockpit:text-[15px]";
 
-export function Ask(p: { q: QuestionView; more: number; run: Run }) {
+export function Ask(p: { q: QuestionView; more: number; session: SessionView; run: Run }) {
   const q = p.q;
+  const [note, setNote] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const answer = async (body: { option?: number; confirmed?: boolean; text?: string; dismissed?: boolean }) => {
     setSending(true);
     try {
-      await p.run("answer", { questionId: q.id, ...body });
+      const noted = note.trim() && (body.option !== undefined || body.confirmed !== undefined) ? { note: note.trim() } : {};
+      await p.run("answer", { questionId: q.id, ...body, ...noted });
     } finally {
       setSending(false);
     }
   };
-  const lines = q.title.split("\n");
+  const [first = "", ...rest] = q.title.split("\n");
+  const body = parts([rest.join("\n"), q.message ?? ""].filter((s) => s.trim()).join("\n\n"));
+  const noteField = (
+    <>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Add a note for pi"
+        aria-label="A note for pi"
+        enterKeyHint="done"
+        className={field}
+      />
+      {note.trim() && <p className="-mt-1 text-[12.5px] text-ink3">pi gets the note with your answer.</p>}
+    </>
+  );
   return (
-    <section className="flex flex-col gap-2.5 rounded-2xl bg-block-wash px-3.5 py-3 cockpit:rounded-lg" aria-label="pi asks" role="group">
-      <div className="flex items-baseline gap-2.5">
-        <span className="w-4 flex-none text-center font-mono font-semibold text-block" aria-hidden="true">×</span>
-        <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-          <p className="text-[15px] font-semibold text-ink">{lines[0] || (q.answerable ? "pi asks" : "A dialog in pi's terminal")}</p>
-          {lines.slice(1).concat(q.message ? q.message.split("\n") : []).map((l, i) => <p key={i} className="text-[14.5px] text-ink2">{l}</p>)}
-          {!q.answerable && <p className="text-[13.5px] text-ink3">Waiting in pi's terminal; it can be answered only there.</p>}
-          {p.more > 0 && <p className="text-[13.5px] text-ink3">{p.more} more after this one</p>}
-        </div>
+    <section className="flex flex-col gap-2.5" aria-label="pi asks" role="group">
+      <div className="flex min-h-8 items-center gap-2">
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold tracking-[0.04em] text-accent uppercase cockpit:font-mono cockpit:tracking-normal">
+          <span className="size-[7px] rounded-full bg-current" aria-hidden="true" />
+          {q.answerable ? "pi asks" : "pi asks in its terminal"}
+        </span>
+        {p.more > 0 && <span className="text-[12.5px] text-ink3">{p.more} more after this one</span>}
+        {q.answerable && (
+          <button className="ml-auto px-1 py-1.5 text-[14px] font-medium text-ink2 hover:text-ink disabled:opacity-40" disabled={sending} onClick={() => void answer({ dismissed: true })} title="Close the question and stop pi">
+            Dismiss
+          </button>
+        )}
       </div>
-      {q.answerable && q.kind === "select" && (
-        <div className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
-          {(q.options ?? []).map((o, i) => (
-            <button key={i} className={`${choice} py-2 text-left font-medium [overflow-wrap:anywhere]`} disabled={sending} onClick={() => void answer({ option: i })}>{o}</button>
-          ))}
-        </div>
+      <div className="flex max-h-[45vh] flex-col gap-1.5 overflow-y-auto [overflow-wrap:anywhere]">
+        <p className="text-[16px] font-semibold text-ink">{first || (q.answerable ? "pi asks" : "A dialog in pi's terminal")}</p>
+        <Body parts={body} />
+      </div>
+      {!q.answerable && (
+        <>
+          <div className="flex flex-col gap-0.5 text-[14px] text-ink2">
+            <p>This needs pi's terminal to answer.</p>
+            <p className="text-[12.5px] text-ink3">{where(p.session)}</p>
+          </div>
+          <button className="inline-flex h-9 items-center gap-2 self-start rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => void p.run("abort", {})}>
+            <span className="size-[9px] rounded-[1.5px] bg-current" aria-hidden="true" />Stop
+          </button>
+        </>
       )}
       {q.answerable && q.kind === "confirm" && (
-        <div className="flex gap-2">
-          <button className={primary} disabled={sending} onClick={() => void answer({ confirmed: true })}>Yes</button>
-          <button className={choice} disabled={sending} onClick={() => void answer({ confirmed: false })}>No</button>
-        </div>
+        <>
+          {noteField}
+          <div className="grid grid-cols-2 gap-2">
+            <button className={choice} disabled={sending} onClick={() => void answer({ confirmed: false })}>No</button>
+            <button className={primary} disabled={sending} onClick={() => void answer({ confirmed: true })}>Yes</button>
+          </div>
+        </>
+      )}
+      {q.answerable && q.kind === "select" && (
+        <>
+          <div className="flex max-h-[35vh] flex-col gap-2 overflow-y-auto">
+            {(q.options ?? []).map((o, i) => (
+              <button key={i} className={`${choice} flex items-center py-2.5 text-left font-medium [overflow-wrap:anywhere]`} disabled={sending} onClick={() => void answer({ option: i })}>
+                <span className="mr-2.5 text-ink3 tabular-nums">{i + 1}</span>{o}
+              </button>
+            ))}
+          </div>
+          {noteField}
+        </>
       )}
       {q.answerable && q.kind === "input" && (
-        <form className="flex gap-2" onSubmit={(e) => {
+        <form className="flex flex-col gap-2" onSubmit={(e) => {
           e.preventDefault();
           if (!sending) void answer({ text });
         }}>
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            aria-label={lines[0] || "Answer"}
+            aria-label={first || "Answer"}
             placeholder={q.placeholder}
             enterKeyHint="send"
-            className="min-w-0 flex-1 rounded-xl border border-rule bg-paper px-3 text-[15px] text-ink outline-none placeholder:text-ink3 focus:border-accent cards:bg-card"
+            className={field}
           />
           <button className={primary} disabled={sending}>Send</button>
         </form>
       )}
-      {q.answerable && (
-        <button className="self-start px-1 text-[14px] text-ink2 underline-offset-4 hover:underline disabled:opacity-40" disabled={sending} onClick={() => void answer({ dismissed: true })}>Dismiss</button>
-      )}
     </section>
   );
+}
+
+// The question's text in its parts: label and value pairs together, code
+// as code, the rest as written.
+function Body(p: { parts: Part[] }) {
+  const out: React.ReactNode[] = [];
+  for (let i = 0; i < p.parts.length; i++) {
+    const x = p.parts[i];
+    if (x.kind === "field") {
+      const fields: { label: string; value: string }[] = [];
+      while (i < p.parts.length && p.parts[i].kind === "field") fields.push(p.parts[i++] as { label: string; value: string });
+      i--;
+      out.push(
+        <dl key={i} className="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 text-[14px]">
+          {fields.map((f, j) => [<dt key={`t${j}`} className="text-ink3">{f.label}</dt>, <dd key={`d${j}`} className="min-w-0 text-ink">{f.value}</dd>])}
+        </dl>,
+      );
+    } else if (x.kind === "label") {
+      out.push(<p key={i} className="text-[13px] text-ink3">{x.label}</p>);
+    } else if (x.kind === "code") {
+      out.push(<pre key={i} className="overflow-x-auto rounded-[10px] bg-wash px-3 py-2 font-mono text-[12.5px] leading-[1.45] whitespace-pre text-ink [overflow-wrap:normal] cockpit:rounded-md">{x.text}</pre>);
+    } else {
+      out.push(<p key={i} className="text-[14.5px] whitespace-pre-wrap text-ink2">{x.text}</p>);
+    }
+  }
+  return <>{out}</>;
 }
