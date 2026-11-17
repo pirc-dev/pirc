@@ -2081,7 +2081,11 @@ Each step ends with something that can be seen working.
 14. **Hosted relay**: multi-tenancy, end-to-end encryption and device-signed
     registration (section 5). End-to-end encryption and the
     device-signed list are proposed in `docs/e2e.md`, open (2026-11-15),
-    revised after two independent reviews (2026-11-16 and 2026-11-17).
+    revised after two independent reviews (2026-11-16 and 2026-11-17),
+    and corrected after tests of its riskiest assumptions on every
+    platform (2026-11-17): the join's CPace, Ed25519 verifiers, and HPKE
+    in the iOS notification extension. They found a bug in the app's
+    Ed25519 verifier (Dart `cryptography` 2.9.0), to be patched.
 
     **Decided** (2026-11-16, one at a time with the owner):
     1. **Price.** The hosted relay comes with the app's subscription: an

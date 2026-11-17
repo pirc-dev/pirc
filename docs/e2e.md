@@ -2,7 +2,9 @@
 
 Status: **Open**. A proposal, 2026-11-15, for the first step towards a
 hosted relay (`design.md`, section 5.1 and section 12, step 14), revised
-2026-11-17 after two independent reviews. Nothing here is built. The
+2026-11-17 after two independent reviews, and corrected the same day by
+tests of its riskiest assumptions on every platform (sections 2, 5 and
+11). Nothing here is built. The
 owner's decisions it takes as given are marked **Decided**; the rest is
 proposed.
 
@@ -94,8 +96,13 @@ its base mode: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-256-GCM. HPKE
 is built in nowhere PiRC needs it: not in Node, WebCrypto, Dart, or
 CryptoKit before iOS 17 (the notification extension's target is iOS 16).
 So the extension, the browser client, the app and the notification
-extension each build it from the primitives, held to RFC 9180's test
-vectors in `cases/`; the relay needs none. Base mode authenticates no
+extension each build it from the primitives, held in `cases/` to the
+CFRG's HPKE test vectors (RFC 9180's appendix has none for this suite;
+`test-vectors.json` in the draft's repository, commit `b1f7cb0`); the
+relay needs none. Tested 2026-11-17 in Swift: built from CryptoKit's
+primitives at an iOS 16 target (HKDF sets the floor, at iOS 14), it
+passes that vector, and CryptoKit's own HPKE opens what it seals and the
+reverse; it adds about 40 KB. Base mode authenticates no
 sender, so being able to decrypt something proves nothing about who made
 it: whoever made it is proved by an Ed25519 signature inside, so that
 every identity is an Ed25519 key on the list and X25519 keys can be
@@ -103,15 +110,33 @@ renewed freely. ChaCha20-Poly1305 is not chosen because WebCrypto lacks
 it.
 
 **Ed25519 is verified strictly, alike everywhere.** Libraries differ on
-signatures at the edges (a non-canonical `S`, small-order public keys,
-torsion in `R`). A signer with a stolen key could make one that one
-platform accepts and another refuses, and so split an account. Every
-verifier refuses a non-canonical `S` and small-order public keys, and
-`cases/` holds the edge-case vectors of "Taming the many EdDSAs", which
-the relay, the extension, browsers, the app and the notification
-extension must all decide the same way. Some signers' signatures are
-randomized, so `cases/` holds signatures as vectors that must verify, not
-as bytes to reproduce.
+signatures at the edges, and a signer with a stolen key could make one
+that one platform accepts and another refuses, and so split an account.
+Tested 2026-11-17 on every verifier PiRC uses (Go, Node, WebCrypto in
+Chromium, Firefox and WebKit, Dart's `cryptography` 2.9.0, CryptoKit),
+with the 12 vectors of "Taming the many EdDSAs" and 21 more: none
+differs on a non-canonical `S` or on torsion in `R`; they differ on a
+public key encoded non-canonically, which Go, OpenSSL and BoringSSL
+accept and the others refuse; and Dart's accepts signatures that no other
+does, since its point comparison checks `x` twice and never `y` (a bug,
+upstream too). So:
+
+- before verifying, every platform checks the bytes: a 64-byte signature
+  and a 32-byte key; `S` below the group order; and for both the key and
+  the signature's `R`, `y` below p, with the top bit masked, and not one
+  of the ten encodings of small-order points (the eight canonical ones,
+  and the two non-canonical ones that decode);
+- the equation is the cofactorless one that every platform's API
+  computes. Mixed-order keys are not refused: only curve arithmetic of
+  our own could find them, and honest keys never are;
+- the app uses `cryptography` with the two-line fix to its point
+  comparison, by `dependency_overrides`, until upstream takes it.
+
+With these, every verifier decides all 33 vectors alike. `cases/` holds
+them, and the relay, the extension, browsers, the app and the
+notification extension must all decide them the same way. Some signers'
+signatures are randomized (CryptoKit's are), so `cases/` holds signatures
+as vectors that must verify, not as bytes to reproduce.
 
 **What is signed and hashed is exact bytes.** Protocol Buffers encodings
 are not canonical across languages. So every signed object travels as
@@ -526,7 +551,8 @@ already in the account types it.
 - four for the lookup, which the relay sees and uses only to pair the
   client with the device waiting, unique among the joins under way;
 - five secret, a password for CPace (a password-authenticated key
-  exchange, CFRG Internet-Draft, suite CPACE-X25519-SHA512), which never
+  exchange, suite CPACE-X25519-SHA512, pinned at
+  `draft-irtf-cfrg-cpace-21`, which is with the RFC Editor), which never
   leaves the two devices.
 
 A code is good for one try and ten minutes. The device that shows it
@@ -573,6 +599,18 @@ join plainly, as a possible attack.
 
 The name travels only in step 3 and in the label record, never in `Hello`
 (section 7).
+
+**CPace on each platform.** The platform's X25519 does CPace's scalar
+multiplications. Before it, the other side's point is made canonical (bit
+255 cleared, then reduced mod p), since Firefox refuses at import some
+non-canonical encodings that every other platform takes; the transcript
+keeps the bytes as received. An error from the platform and an all-zero
+result both end the join, as a failed confirmation does: on a low-order
+point every platform raises an error except Dart's `cryptography`, which
+returns zeros, so CPace's own check is the one that acts there. Tested
+2026-11-17 in TypeScript (in Node, Chromium, Firefox and WebKit) and in
+Dart: both pass draft 21's vectors, and joins between them succeed both
+ways, and fail on a wrong code or a low-order point put in by the relay.
 
 **What a host says.** A code hands whoever types it a shell on the
 machine, and a code read out over the phone is how device-code phishing
@@ -810,7 +848,8 @@ before encryption can find the hosted relay; that is what these are for.
   missing versions; the label key and records; typing a join code,
   CPace, and approving by role; following each host's confirmation of a
   removal, and showing additions; acting on removal only from a checked
-  version, and no longer on a 1008 close. CPace is needed only in
+  version, and no longer on a 1008 close; in the app, `cryptography`
+  with its point comparison fixed (section 2). CPace is needed only in
   TypeScript and Dart. `relay-client`, the relay connection the extension
   uses, is Node only; a browser client needs a connection of its own in
   `web/core`, which has none today.
@@ -904,26 +943,22 @@ before encryption can find the hosted relay; that is what these are for.
 
 **Risks, not yet settled:**
 
-- **CPace is an Internet-Draft**, not an RFC. The join pins one version of
-  it and holds every implementation to that version's test vectors in
-  `cases/`. SPAKE2 is an RFC (9382), but needs group addition on Ed25519,
-  which no platform's library offers.
-- **CPace on the platforms' X25519.** CPace's X25519 suite calls the
-  platform's X25519 function on a point it maps to (Elligator2, RFC 9380,
-  about 50 lines of field arithmetic in each language, with the top bit
-  masked as RFC 7748 says). It is believed, not yet tested, that
-  WebCrypto, Node, CryptoKit, Dart's `cryptography` and Go's `crypto/ecdh`
-  each take an arbitrary 32-byte input as a public key; they likely differ
-  on low-order points (some raising an error on an all-zero result, Node
-  perhaps returning zeros), which CPace's own check that the result is not
-  the identity covers either way. The map runs on numbers derived from the
-  password, and will not be constant-time in TypeScript or Dart big
-  integers: a side channel on the device only, not one the relay can
-  measure.
-- **Ed25519 verifiers** (section 2): whether Dart's pure-Dart verifier
-  refuses a non-canonical `S`, as Go and OpenSSL do, is not checked. If it
-  does not, a relay could turn one honest version into two encodings that
-  a Dart client counts as a fork, until `cases/` makes them agree.
+- **CPace is not yet an RFC**: draft 21 is with the RFC Editor. The join
+  pins it and holds every implementation to its test vectors in `cases/`.
+  SPAKE2 is an RFC (9382), but needs group addition on Ed25519, which no
+  platform's library offers. The map to the curve (Elligator2, RFC 9380)
+  runs on numbers derived from the password, and is not constant-time in
+  TypeScript or Dart big integers: a side channel on the device only, not
+  one the relay can measure. The platforms' X25519 was tested 2026-11-17
+  (section 5); Firefox in Playwright's build, not a released Firefox.
+- **Ed25519 verifiers** (section 2): their differences are known and the
+  checks there make them agree, tested 2026-11-17. CryptoKit has changed
+  its answers before (in 2020 it accepted non-canonical keys), which the
+  byte checks cover; a platform that moved to the cofactored equation
+  would show in the mixed-order vectors. The app depends on a patched
+  `cryptography` until upstream fixes its point comparison.
+- **Not tested on iOS 16** itself: no iOS 16 simulator or device was at
+  hand, only iOS 18 and 26 simulators and a compile at an iOS 16 target.
 - **Signature contexts** (section 2) are hardening: no collision with the
   current encodings is known.
 - **Old code** (section 8): how often a machine has two installs of PiRC,
