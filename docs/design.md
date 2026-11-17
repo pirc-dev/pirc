@@ -979,6 +979,27 @@ that started it: the prompt's deadline waits while a question is asked,
 in the extension and in the web app's server. A question also notifies
 (`web.md`, section 6).
 
+**A note with the answer, and Dismiss that stops (decided 2026-11-17).**
+Tested on pi 1.5.2 with an extension asking from `tool_call`, as
+pi-automode does: a dismissed confirm was the same as No (the model
+carried on); a message sent after answering No reached the model a step
+late, after it had already answered the refusal, while one queued before
+the answer arrived with the tool's result in the next model call; and
+`abort()` closed a question only when the asking extension had passed
+pi's signal, leaving the turn hung otherwise. So `Answer` carries an
+optional `note`, sent in the same message: while a turn runs, the
+extension queues it as a steer (`sendUserMessage`, `deliverAs: "steer"`)
+before giving the answer, so the model reads the result and the note in
+one step; with no turn running (a command's question), it is sent as a
+prompt after the answer. A note goes with an option or a confirm's answer,
+not with an input's text (the answer itself) nor with `dismissed`.
+`dismissed` now means "close the question and stop": the extension gives
+the asking extension what Escape would (false for a confirm, nothing
+otherwise) and then aborts the turn, if one runs, so it works whether or
+not the extension passed the signal, and on a command's question. Clients
+show an answerable question in place of the composer, with the note field
+(`web.md`, section 3).
+
 **What a tool's result says beyond its output** (2026-10-30, `ToolResult`):
 how long it ran, from pi's `durationMs` on the result where pi records it
 (its agent core from 1.4), else timed by the extension from

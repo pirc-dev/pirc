@@ -34,8 +34,9 @@ export interface Commands {
   launch: { body: { cwd: string; name?: string }; result: Of<"accepted"> };
   // Answers one of the session's questions (view.ts, QuestionView): an
   // option's index for a select, yes or no for a confirm, text for an
-  // input, or dismissed for any.
-  answer: { body: { questionId: string; option?: number; confirmed?: boolean; text?: string; dismissed?: boolean }; result: Of<"accepted"> };
+  // input, or dismissed for any, which also stops the turn. note goes to
+  // pi with an option or a yes or no, read with what it asked about.
+  answer: { body: { questionId: string; option?: number; confirmed?: boolean; text?: string; dismissed?: boolean; note?: string }; result: Of<"accepted"> };
   stats: { body: object; result: Of<"stats"> };
   models: { body: object; result: Of<"models"> };
 }

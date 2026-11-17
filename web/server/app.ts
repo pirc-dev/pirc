@@ -225,7 +225,9 @@ const COMMANDS: { [K in CommandName]: ServerCommand & { result: Commands[K]["res
         : typeof b.text === "string" ? { case: "text" as const, value: b.text }
         : undefined;
       if (!value) return "an answer is an option, yes or no, text, or dismissed";
-      return { case: "answer", value: { requestId, questionId, value } };
+      // The extension refuses one with text or dismissed (session.proto).
+      const note = str(b.note)?.trim() ?? "";
+      return { case: "answer", value: { requestId, questionId, value, note } };
     },
     result: "accepted",
   },

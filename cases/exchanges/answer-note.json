@@ -1,0 +1,245 @@
+{
+ "about": "an answer goes to the session with its note, as given: a confirm's yes with a note, and a dismiss",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "name": "",
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.5.2",
+        "extensionVersion": "0.3.9",
+        "working": true,
+        "questions": [
+         {
+          "id": "q1",
+          "kind": "QUESTION_KIND_CONFIRM",
+          "title": "Run it?",
+          "message": "bash {\n  \"command\": \"ls\"\n}",
+          "answerable": true,
+          "askedAt": "1970-01-01T00:00:00Z"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": true,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.9",
+      "questions": [
+       {
+        "id": "q1",
+        "kind": "confirm",
+        "title": "Run it?",
+        "message": "bash {\n  \"command\": \"ls\"\n}",
+        "answerable": true,
+        "askedAt": 0
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "answer": {
+      "requestId": "a1",
+      "questionId": "q1",
+      "confirmed": true,
+      "note": "Also list the hidden files"
+     }
+    }
+   },
+   "as": "a"
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "answer": {
+        "requestId": "a1",
+        "questionId": "q1",
+        "confirmed": true,
+        "note": "Also list the hidden files"
+       },
+       "requestId": "a1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "accepted": {
+       "requestId": "a1"
+      }
+     }
+    }
+   }
+  },
+  {
+   "reply": {
+    "as": "a",
+    "is": {
+     "accepted": {
+      "requestId": "a1"
+     }
+    }
+   }
+  },
+  {
+   "ask": {
+    "id": "0101010101010101-i1",
+    "body": {
+     "answer": {
+      "requestId": "b1",
+      "questionId": "q1",
+      "dismissed": true
+     }
+    }
+   },
+   "as": "b"
+  },
+  {
+   "sent": [
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "answer": {
+        "requestId": "b1",
+        "questionId": "q1",
+        "dismissed": true
+       },
+       "requestId": "b1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "accepted": {
+       "requestId": "b1"
+      }
+     }
+    }
+   }
+  },
+  {
+   "reply": {
+    "as": "b",
+    "is": {
+     "accepted": {
+      "requestId": "b1"
+     }
+    }
+   }
+  }
+ ]
+}

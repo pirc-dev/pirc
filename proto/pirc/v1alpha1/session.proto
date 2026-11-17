@@ -403,10 +403,13 @@ message Launch {
 // Answers one of the session's questions (SessionAnnouncement.questions),
 // as the person would in pi's terminal, which then closes its dialog:
 // option for a select (its index), confirmed for a confirm, text for an
-// input, or dismissed for any of them, as Escape does. INVALID when the
-// question is no longer asked, cannot be answered from a client, or the
-// answer does not fit it. Accepted once the extension has its answer; the
-// question then leaves the announcement.
+// input. dismissed, for any of them, closes the question and stops the
+// turn: the extension gets what Escape gives it (false for a confirm,
+// nothing for the others), and the turn under way, if one is, is aborted,
+// whether or not the asking extension gave its question pi's stop signal.
+// INVALID when the question is no longer asked, cannot be answered from a
+// client, or the answer does not fit it. Accepted once the extension has
+// its answer; the question then leaves the announcement.
 message Answer {
   string request_id = 1;
   string question_id = 2;
@@ -416,6 +419,13 @@ message Answer {
     string text = 5;
     bool dismissed = 6;
   }
+  // A message for pi, sent with an option or a confirm's answer (not with
+  // text, which is the answer itself, nor with dismissed: INVALID). While
+  // a turn runs, it is queued as a steer before the answer is given, so
+  // the model reads it with the result of what it asked about, in the same
+  // step; with no turn running (a command's question), it is sent as a
+  // prompt after the answer. Empty: none.
+  string note = 7;
 }
 
 // Moves the session to another point of its tree, as pi's /tree, in the
