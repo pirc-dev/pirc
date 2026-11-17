@@ -452,9 +452,13 @@ try {
     q = await asked("confirm");
     const before = requests.length;
     assert.ok((await answer(q.id, { confirmed: true, note: "Say hello afterwards" })).ok);
-    await settled(answers().length + 1);
+    // The chat already ends in a finished reply, and pi is idle until the
+    // note's run starts: wait for the note itself.
+    const sent = () => requests.slice(before).some((r) => said(r.at(-1)!).includes("Say hello afterwards"));
+    for (let i = 0; i < 100 && !sent(); i++) await sleep(100);
+    assert.ok(sent(), "the note was not sent as a prompt");
     assert.equal(answers().at(-1), "command=true");
-    assert.ok(requests.slice(before).some((r) => said(r.at(-1)!).includes("Say hello afterwards")), "the note was not sent as a prompt");
+    await settled(answers().length);
     await prompted;
   }
 
