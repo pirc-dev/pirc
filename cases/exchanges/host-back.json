@@ -1,0 +1,418 @@
+{
+ "about": "a host back within the grace after its session ended (its connection dropped) is attached again and caught up, so that its events reach the client",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.5.2",
+        "extensionVersion": "0.3.10"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.10"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "1",
+       "items": [
+        {
+         "turnId": "u1",
+         "at": "2026-11-17T10:00:00Z",
+         "userMessage": {
+          "text": "one"
+         },
+         "entryId": "u1"
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1794909600000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.10",
+      "last": {
+       "who": "user",
+       "text": "one",
+       "at": 1794909600000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionEnded": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     }
+    }
+   }
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "in": {
+    "sessionUpdated": {
+     "entry": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "hostLabel": "laptop",
+      "announcement": {
+       "cwd": "/src/app",
+       "hostname": "laptop.local",
+       "piVersion": "1.5.2",
+       "extensionVersion": "0.3.10"
+      }
+     }
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-2",
+        "limit": 200,
+        "afterEntryId": "u1"
+       },
+       "requestId": "id-2"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-2",
+       "seq": "2",
+       "fromEntry": true,
+       "items": [
+        {
+         "turnId": "u2",
+         "at": "2026-11-17T10:01:00Z",
+         "userMessage": {
+          "text": "two"
+         },
+         "entryId": "u2"
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1794909600000,
+        "entryId": "u1",
+        "text": "one",
+        "images": []
+       },
+       {
+        "kind": "user",
+        "id": "e-u2",
+        "turnId": "u2",
+        "at": 1794909660000,
+        "entryId": "u2",
+        "text": "two",
+        "images": []
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.10",
+      "last": {
+       "who": "user",
+       "text": "two",
+       "at": 1794909660000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "3",
+       "at": "2026-11-17T10:02:00Z",
+       "item": {
+        "turnId": "u3",
+        "at": "2026-11-17T10:02:00Z",
+        "userMessage": {
+         "text": "three"
+        },
+        "entryId": "u3"
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "user",
+      "id": "e-u3",
+      "turnId": "u3",
+      "at": 1794909720000,
+      "entryId": "u3",
+      "text": "three",
+      "images": []
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.10",
+      "last": {
+       "who": "user",
+       "text": "three",
+       "at": 1794909720000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1794909600000,
+       "entryId": "u1",
+       "text": "one",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u2",
+       "turnId": "u2",
+       "at": 1794909660000,
+       "entryId": "u2",
+       "text": "two",
+       "images": []
+      },
+      {
+       "kind": "user",
+       "id": "e-u3",
+       "turnId": "u3",
+       "at": 1794909720000,
+       "entryId": "u3",
+       "text": "three",
+       "images": []
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  }
+ ]
+}

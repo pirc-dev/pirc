@@ -437,6 +437,9 @@ export class Client {
       this.attach(live);
       return id;
     }
+    // Back within the grace after ending: its host reconnected, and the
+    // relay made the session again, with no client attached to it.
+    const back = s.endTimer !== undefined;
     this.clock.clearTimeout(s.endTimer);
     s.endTimer = undefined;
     if (JSON.stringify(view) !== JSON.stringify(s.view)) {
@@ -453,9 +456,12 @@ export class Client {
       s.historyId = undefined;
       this.o.onEvent({ type: "chatReset", id, chat: s.chat });
       this.attach(s);
-    } else if (this.listing && s.historyId === undefined) {
-      // After a reconnect: attach again, and catch up on what was missed.
+    } else if (back || (this.listing && s.historyId === undefined)) {
+      // After a reconnect, this client's or the host's: attach again, and
+      // catch up on what was missed. A history asked of the session that
+      // ended will not come.
       s.ref = ref;
+      if (back) s.historyId = undefined;
       this.attach(s);
     }
     return id;

@@ -484,6 +484,40 @@ try {
     await prompted;
   }
 
+  // The relay ends a session when its host's connection drops, and makes it
+  // again, with nobody attached, when the host comes back; a client still
+  // within its grace for the session must attach again (cases/exchanges/
+  // host-back.json).
+  const replied = async (text: string) => {
+    const before = chat.items.length;
+    assert.ok((await post<Outcome>(`/api/sessions/${encodeURIComponent(id)}/prompt`, { text })).ok);
+    await until(`the reply to "${text}"`, (items) => items.length > before && items.at(-1)?.kind === "assistant"
+      && !(items.at(-1) as { streaming: boolean }).streaming && !session?.working);
+  };
+  step("the host's connection dropped and back at once: the chat still follows");
+  {
+    const from = relay.log().length;
+    // Whatever pi put back in its input box (what was queued when a turn
+    // was stopped) goes first.
+    pi.keys("C-u");
+    pi.keys("/pirc reconnect", "Enter");
+    for (let i = 0; i < 100 && !/msg=connected role=host label=e2e-host/.test(relay.log().slice(from)); i++) await sleep(100);
+    assert.match(relay.log().slice(from), /msg=disconnected role=host label=e2e-host[\s\S]*msg=connected role=host label=e2e-host/, pi.screen());
+    await replied("after the host's reconnect");
+  }
+
+  step("the relay restarted: the chat still follows, whichever logs in first");
+  {
+    // Which comes back first is up to their backoffs (a stopped pi cannot
+    // hold back: tmux continues a pane's process).
+    const from = relay.log().length;
+    await relay.kill();
+    relay.start();
+    for (let i = 0; i < 150 && !/msg=connected role=host label=e2e-host/.test(relay.log().slice(from)); i++) await sleep(100);
+    for (let i = 0; i < 150 && !/msg=connected role=client label=e2e-web/.test(relay.log().slice(from)); i++) await sleep(100);
+    await replied("after the restart");
+  }
+
   step("a new agent opens beside pi, in a folder of the host's, in a window named as asked, and announces its launch; stopping it ends it");
   {
     type Snap = { sessions: SessionView[] };
@@ -653,7 +687,7 @@ try {
 
   step("the prompts reached pi's terminal");
   // The last the app sent; earlier ones have scrolled away.
-  assert.match(pi.screen(), /Say hello afterwards/);
+  assert.match(pi.screen(), /after the restart/);
 
   step("revoking the passkey signs it out");
   cli("revoke", "e2e-phone");

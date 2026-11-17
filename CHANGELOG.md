@@ -6,6 +6,13 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- The web app keeps following a session whose computer reconnects to the
+  relay within a few seconds, as when the relay restarts; before, its
+  chat stopped updating, though messages still reached pi. The iOS and
+  Android apps get the same fix in their next store build.
+
 ## 0.3.10 (2026-11-17)
 
 - Dismiss on a question asked before pi started on your message (some
