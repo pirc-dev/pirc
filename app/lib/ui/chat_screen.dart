@@ -1137,11 +1137,15 @@ class _AskState extends State<_Ask> {
             child: Text(label, style: look.text(size: 15, weight: left ? FontWeight.w500 : FontWeight.w600, color: primary ? look.onAccent : look.ink, spacing: 0)),
           ),
         );
+    // Dismiss is a whole 44 points tall, as a finger needs: 6 more above
+    // and below its text than it shows, taken from the gap over it and the
+    // card's padding under it, so the card looks the same.
+    final dismiss = q.answerable;
     return Semantics(
       label: 'pi asks',
       container: true,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: EdgeInsets.fromLTRB(14, 12, 14, dismiss && _error == null ? 6 : 12),
         decoration: BoxDecoration(color: look.blockWash, borderRadius: BorderRadius.circular(16)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 10, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1161,34 +1165,39 @@ class _AskState extends State<_Ask> {
               ]),
             ),
           ]),
-          if (q.answerable && q.kind == 'select')
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
-              for (final (i, o) in (q.options ?? const <String>[]).indexed) choice(o, () => _answer(option: i), left: true),
-            ]),
-          if (q.answerable && q.kind == 'confirm')
-            Row(spacing: 8, children: [choice('Yes', () => _answer(confirmed: true), primary: true), choice('No', () => _answer(confirmed: false))]),
-          if (q.answerable && q.kind == 'input')
-            Row(spacing: 8, children: [
-              Expanded(
-                child: CupertinoTextField(
-                  controller: _text,
-                  placeholder: q.placeholder,
-                  style: look.text(size: 15),
-                  placeholderStyle: look.text(size: 15, color: look.ink3),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                  decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: look.rule)),
-                  onSubmitted: (v) => _answer(text: v),
+          if (dismiss)
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
+              if (q.kind == 'select')
+                Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [
+                  for (final (i, o) in (q.options ?? const <String>[]).indexed) choice(o, () => _answer(option: i), left: true),
+                ]),
+              if (q.kind == 'confirm')
+                Row(spacing: 8, children: [choice('Yes', () => _answer(confirmed: true), primary: true), choice('No', () => _answer(confirmed: false))]),
+              if (q.kind == 'input')
+                Row(spacing: 8, children: [
+                  Expanded(
+                    child: CupertinoTextField(
+                      controller: _text,
+                      placeholder: q.placeholder,
+                      style: look.text(size: 15),
+                      placeholderStyle: look.text(size: 15, color: look.ink3),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: look.rule)),
+                      onSubmitted: (v) => _answer(text: v),
+                    ),
+                  ),
+                  choice('Send', () => _answer(text: _text.text), primary: true),
+                ]),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: const Size(44, 44),
+                  onPressed: _sending ? null : () => _answer(dismissed: true),
+                  child: Text('Dismiss', style: look.text(size: 14, color: look.ink2, spacing: 0)),
                 ),
               ),
-              choice('Send', () => _answer(text: _text.text), primary: true),
             ]),
-          if (q.answerable)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              minimumSize: const Size(0, 32),
-              onPressed: _sending ? null : () => _answer(dismissed: true),
-              child: Text('Dismiss', style: look.text(size: 14, color: look.ink2, spacing: 0)),
-            ),
           if (_error != null) Text(_error!, style: look.text(size: 13.5, color: look.block, spacing: 0)),
         ]),
       ),

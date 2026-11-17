@@ -11,6 +11,9 @@ release that needs its parts upgraded together says so here.
 - The web app opens a long session quickly: it loads the latest 100
   messages and tool calls, and earlier ones as you scroll up, keeping your
   place. What it loads is sent compressed.
+- In the iOS and Android apps, Dismiss under a question takes a tap a
+  little above or below the word, as the buttons beside it do, from their
+  next store build.
 
 ## 0.3.8 (2026-11-15)
 

@@ -1297,6 +1297,26 @@ void main() {
     await tester.pump(const Duration(seconds: 46));
   }, skip: !drawsGoldens);
 
+  testWidgets("a question's Dismiss takes a finger's tap a little off its word", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2')));
+    await tester.pump();
+    // 17 points above and below the word: outside the 32 points it had,
+    // where a tap on the simulator went unanswered, inside 44.
+    for (final dy in [-17.0, 17.0]) {
+      sent.clear();
+      await tester.tapAt(tester.getCenter(find.text('Dismiss')).translate(0, dy));
+      await tester.pump();
+      final answer = SessionMessage.fromBuffer(sent.single.routed.payload).answer;
+      expect((answer.questionId, answer.dismissed), ('q1', true), reason: '$dy from the word');
+      model.client.onFrame(Frame(routed: Routed(session: sent.single.routed.session, payload: SessionMessage(error: Error(requestId: answer.requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'again')).writeToBuffer())));
+      await tester.pump();
+    }
+    // Unanswered here: its deadline passes.
+    await tester.pump(const Duration(seconds: 46));
+  });
+
   testWidgets('a message sent while pi works steers, unless Queue is chosen', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
