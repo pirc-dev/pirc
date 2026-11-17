@@ -6,7 +6,7 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
-## Unreleased
+## 0.3.9 (2026-11-17)
 
 - The web app opens a long session quickly: it loads the latest 100
   messages and tool calls, and earlier ones as you scroll up, keeping your
