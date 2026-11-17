@@ -2143,10 +2143,13 @@ Each step ends with something that can be seen working.
        AI service of its own (it controls the user's own pi), so it
        declares No to both.
 
-    **Open**: who serves the hosted web client's page (`e2e.md`,
-    section 11). Since every client can run commands on every host, the
-    page's server can too; serving it apart from the relay, as fixed files
-    on a static host, was proposed on 2026-11-17 and is not yet decided.
+    7. **The hosted web client's page** (decided 2026-11-17) is served as
+       fixed files from Cloudflare Pages, apart from the relay, so that
+       getting into the relay does not give anyone the page. Every client
+       can run commands on every host, so whoever controls the page's code
+       controls every account with a browser on it; with the page apart,
+       that takes Cloudflare Pages or the publisher's deploy of it, not the
+       relay (`e2e.md`, section 9).
 15. **Open**: licence, public repository, pirc.dev, store listings.
     Planned 2026-11-07, for self-hosters first: it does not wait for the
     hosted relay (step 14), which comes after as its own release, and

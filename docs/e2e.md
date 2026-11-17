@@ -829,7 +829,13 @@ before encryption can find the hosted relay; that is what these are for.
   "The web app stays as it is"): keys in the browser, made by WebCrypto
   as non-extractable keys in IndexedDB. It joins by showing a code. It
   still trusts the page's code on every load, which is the cost of any web
-  client, and is stated so. Safari deletes a site's storage after seven
+  client, and is stated so. Since every client is a shell on every host,
+  whoever controls the page's code controls every account with a browser
+  on it. **Decided** (2026-11-17, `design.md` step 14): the page is served
+  as fixed files from Cloudflare Pages, apart from the relay, so that
+  getting into the relay does not give anyone the page; what an account
+  with a browser trusts is then Cloudflare Pages and the publisher's
+  deploy of the page, besides its own devices. Safari deletes a site's storage after seven
   days without use unless it is installed (added to the Dock or home
   screen), so in Safari it is to be installed, or it loses its keys and
   stays on the list as a device nobody holds; clients show, for each
@@ -886,10 +892,6 @@ before encryption can find the hosted relay; that is what these are for.
 
 ## 11. Open
 
-- **Who serves the hosted web client's page, and what an account with a
-  browser trusts.** Since every client is a shell on every host, whoever
-  controls the page's code controls the account; raised by the second
-  review, and waiting on the owner's decision.
 - **A QR code** for joining, beside the typed code, where a camera can see
   the screen (section 5).
 - **The lengths of time**: a pre-key's 14 days and its weekly renewal, the
