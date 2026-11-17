@@ -2,14 +2,17 @@
 
 Status: **Open**. A proposal, 2026-11-15, for the first step towards a
 hosted relay (`design.md`, section 5.1 and section 12, step 14), revised
-2026-11-17 after two independent reviews, and corrected the same day by
+2026-11-17 after two independent reviews, corrected the same day by
 tests of its riskiest assumptions on every platform (sections 2, 5 and
-11). Nothing here is built. The
+11), and revised again after a third review, by Kimi K3 and GLM 5.3. Nothing here is built. The
 owner's decisions it takes as given are marked **Decided**; the rest is
 proposed.
 
 The aim: a relay that routes every session but can read none of them, and
-cannot add a device to an account. Today a relay is trusted completely
+cannot add a device to an account. A browser is the exception: it runs the
+page's code as served on every load, so whoever controls that code can
+read and act through it; the page is kept apart from the relay (section
+9). Today a relay is trusted completely
 (`design.md`, section 6), which is acceptable only because it is the
 person's own. A relay run by someone else, the publisher's included, must
 be able to see only what it needs to route: which devices are in an
@@ -62,7 +65,8 @@ as it is, unencrypted, for good (section 8).
   keep an old private key alive. Hosts wrap only for a current pre-key of
   a device on the list. The relay stores the latest of each device's and
   hands them out; a relay that holds back a new one can keep an old one in
-  use for at most its 14 days. Pre-keys are outside the list, so renewing
+  use until it expires, at most 14 days after it was made, a week past
+  the renewal held back. Pre-keys are outside the list, so renewing
   one changes no version of it.
 - **Encryption, for hosts: one X25519 key per process, per day**, made with
   its sending keys and gone with them (section 4). A host has no
@@ -76,8 +80,12 @@ pre-key, stored as its signing key is:
 - the main pre-key's private key with the same protection as the main
   Ed25519 key: released only by Face ID or the PIN, on this device only.
   So the main pre-key is renewed only while the app is open and unlocked.
-  A phone stolen while locked yields at most the read-only key's secrets,
-  which open announcements, not the conversation. A phone whose app is not
+  A phone stolen while locked yields at most the read-only key's secrets:
+  the label key, so every device's name, and the announcements of every
+  session on every host, which hold each session's name, folder and model
+  and its latest notice, the agent's question in its own words. Not the
+  rest of the conversation. That is what a notification needs, and so
+  what a locked phone gives up. A phone whose app is not
   opened for 14 days stops getting the conversation key until it is,
   which is fine;
 - the read-only pre-key readable from the first unlock, and renewed by
@@ -127,8 +135,10 @@ upstream too). So:
   of the ten encodings of small-order points (the eight canonical ones,
   and the two non-canonical ones that decode);
 - the equation is the cofactorless one that every platform's API
-  computes. Mixed-order keys are not refused: only curve arithmetic of
-  our own could find them, and honest keys never are;
+  computes. Mixed-order keys are not refused. With the byte checks, every
+  verifier computes the same function of the bytes for them, so they do
+  not split verifiers; finding them would take curve arithmetic of our
+  own; and honest keys never are;
 - the app uses `cryptography` with the two-line fix to its point
   comparison, by `dependency_overrides`, until upstream takes it.
 
@@ -175,11 +185,14 @@ The list (`design.md`, section 5.2) is a chain of versions. Each holds:
 signs it. Every later version is valid only when signed by a client (not
 a read-only key, not a host) in the version before it. That is today's
 rule in another form: any registered client may approve, rename, remove
-and invite (`design.md`, section 5.3). Hosts sign nothing, since a host
-that could add a client could give itself a shell on every other host. A
-version that removes a client but keeps its read-only key is invalid:
-both go together, a rule the relay applies today (`design.md`, section 7)
-and the list now carries.
+and invite (`design.md`, section 5.3). Hosts sign no version of the list
+(they sign bundles and announcements, section 4), since a host that could
+add a client could give itself a shell on every other host. A version
+that removes a client but keeps its read-only key is invalid: both go
+together, a rule the relay applies today (`design.md`, section 7) and the
+list now carries. So is a version with no client in it: the last client
+cannot remove itself, as today a client cannot remove the key it asks
+with (`design.md`, section 5.3). The relay and every device refuse both.
 
 **Every client is a shell on every host.** **Decided**, by design: there
 are no read-only hosts and no permissions per client. A client on the
@@ -221,9 +234,17 @@ withdrawal. So:
   branch as needing `/pirc join`. It says that the relay may have caused
   it, and names the other branch's signer as a suspect only if that device
   has been removed.
+- **A client that adopted neither branch** (one that was away, or has
+  just joined) takes neither: it says so, and is joined again from a
+  client of the person's choosing.
 - **A host** shown a fork that no withdrawal explains stops serving, and
   says so at its terminal: it cannot tell which branch is its account's.
   It is joined again with `/pirc join`.
+- **A device added by a version that is then withdrawn**, so that the
+  winning branch lacks it, has not been removed: its join failed. It
+  stops and says so, deletes nothing, and can be joined again. Otherwise
+  a relay that tells the adding client its version lost could make a new
+  device wipe itself.
 
 So the relay, with a stolen key of a removed device, can stop a host until
 the person is at it; without one, only until a withdrawal reaches it.
@@ -231,15 +252,22 @@ Neither can make the person's own clients stop.
 
 **Labels.** The relay needs keys and roles to admit and route, but not
 the names. Names are in a label record, outside the list: each device's
-label, encrypted under a label key, with a counter and the list version
-it belongs to, signed by a client. A device takes a record only with a
-higher counter than the one it has; two records with the same counter (two
-clients renaming at once) are ordered by their hashes, the higher winning,
-so every device ends with the same one. The label key is one symmetric
-key shared by the clients and read-only keys, made new only when a client
-or read-only key is removed, and wrapped by the client that makes it for
-each current pre-key, each wrap signed by that client, so that the relay
-cannot hand a device a label key of its own. A device keeps it once it has
+label, encrypted under a label key, with the label key's ID, a counter and
+the list version it belongs to, signed by a client. The label key is one
+symmetric key shared by the clients and read-only keys, made new only when
+a client or read-only key is removed, by the client that removes it, and
+wrapped by that client for each current pre-key, each wrap signed by it,
+so that the relay cannot hand a device a label key of its own. A label key
+is named by the list version that made it; the client that makes one
+writes at once a label record under it, with the current names. Records
+and wraps are taken only from a signer that is a client on the list as
+the device now has it. A device orders records by their label key's list
+version first, then by counter, which starts again at 1 under each new
+label key, so that a client removed after writing a huge counter leaves
+nothing stuck; two records alike in both (two clients renaming at once)
+are ordered by their hashes, the higher winning, and two label keys made
+for the same version (two removals at once) the same way, so every device
+ends with the same one. A device keeps it once it has
 it; a new device gets it, with the current record's counter, in the join
 (section 5); a device whose pre-key expired while it was away gets it
 wrapped again by any client once it publishes a new one. Renaming is a new
@@ -256,10 +284,14 @@ takes a new one only if it chains from it.
 **A host's anchor.** A host's processes share the account's state in a
 folder of their own, not in `host.json`: the relay's address, the account
 ID, and one file per version they have checked, named by its number and
-hash, each created with an exclusive link (the call `relay-client` uses to
+hash, and one per withdrawal it has checked, named by the hash withdrawn,
+each created with an exclusive link (the call `relay-client` uses to
 create a key file once), so that a file is never replaced. The anchor is
-the highest version present. A process that finds its link refused because
-the same number is there with another hash has found a fork. Every process
+the highest version present that is not withdrawn, on the chain from the
+version `/pirc join` set. Two versions with one number, neither
+withdrawn, are a fork, which every process finds by reading the folder.
+The folder is never pruned: a version is a few hundred bytes, and an
+account makes a few dozen a year. Every process
 reads the folder before it checks a request's signer and before it signs a
 bundle, and makes new keys at once when it finds a removal there, so that
 no process stays on an older version than another has seen.
@@ -362,8 +394,9 @@ wrap`, the account ID, the host key, the key ID and the recipient's
 Ed25519 key. It signs the bundle with the host's Ed25519 key. The
 signature covers the account ID, the host key, the instance ID, the key
 ID, when the bundle was made, the list version, the process's request
-key, every recipient's Ed25519 key, pre-key and ciphertext, and the
-bundle's context. It publishes the bundle to the relay, which stores it by
+key, every recipient's Ed25519 key, pre-key and ciphertexts, each
+ciphertext marked as the announcement key or the conversation key, in a
+fixed order, and the bundle's context. It publishes the bundle to the relay, which stores it by
 key ID, since two connections can serve one `SessionRef` during a
 handover, keeps it while a stored announcement uses that key ID, and
 sends it to clients with the session list. With a few dozen devices, that
@@ -425,8 +458,11 @@ even with the relay's help.
   announcement to another.
 - *Everything routed*: the payload of `Routed`, both broadcasts and
   answers to one client, is encrypted with the conversation key. An
-  answer meant for one client can be read by every other client of the
-  account, which can ask for the same answer anyway. These are not
+  answer meant for one client could be read by any other client of the
+  account that put the recipient's key in the additional data (below),
+  which can ask for the same answer anyway: the recipient in the
+  additional data stops the relay from moving an answer, not other
+  clients from reading it. These are not
   signed: only clients have the conversation key, and a client is a shell
   on the host already. A removed client's copy is what the checks above
   shut out.
@@ -442,11 +478,17 @@ even with the relay's help.
   came for, and whether it is a broadcast or an answer to itself. So the
   relay cannot move a frame from one session to another, or from one
   client to another, without its failing.
-- **No replays.** A client accepts, under each key ID, only counters
-  higher than the last it accepted. It sees only some of a process's
-  frames (those for the sessions it is attached to, and its own answers),
-  but in order. The one exception is the stored announcement, which may
-  come again with the same counter and the same bytes.
+- **No replays.** A client keeps, for each key ID and session, the
+  highest counter it has accepted, in its storage, so that a restart
+  forgets nothing (a key ID lives at most 26 hours, so this stays small),
+  and accepts only higher ones. A process's counter is one for all its
+  sessions, so a client sees gaps (the sessions it is not attached to,
+  others' answers), but within a session, in order. The one exception is
+  the stored announcement, which may come again with the same counter and
+  the same bytes. On the first look at a session the client has no
+  counter for, it takes the stored announcement it is given: that is the
+  rollback of section 7, at most as old as the bundle's 26 hours, and the
+  client shows when the announcement was made.
 
 **What a client sends.** Each request (`Routed` from a client) is put in
 an envelope that holds:
@@ -455,7 +497,9 @@ an envelope that holds:
   ID, instance ID) and the key ID of the process's request key;
 - the direction, client to host;
 - the time, and a counter, which goes up with each envelope this client
-  sends under that request key, kept by the client in its storage;
+  sends under that request key, kept by the client in its storage and
+  written there before the envelope is sent, so that a crash cannot send
+  one counter twice;
 - the client's latest list version, with any versions and withdrawals the
   host is missing (section 3);
 - the request itself;
@@ -483,8 +527,7 @@ in this order:
    the relay says;
 6. that its time is within two minutes of the host's own, and its counter
    higher than the last it accepted from that client under this request
-   key;
-7. that it is not a repeat (below).
+   key.
 
 Only then does it run it. Requests are few and small (prompts, actions),
 so a key exchange and a signature each cost nothing.
@@ -501,13 +544,11 @@ repeated request ID is how a client retries: after a retryable error
 (`BUSY`, `TIMEOUT` and the like), a repeat runs again (`design.md`,
 section 7). So a repeat of the same request ID cannot be the test. Instead:
 
-- The process records every envelope it accepts, by its HPKE
-  encapsulated key, which is new for every encryption, and refuses the
-  same one again. It keeps each for four minutes, twice the window,
-  measured on a monotonic clock, so that a change of the system clock
-  cannot shorten it. The set belongs to the request key, and goes when it
-  does; an envelope for an old key cannot be opened after that key is
-  gone.
+- The counter is the test: an envelope seen before has a counter no
+  higher than the last accepted from its client under that request key,
+  and is refused at step 6. Only a listed client can make an envelope
+  that passes step 4, and the relay cannot open one to make it anew. The
+  process takes one envelope at a time, so two copies cannot both pass.
 - A client's retry is a new envelope, with a new time, a higher counter
   and a new encryption. It keeps its request ID, so that a retry of a
   request the host has already answered gets that answer, and is not run
@@ -564,16 +605,22 @@ this short, anything but a PAKE would let it find the secret from the
 first message it carried (section 10). A relay that poses as the waiting
 device to the client gets its guess without the real device seeing
 anything, so the client, not only the new device, reports every failed
-join plainly, as a possible attack.
+join plainly, as a possible attack. Anyone signed up can also burn
+codes by trying lookups at random (about one in a million each), which
+costs the person only a new code; the relay caps lookups per account and
+per address (section 6).
 
 **The exchange.** Through the relay:
 
 1. `/pirc join` at the host's terminal (or the join screen of a new
    browser or phone) makes the code and a nonce, and waits.
-2. The person types the code into a client. The two run CPace, with a
-   session ID made of the string `pirc-join-v1`, the relay's origin, the
-   lookup characters and the nonce, and confirm the key in both
-   directions. A failed confirmation ends the join on both sides. From
+2. The person types the code into a client. The two run CPace, with, as
+   its channel identifier, the string `pirc-join-v1`, the relay's origin
+   and the lookup characters, and, as its session ID, the nonce, which
+   the device sends with its first CPace message (each part
+   length-prefixed, as CPace's `lv_cat`), and confirm the key in both
+   directions. A relay that changes the nonce makes the confirmation
+   fail. A failed confirmation ends the join on both sides. From
    CPace's key, HKDF derives one key for each direction; each message is
    AES-256-GCM under its direction's key, with a counter as its nonce, and
    carries the hash of the transcript so far.
@@ -640,7 +687,8 @@ logs.
 A hosted relay holds many accounts. The account ID is in `Hello`, and in
 the login signature (section 2). The relay routes only within an account:
 a session's frames go only to that account's clients, and a key logs in to
-the accounts whose latest version lists it. A device belongs to one
+the account its `Hello` names, only if that account's latest version
+lists it. A device belongs to one
 account; a person with two accounts uses two installs, as now with two
 relays. Sharing between accounts is not part of this. The relay's registry
 holds one account today (`relay/internal/registry`); holding many is a
@@ -660,7 +708,8 @@ let in one the list does not have, and cannot read what it routes.
   trial, and the browsers on it are included. Accounts with no phone pay
   later, by Stripe or a merchant of record.
 - Against abuse: the hosted relay has a domain of its own, not
-  `pirc.dev`; there are caps per account and per address; sign-ups can be
+  `pirc.dev`; there are caps per account and per address, join lookups
+  among them; sign-ups can be
   closed, to invite codes only; an account can be deleted; and abuse
   reports go to an `abuse@` address.
 
@@ -734,9 +783,10 @@ still:
   session, before a question was asked, say; counters catch a rollback
   within a stream, not on the first view. This is withholding by another
   name;
-- hold back a device's new pre-key, keeping its old one in use for up to
-  14 days, or keep a new one from the hosts, so that the device stops
-  reading after two days (section 2);
+- hold back a device's new pre-key, keeping its old one in use until it
+  expires (a week past the renewal held back), or keep a published new
+  one from the hosts, so that the device stops reading two days later,
+  when it deletes the old private key (section 2);
 - answer a client's join attempt as the waiting device, for one guess at
   the code (section 5).
 
@@ -797,13 +847,20 @@ found the hosted relay's address, a malicious relay would answer it in
   version refuses before it opens a socket: an address with the scheme
   `pirc-e2e:`, which their `relayURL()` rejects, as it rejects anything
   but `ws:` and `wss:`. Old code then fails to connect, and says so.
-- New code with an anchor ignores `PIRC_RELAY` and refuses to start if it
-  names another relay.
+- New code with an anchor refuses to start while `PIRC_RELAY` is set at
+  all, since the anchor holds the address and an environment variable is
+  read by every install on the machine, old code included, which takes
+  it before `host.json`; `/pirc join` refuses while it is set.
+- The hosted relay never speaks `v1alpha1`. That stops only accidents:
+  a malicious relay answers however it likes.
 - A test runs the last unencrypted release against a host that has joined
   a hosted account, and checks that it does not connect.
 
 A hosted account is safe from a downgrade only as long as no code from
-before encryption can find the hosted relay; that is what these are for.
+before encryption connects to the hosted relay. Its address is public, so
+these cannot make it unfindable: they keep PiRC's own configuration from
+leading old code there. Old code pointed at it by hand, by a setting of
+its own, is not covered.
 
 ## 9. What changes in each part
 
@@ -940,6 +997,10 @@ before encryption can find the hosted relay; that is what these are for.
   first guesses.
 - **Padding** frames to fixed sizes, and hiding session IDs from the
   relay (section 7).
+- **Moving the hosted relay's domain.** The anchor holds the relay's
+  origin and every login signs it, so a move means `/pirc join` at every
+  host and every client signing in again. A move signed by the account's
+  clients, in a version of the list, may come later.
 
 **Risks, not yet settled:**
 

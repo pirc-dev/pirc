@@ -2085,7 +2085,9 @@ Each step ends with something that can be seen working.
     and corrected after tests of its riskiest assumptions on every
     platform (2026-11-17): the join's CPace, Ed25519 verifiers, and HPKE
     in the iOS notification extension. They found a bug in the app's
-    Ed25519 verifier (Dart `cryptography` 2.9.0), to be patched.
+    Ed25519 verifier (Dart `cryptography` 2.9.0), to be patched. A third
+    review (Kimi K3 and GLM 5.3, 2026-11-17) found no better design, and
+    gaps that are now closed in it.
 
     **Decided** (2026-11-16, one at a time with the owner):
     1. **Price.** The hosted relay comes with the app's subscription: an
