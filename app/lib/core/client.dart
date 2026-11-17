@@ -439,6 +439,9 @@ class Client {
       _attach(live);
       return id;
     }
+    // Back within the grace after it ended: the relay made it afresh, with
+    // nobody attached.
+    final back = s.endTimer != null;
     _clock.clearTimeout(s.endTimer);
     s.endTimer = null;
     if (jsonEncode(view.toJson()) != jsonEncode(s.view.toJson())) {
@@ -455,9 +458,12 @@ class Client {
       s.historyId = null;
       onEvent(ChatReset(id, s.chat));
       _attach(s);
-    } else if (_listing != null && s.historyId == null) {
-      // After a reconnect: attach again, and catch up on what was missed.
+    } else if (back || (_listing != null && s.historyId == null)) {
+      // After a reconnect, the client's or the host's: attach again, and
+      // catch up on what was missed. A history asked of the ended session
+      // will not come.
       s.ref = ref;
+      if (back) s.historyId = null;
       _attach(s);
     }
     return id;
