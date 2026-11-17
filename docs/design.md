@@ -2120,6 +2120,14 @@ Each step ends with something that can be seen working.
        - more than 1 TB of traffic a month, or more than 20% of the
          shared server's CPU, sustained;
        - 500 accounts.
+    6. **China mainland** (decided 2026-11-17): the hosted relay, with its
+       end-to-end encryption, is not offered on App Store storefronts in
+       China mainland; the app checks its storefront. There PiRC stays
+       self-hosted only, as today. Apple asks apps sold in China mainland
+       to declare AI-generated services and features needing a Security
+       Assessment, such as end-to-end encrypted messaging. PiRC offers no
+       AI service of its own (it controls the user's own pi), so it
+       declares No to both.
 
     **Open**: who serves the hosted web client's page (`e2e.md`,
     section 11). Since every client can run commands on every host, the
