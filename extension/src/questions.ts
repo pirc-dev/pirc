@@ -5,7 +5,9 @@
 // still shows in the terminal, and a client's answer closes it there with
 // the signal pi's dialogs take, as Escape would, the answer going to the
 // extension instead. editor() takes no signal, so it, and custom(), are
-// only shown to clients, as what the session waits for.
+// only shown to clients, as what the session waits for. notify() is
+// wrapped too: pi still shows each notification, and clients get it in the
+// chat (live.ts, onNotify).
 //
 // This relies on pi's internals (one shared, writable ui object, checked
 // against pi 1.0.0): where wrapping fails, questions are shown only through
@@ -26,7 +28,7 @@ const OPTIONS_MAX = 200;
 // pi's own methods, kept on the ui object so that a newer load of the
 // extension wraps them rather than the older load's wrappers.
 const ORIGINALS = Symbol.for("pirc.questions.originals");
-type Wrapped = "select" | "confirm" | "input" | "editor" | "custom";
+type Wrapped = "select" | "confirm" | "input" | "editor" | "custom" | "notify";
 type UI = ExtensionUIContext & { [ORIGINALS]?: Pick<ExtensionUIContext, Wrapped> };
 
 interface Pending {
@@ -44,7 +46,19 @@ export class Questions {
   // Why wrapping failed, if it did.
   problem = "";
 
-  constructor(private readonly onChange: () => void) {}
+  constructor(
+    private readonly onChange: () => void,
+    // A notification an extension showed (ctx.ui.notify).
+    private readonly onNotify: (message: string, type: "info" | "warning" | "error") => void = () => {},
+  ) {}
+
+  notified(message: string, type: "info" | "warning" | "error" = "info"): void {
+    try {
+      this.onNotify(message, type);
+    } catch {
+      // pi has shown it; clients do without.
+    }
+  }
 
   // The questions now, oldest first.
   list(): Question[] {
@@ -56,7 +70,9 @@ export class Questions {
   install(ui: ExtensionUIContext, current: () => Questions): void {
     try {
       const u = ui as UI;
-      const orig = u[ORIGINALS] ?? { select: u.select, confirm: u.confirm, input: u.input, editor: u.editor, custom: u.custom };
+      // A load before notify was wrapped kept the others only.
+      const kept = u[ORIGINALS];
+      const orig = kept ? { ...kept, notify: kept.notify ?? u.notify } : { select: u.select, confirm: u.confirm, input: u.input, editor: u.editor, custom: u.custom, notify: u.notify };
       if (u[ORIGINALS] && (u.select as { pirc?: Questions }).pirc === this) return;
       Object.defineProperty(u, ORIGINALS, { value: orig, configurable: true });
       const select = (title: string, options: string[], opts?: ExtensionUIDialogOptions) =>
@@ -66,6 +82,10 @@ export class Questions {
       u.confirm = (title, message, opts) => current().ask({ kind: QuestionKind.CONFIRM, title, message }, opts, (o) => orig.confirm.call(ui, title, message, o));
       u.input = (title, placeholder, opts) => current().ask({ kind: QuestionKind.INPUT, title, placeholder }, opts, (o) => orig.input.call(ui, title, placeholder, o));
       u.editor = (title, prefill) => current().show({ kind: QuestionKind.EDITOR, title }, () => orig.editor.call(ui, title, prefill));
+      u.notify = (message, type) => {
+        orig.notify.call(ui, message, type);
+        current().notified(String(message ?? ""), type ?? "info");
+      };
       u.custom = ((factory: never, options: never) => current().show({ kind: QuestionKind.CUSTOM, title: "" }, () => orig.custom.call(ui, factory, options))) as ExtensionUIContext["custom"];
       if (u.select !== select) throw new Error("pi's ui object cannot be changed");
       this.problem = "";

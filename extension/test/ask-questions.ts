@@ -6,7 +6,8 @@
 //
 // It also asks as a guard does (pi-automode): a bash call whose command
 // says "approve-" waits for a confirm from tool_call, with pi's signal
-// unless the command also says "nosignal", and is blocked on a no. And
+// unless the command also says "nosignal", and is blocked on a no, which
+// it also tells pi's terminal as a warning (ctx.ui.notify). And
 // /ask-from-command asks a confirm outside any turn.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { appendFileSync } from "node:fs";
@@ -18,6 +19,8 @@ export default function (pi: ExtensionAPI): void {
     if (!command.includes("approve-")) return undefined;
     const ok = await ctx.ui.confirm("Run it?", command, command.includes("nosignal") ? undefined : { signal: ctx.signal });
     appendFileSync(join(ctx.cwd, "answers.log"), `tool=${ok}\n`);
+    // As pi-automode says so in pi's terminal.
+    if (!ok) ctx.ui.notify(`The guard blocked: ${command}`, "warning");
     return ok ? undefined : { block: true, reason: "The guard was told no." };
   });
   pi.registerCommand("ask-from-command", {

@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { StopReason, thinkingLevel, ThinkingLevel } from "@pirc/protocol";
+import { create } from "@bufbuild/protobuf";
+import { ConversationItemSchema, NotificationLevel, StopReason, thinkingLevel, ThinkingLevel } from "@pirc/protocol";
 
-import { atMs, branches, clip, firstLine, firstPrompt, historyItems, lastTurnId, messageItems, promptText, resultFacts } from "../src/convert.ts";
+import { atMs, branches, clip, firstLine, firstPrompt, historyItems, lastTurnId, messageItems, promptText, resultFacts, withNotes } from "../src/convert.ts";
 
 const at = atMs(0);
 const usage = { input: 3, output: 4, cacheRead: 1, cacheWrite: 2, totalTokens: 7, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.25 } };
@@ -184,4 +185,15 @@ test("a tool result carries its facts into the item", () => {
   assert.equal(item.body.case, "toolResult");
   const v = item.body.value as { durationMs?: number; exitCode?: number; diff: string };
   assert.deepEqual([v.durationMs, v.exitCode, v.diff], [1500, 1, ""]);
+});
+
+test("notifications go into a history after the last item of the entry they followed, first when none had, and not at all when that entry is not there", () => {
+  const item = (entryId: string, text: string) => create(ConversationItemSchema, { entryId, body: { case: "userMessage", value: { text } } });
+  const note = (after: string, id: string) => ({ after, item: create(ConversationItemSchema, { body: { case: "notification", value: { id, level: NotificationLevel.WARNING, text: id } } }) });
+  // e2's two items (an assistant message and its tool call) share their entry.
+  const items = [item("e1", "a"), item("e2", "b"), item("e2", "c"), item("e3", "d")];
+  const out = withNotes(items, [note("", "n0"), note("e2", "n1"), note("e2", "n2"), note("gone", "n3")]);
+  const name = (i: (typeof out)[number]) => (i.body.case === "notification" ? i.body.value.id : i.body.case === "userMessage" ? i.body.value.text : "");
+  assert.deepEqual(out.map(name), ["n0", "a", "b", "c", "n1", "n2", "d"]);
+  assert.equal(withNotes(items, []), items);
 });

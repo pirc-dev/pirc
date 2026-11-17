@@ -1,0 +1,366 @@
+{
+ "about": "pi's notifications are chat items with their level, from History and live, where they were shown; one with no level known is info",
+ "steps": [
+  {
+   "state": "ready"
+  },
+  {
+   "sent": [
+    {
+     "subscribeSessions": {}
+    },
+    {
+     "watchPendingHosts": {}
+    },
+    {
+     "watchKeys": {}
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "relay",
+     "relay": {
+      "state": "ready"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "sessionList": {
+     "sessions": [
+      {
+       "session": {
+        "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sessionId": "s1",
+        "instanceId": "i1"
+       },
+       "hostLabel": "laptop",
+       "announcement": {
+        "cwd": "/src/app",
+        "hostname": "laptop.local",
+        "piVersion": "1.5.2",
+        "extensionVersion": "0.3.11"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "sent": [
+    {
+     "attach": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      }
+     }
+    },
+    {
+     "routed": {
+      "session": {
+       "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+       "sessionId": "s1",
+       "instanceId": "i1"
+      },
+      "message": {
+       "historyRequest": {
+        "requestId": "id-1",
+        "limit": 200
+       },
+       "requestId": "id-1"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "events": [
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.11"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "history": {
+       "requestId": "id-1",
+       "seq": "2",
+       "items": [
+        {
+         "turnId": "u1",
+         "at": "2026-11-17T10:00:00Z",
+         "userMessage": {
+          "text": "push it"
+         },
+         "entryId": "u1"
+        },
+        {
+         "turnId": "u1",
+         "at": "2026-11-17T10:00:02Z",
+         "notification": {
+          "id": "n1",
+          "level": "NOTIFICATION_LEVEL_INFO",
+          "text": "Checking the remote"
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatReset",
+     "id": "0101010101010101-i1",
+     "chat": {
+      "items": [
+       {
+        "kind": "user",
+        "id": "e-u1",
+        "turnId": "u1",
+        "at": 1794909600000,
+        "entryId": "u1",
+        "text": "push it",
+        "images": []
+       },
+       {
+        "kind": "notification",
+        "id": "n-n1",
+        "turnId": "u1",
+        "at": 1794909602000,
+        "level": "info",
+        "text": "Checking the remote"
+       }
+      ],
+      "truncated": false,
+      "loading": false
+     }
+    },
+    {
+     "type": "session",
+     "session": {
+      "id": "0101010101010101-i1",
+      "sessionId": "s1",
+      "hostLabel": "laptop",
+      "hostname": "laptop.local",
+      "name": "",
+      "cwd": "/src/app",
+      "working": false,
+      "compacting": false,
+      "piVersion": "1.5.2",
+      "extensionVersion": "0.3.11",
+      "last": {
+       "who": "user",
+       "text": "push it",
+       "at": 1794909600000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "3",
+       "at": "2026-11-17T10:00:03Z",
+       "item": {
+        "turnId": "u1",
+        "at": "2026-11-17T10:00:02Z",
+        "notification": {
+         "id": "n2",
+         "level": "NOTIFICATION_LEVEL_WARNING",
+         "text": "Auto mode blocked bash: git push --force"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "notification",
+      "id": "n-n2",
+      "turnId": "u1",
+      "at": 1794909602000,
+      "level": "warning",
+      "text": "Auto mode blocked bash: git push --force"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "4",
+       "at": "2026-11-17T10:00:04Z",
+       "item": {
+        "turnId": "u1",
+        "at": "2026-11-17T10:00:02Z",
+        "notification": {
+         "id": "n3",
+         "level": "NOTIFICATION_LEVEL_ERROR",
+         "text": "The classifier failed"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "notification",
+      "id": "n-n3",
+      "turnId": "u1",
+      "at": 1794909602000,
+      "level": "error",
+      "text": "The classifier failed"
+     }
+    }
+   ]
+  },
+  {
+   "in": {
+    "routed": {
+     "session": {
+      "hostKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      "sessionId": "s1",
+      "instanceId": "i1"
+     },
+     "message": {
+      "event": {
+       "seq": "5",
+       "at": "2026-11-17T10:00:05Z",
+       "item": {
+        "turnId": "u1",
+        "at": "2026-11-17T10:00:02Z",
+        "notification": {
+         "id": "n4",
+         "level": "NOTIFICATION_LEVEL_UNSPECIFIED",
+         "text": "No level"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "events": [
+    {
+     "type": "chatItem",
+     "id": "0101010101010101-i1",
+     "item": {
+      "kind": "notification",
+      "id": "n-n4",
+      "turnId": "u1",
+      "at": 1794909602000,
+      "level": "info",
+      "text": "No level"
+     }
+    }
+   ]
+  },
+  {
+   "chat": {
+    "id": "0101010101010101-i1",
+    "is": {
+     "items": [
+      {
+       "kind": "user",
+       "id": "e-u1",
+       "turnId": "u1",
+       "at": 1794909600000,
+       "entryId": "u1",
+       "text": "push it",
+       "images": []
+      },
+      {
+       "kind": "notification",
+       "id": "n-n1",
+       "turnId": "u1",
+       "at": 1794909602000,
+       "level": "info",
+       "text": "Checking the remote"
+      },
+      {
+       "kind": "notification",
+       "id": "n-n2",
+       "turnId": "u1",
+       "at": 1794909602000,
+       "level": "warning",
+       "text": "Auto mode blocked bash: git push --force"
+      },
+      {
+       "kind": "notification",
+       "id": "n-n3",
+       "turnId": "u1",
+       "at": 1794909602000,
+       "level": "error",
+       "text": "The classifier failed"
+      },
+      {
+       "kind": "notification",
+       "id": "n-n4",
+       "turnId": "u1",
+       "at": 1794909602000,
+       "level": "info",
+       "text": "No level"
+      }
+     ],
+     "truncated": false,
+     "loading": false
+    }
+   }
+  }
+ ]
+}

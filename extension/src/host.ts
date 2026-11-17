@@ -79,7 +79,7 @@ export class Host implements Sink {
   readonly dialogs = new Questions(() => {
     this.live?.onQuestionsChanged();
     if (this.state.kind === "ready") this.live?.onAnnouncementChanged();
-  });
+  }, (message, type) => this.live?.onNotify(message, type));
   // The Launch that started this process, if one did.
   readonly launchId = process.env[LAUNCH_ENV] ?? "";
 

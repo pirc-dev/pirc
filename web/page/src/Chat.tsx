@@ -561,8 +561,22 @@ const Item = memo(function Item(p: { item: ChatItem }) {
       return <Summary label={`Context compacted · ${it.tokensBefore.toLocaleString()} tokens before`} text={it.summary} />;
     case "branchSummary":
       return <Summary label="Went back · what came after, summarised" text={it.summary} />;
+    case "notification":
+      return <Notification level={it.level} text={it.text} />;
   }
 });
+
+// A notification an extension showed in pi's terminal: an info quietly, a
+// warning or an error in its colour, as pi shows them.
+function Notification(p: { level: "info" | "warning" | "error"; text: string }) {
+  const [mark, tone] = p.level === "error" ? ["✕", "text-block"] : p.level === "warning" ? ["⚠", "text-work"] : ["·", "text-ink3"];
+  return (
+    <p className={`flex gap-2 text-[13.5px] leading-snug ${p.level === "info" ? "text-ink3" : tone} cockpit:font-mono cockpit:text-xs`} role={p.level === "info" ? undefined : "status"}>
+      <span className={`w-3 flex-none text-center font-mono font-semibold ${tone}`} aria-hidden="true">{mark}</span>
+      <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{p.text}</span>
+    </p>
+  );
+}
 
 // A summary pi wrote, folded under a line.
 function Summary(p: { label: string; text: string }) {

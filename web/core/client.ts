@@ -12,6 +12,7 @@ import {
   Role,
   SessionAnnouncementSchema,
   SessionMessageSchema,
+  NotificationLevel,
   StopReason,
   QuestionKind,
   NoticeKind,
@@ -107,6 +108,12 @@ interface Pending {
 export function viewId(s: SessionRef): string {
   return `${hex(s.hostKey).slice(0, 16)}-${s.instanceId}`;
 }
+
+const LEVEL: Partial<Record<NotificationLevel, "info" | "warning" | "error">> = {
+  [NotificationLevel.INFO]: "info",
+  [NotificationLevel.WARNING]: "warning",
+  [NotificationLevel.ERROR]: "error",
+};
 
 const STOP: Partial<Record<StopReason, string>> = {
   [StopReason.STOP]: "stop",
@@ -668,6 +675,9 @@ export class Client {
         break;
       case "branchSummary":
         item = { kind: "branchSummary", id: it.entryId ? `e-${it.entryId}` : `b-${s.unsaved++}`, ...base, summary: b.value.summary };
+        break;
+      case "notification":
+        item = { kind: "notification", id: `n-${b.value.id}`, ...base, level: LEVEL[b.value.level] ?? "info", text: b.value.text };
         break;
     }
     if (!item) return;

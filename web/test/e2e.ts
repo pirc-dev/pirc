@@ -429,6 +429,14 @@ try {
       assert.ok(tool >= 0 && next.slice(tool + 1).some((m) => m.role === "user" && said(m).includes(note)),
         `the note is not in the step with the result: ${JSON.stringify(next.slice(-3))}`);
       assert.match(said(next[tool]), yes ? /approve-one/ : /The guard was told no/);
+      if (!yes) {
+        // The guard's notification in pi's terminal reaches the chat too,
+        // right after the call it blocked.
+        const at = chat.items.findLastIndex((x) => x.kind === "tool" && x.args.includes("approve-two"));
+        assert.deepEqual(chat.items[at + 1] && { ...chat.items[at + 1], id: "", at: 0, turnId: "" },
+          { kind: "notification", id: "", at: 0, turnId: "", level: "warning", text: "The guard blocked: echo approve-two" }, JSON.stringify(chat.items.slice(at)));
+        assert.match(pi.screen(), /The guard blocked: echo approve-two/);
+      }
     }
     // A note goes with an option or a yes or no only.
     q = await guarded("three");

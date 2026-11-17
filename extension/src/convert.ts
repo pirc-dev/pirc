@@ -388,3 +388,24 @@ export function fitItem(item: ConversationItem, budget: number): ConversationIte
   }
   return item;
 }
+
+// A notification as History places it: after the entry that came before
+// it, or first when none had (after ""). pi does not keep notifications.
+export interface KeptNote {
+  after: string;
+  item: ConversationItem;
+}
+
+// items with the notifications among them, each after the last item of the
+// entry it followed; those after an entry not among items (another branch,
+// or one cut off) are left out.
+export function withNotes(items: ConversationItem[], notes: readonly KeptNote[]): ConversationItem[] {
+  if (notes.length === 0) return items;
+  const out: ConversationItem[] = notes.filter((n) => n.after === "").map((n) => n.item);
+  items.forEach((item, i) => {
+    out.push(item);
+    const id = item.entryId;
+    if (id && items[i + 1]?.entryId !== id) for (const n of notes) if (n.after === id) out.push(n.item);
+  });
+  return out;
+}

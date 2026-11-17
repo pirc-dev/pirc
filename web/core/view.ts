@@ -124,7 +124,7 @@ export interface ModelView {
   name: string;
 }
 
-export type ChatItem = UserItem | AssistantItem | ToolItem | CompactionItem | BranchSummaryItem;
+export type ChatItem = UserItem | AssistantItem | ToolItem | CompactionItem | BranchSummaryItem | NotificationItem;
 
 interface ItemBase {
   // Unique within the chat; an item that changes keeps its ID. Opaque: what
@@ -192,6 +192,14 @@ export interface CompactionItem extends ItemBase {
   kind: "compaction";
   summary: string;
   tokensBefore: number;
+}
+
+// A notification an extension showed in pi's terminal (ctx.ui.notify),
+// where it was shown; pi does not keep it in the session.
+export interface NotificationItem extends ItemBase {
+  kind: "notification";
+  level: "info" | "warning" | "error";
+  text: string;
 }
 
 // What was done on a branch the session went back from.

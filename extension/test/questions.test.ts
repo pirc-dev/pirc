@@ -131,3 +131,16 @@ test("a note goes with an option or a yes or no, and is given its moment before 
   assert.equal(await typed, undefined);
   assert.equal(t.open, 0);
 });
+
+test("a notification still shows in pi's terminal, and is passed on with its level", () => {
+  const { ui } = terminal();
+  const shown: string[] = [];
+  (ui as { notify: unknown }).notify = (m: string, t?: string) => void shown.push(`${t ?? "info"}: ${m}`);
+  const passed: string[] = [];
+  const q = new Questions(() => {}, (m, t) => void passed.push(`${t}: ${m}`));
+  q.install(ui, () => q);
+  ui.notify("Auto mode blocked bash: rm -rf /", "warning");
+  ui.notify("done");
+  assert.deepEqual(shown, ["warning: Auto mode blocked bash: rm -rf /", "info: done"]);
+  assert.deepEqual(passed, ["warning: Auto mode blocked bash: rm -rf /", "info: done"]);
+});

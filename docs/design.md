@@ -1008,6 +1008,20 @@ within 5 seconds of the dismiss (decided 2026-11-17). Clients
 show an answerable question in place of the composer, with the note field
 (`web.md`, section 3).
 
+**pi's notifications, in the chat (decided 2026-11-17).** Extensions
+tell the person things through `ctx.ui.notify` (info, warning, error),
+which only pi's terminal showed: pi-automode's "Auto mode blocked bash:
+…", say, never reached a phone. The extension wraps `notify` on the same
+`ui` object as the dialogs (`questions.ts`), still calling pi's own, and
+sends each as a `Notification` item, with its level, where it was shown:
+after the messages before it, held back until pi has saved them. pi does
+not keep notifications in the session file, so the extension keeps a
+session's latest 200 while its process runs, and History puts each after
+the entry that came before it; a reload of the extension, or pi
+restarting, forgets them. Clients show an info quietly and a warning or
+an error in its colour. A client that does not know the item leaves it
+out.
+
 **What a tool's result says beyond its output** (2026-10-30, `ToolResult`):
 how long it ran, from pi's `durationMs` on the result where pi records it
 (its agent core from 1.4), else timed by the extension from

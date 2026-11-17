@@ -12,6 +12,11 @@ release that needs its parts upgraded together says so here.
   relay within a few seconds, as when the relay restarts; before, its
   chat stopped updating, though messages still reached pi. The iOS and
   Android apps get the same fix in their next store build.
+- What an extension tells you in pi's terminal (its notifications, such
+  as pi-automode's "Auto mode blocked bash: …") now shows in the chat
+  too, where it happened: info quietly, warnings and errors in their
+  colour. The iOS and Android apps show them from their next store
+  build. Needs this release's extension.
 
 ## 0.3.10 (2026-11-17)
 

@@ -22,7 +22,9 @@ import {
   CommandSource,
   Delivery,
   ErrorCode,
+  ConversationItemSchema,
   HistorySchema,
+  NotificationLevel,
   SessionAnnouncementSchema,
   SessionMessageSchema,
   SessionOrigin,
@@ -53,6 +55,8 @@ import {
   branches,
   historyItems,
   lastTurnId,
+  withNotes,
+  type KeptNote,
   messageItems,
   modelInfo,
   modelRef,
@@ -114,6 +118,12 @@ export const CONFIRM_MS = 30_000;
 // How long after a dismissed question the run it held up is still stopped
 // as it starts: it starts as soon as the asking extension has its answer.
 const STOP_COMING_MS = 5_000;
+
+// The notifications a session keeps for History (convert.ts, withNotes),
+// the latest, and the most of one's text sent.
+const NOTES_KEPT = 200;
+const NOTE_TEXT_MAX = 2000;
+const LEVEL = { info: NotificationLevel.INFO, warning: NotificationLevel.WARNING, error: NotificationLevel.ERROR } as const;
 
 // How long a stopping pi waits for its answer to be sent before it exits.
 const STOP_DELAY_MS = 300;
@@ -383,6 +393,10 @@ export class Live {
   // A prompt has come in (pi's input) and its run has not started: a
   // question asked now (in before_agent_start) holds that run up.
   private runComing = false;
+  // Notifications shown in pi's terminal: those sent, for History, and
+  // those waiting for the items before them (resolvePending).
+  private notes: KeptNote[] = [];
+  private notesWaiting: ConversationItem[] = [];
   // Until when the run coming is to be stopped as it starts: a dismissed
   // question held it up (the answer case below).
   private stopComing = 0;
@@ -646,6 +660,8 @@ export class Live {
     // A reply changes the cost and the context use the announcement has:
     // each assistant message, a run's every step.
     if (replied && !this.disposed) this.onAnnouncementChanged();
+    // Notifications shown after the messages just sent follow them.
+    if (this.pending.length === 0) for (const n of this.notesWaiting.splice(0)) this.sendNote(n);
     if (this.pending.length > 0 && !this.disposed) this.waitForPending();
   }
 
@@ -751,6 +767,26 @@ export class Live {
     const p = this.progress.get(toolCallId);
     if (p) clearTimeout(p.timer);
     this.progress.delete(toolCallId);
+  }
+
+  // A notification an extension showed in pi's terminal (ctx.ui.notify),
+  // into the chat where it was shown: after the messages that came before
+  // it, which may still be waiting for pi to save them.
+  onNotify(text: string, type: "info" | "warning" | "error"): void {
+    this.catchUp();
+    const item = create(ConversationItemSchema, {
+      turnId: this.turnId,
+      at: timestampFromDate(new Date()),
+      body: { case: "notification", value: { id: randomBytes(8).toString("hex"), level: LEVEL[type] ?? NotificationLevel.INFO, text: clip(text, NOTE_TEXT_MAX) } },
+    });
+    if (this.pending.length > 0) this.notesWaiting.push(item);
+    else this.sendNote(item);
+  }
+
+  private sendNote(item: ConversationItem): void {
+    this.notes.push({ after: this.ctx.sessionManager.getLeafId() ?? "", item });
+    if (this.notes.length > NOTES_KEPT) this.notes.splice(0, this.notes.length - NOTES_KEPT);
+    this.emitItem(item);
   }
 
   // pi has taken a prompt in; its run starts after before_agent_start.
@@ -1224,7 +1260,7 @@ export class Live {
     this.resolvePending();
     const budget = this.sink.maxPayloadBytes() - 1024;
     // Each item fits on its own, so the newest always gets through.
-    const all = historyItems(this.ctx.sessionManager.getBranch()).map((i) => fitItem(i, budget - 256));
+    const all = withNotes(historyItems(this.ctx.sessionManager.getBranch()), this.notes).map((i) => fitItem(i, budget - 256));
     // Those after the client's last entry, when they are few enough and
     // fit whole; else the usual answer, which replaces what it has.
     const at = afterEntryId ? all.findLastIndex((i) => i.entryId === afterEntryId) : -1;

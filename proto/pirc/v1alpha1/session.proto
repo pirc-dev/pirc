@@ -634,7 +634,28 @@ message ConversationItem {
     ToolResult tool_result = 7;
     Compaction compaction = 8;
     BranchSummary branch_summary = 9;
+    Notification notification = 10;
   }
+}
+
+// A notification an extension showed in pi's terminal (ctx.ui.notify), in
+// the conversation where it was shown, with no entry_id: pi does not keep
+// it in the session. The extension keeps a session's latest 200 for as
+// long as its process runs, and History puts each after the entry that
+// came before it. A client that does not know it leaves it out.
+message Notification {
+  // Unique within the process.
+  string id = 1;
+  NotificationLevel level = 2;
+  // At most 2000 characters, as the extension cuts it.
+  string text = 3;
+}
+
+enum NotificationLevel {
+  NOTIFICATION_LEVEL_UNSPECIFIED = 0;
+  NOTIFICATION_LEVEL_INFO = 1;
+  NOTIFICATION_LEVEL_WARNING = 2;
+  NOTIFICATION_LEVEL_ERROR = 3;
 }
 
 message UserMessage {
