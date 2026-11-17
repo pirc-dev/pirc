@@ -20,7 +20,9 @@ release that needs its parts upgraded together says so here.
   extension that asked gave pi no way to stop it. The command a question
   holds up says "Waiting for you", and a session that asks is marked "?"
   in the accent colour. The list counts each session once, so its counts
-  add up. Needs this release's extension.
+  add up. Needs this release's extension. With pi 1.0.0, a turn stopped
+  by Dismiss shows as a failed model call ("This operation was
+  aborted"); from pi 1.5 it shows as stopped.
 - In the iOS and Android apps, from their next store build, a question pi
   asks takes the message box's place until it is answered: its text laid
   out as written, a note for pi that goes with your answer, full-width No

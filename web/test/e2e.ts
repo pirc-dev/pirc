@@ -433,10 +433,19 @@ try {
       if (word !== "three") q = await guarded(word);
       const before = requests.length;
       assert.ok((await answer(q.id, { dismissed: true })).ok);
+      const from = chat.items.length;
       await until("the question gone and pi stopped", () => !session?.questions?.length && !session?.working);
       await prompted;
       await sleep(500);
       assert.equal(requests.length, before, `the model took another step after a dismiss (${word})`);
+      // Stopped, not failed: no model call was started to be cut short.
+      // pi 1.0.0 starts the next call already aborted when a turn is
+      // stopped while a tool_call handler waits, and records it as failed;
+      // from 1.5 it ends the turn as stopped.
+      await until("what came since applied", () => true);
+      const failed = chat.items.slice(from).filter((x) => x.kind === "assistant" && x.stop === "error");
+      const [major, minor] = (session?.piVersion ?? "0.0").split(".").map(Number);
+      if (major > 1 || (major === 1 && minor >= 5)) assert.deepEqual(failed, [], `a dismiss ended the turn as failed (${word})`);
       assert.equal(answers().at(-1), "tool=false");
     }
     // A command's question, outside any turn: dismissed, it closes; a

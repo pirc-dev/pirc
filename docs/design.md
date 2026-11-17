@@ -996,7 +996,9 @@ not with an input's text (the answer itself) nor with `dismissed`.
 `dismissed` now means "close the question and stop": the extension gives
 the asking extension what Escape would (false for a confirm, nothing
 otherwise) and then aborts the turn, if one runs, so it works whether or
-not the extension passed the signal, and on a command's question. Clients
+not the extension passed the signal, and on a command's question. pi 1.5
+ends such a turn as stopped; pi 1.0.0 records it as a failed model call
+("This operation was aborted"), which clients show as such. Clients
 show an answerable question in place of the composer, with the note field
 (`web.md`, section 3).
 
