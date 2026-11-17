@@ -131,6 +131,12 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   pi.on("tool_execution_start", on("tool_execution_start", (live, e) => live.onToolStart(e.toolCallId)));
   pi.on("tool_execution_update", on("tool_execution_update", (live, e) => live.onToolUpdate(e)));
   pi.on("tool_execution_end", on("tool_execution_end", (live, e) => live.onToolEnd(e.toolCallId)));
+  // A prompt on its way to a run (pi's input comes after commands, before
+  // before_agent_start): what a question asked meanwhile holds up.
+  pi.on("input", (e) => {
+    on("input", (live) => live.onInput())(e);
+    return { action: "continue" };
+  });
   pi.on("agent_start", on("agent_start", (live) => {
     // pi may have made a new ui object since.
     proc.host.dialogs.install(live.ctx.ui, () => proc.host.dialogs);

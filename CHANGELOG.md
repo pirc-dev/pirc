@@ -6,6 +6,12 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- Dismiss on a question asked before pi started on your message (some
+  extensions ask then) also stops that message from running; before, the
+  question closed and the message ran anyway.
+
 ## 0.3.9 (2026-11-17)
 
 - The web app opens a long session quickly: it loads the latest 100

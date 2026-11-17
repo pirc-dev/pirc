@@ -998,7 +998,13 @@ the asking extension what Escape would (false for a confirm, nothing
 otherwise) and then aborts the turn, if one runs, so it works whether or
 not the extension passed the signal, and on a command's question. pi 1.5
 ends such a turn as stopped; pi 1.0.0 records it as a failed model call
-("This operation was aborted"), which clients show as such. Clients
+("This operation was aborted"), which clients show as such. A question
+asked before the run (in `before_agent_start`) holds up a run not yet
+started: pi 1.5 counts it as busy and the abort stops it as it starts,
+but pi 1.0.0 drops an abort made then, so the extension, which knows a
+prompt is on its way from pi's `input` event (after commands, before
+`before_agent_start`), stops that run itself as it starts, if it starts
+within 5 seconds of the dismiss (decided 2026-11-17). Clients
 show an answerable question in place of the composer, with the note field
 (`web.md`, section 3).
 

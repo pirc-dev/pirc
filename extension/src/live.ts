@@ -111,6 +111,10 @@ const PROMPT_ECHO_MS = 10 * 60_000;
 // client is told it timed out. pi refuses a prompt (no credentials, an
 // input handler that consumed it) only on its own screen.
 export const CONFIRM_MS = 30_000;
+// How long after a dismissed question the run it held up is still stopped
+// as it starts: it starts as soon as the asking extension has its answer.
+const STOP_COMING_MS = 5_000;
+
 // How long a stopping pi waits for its answer to be sent before it exits.
 const STOP_DELAY_MS = 300;
 // How long a finished message may wait for pi to persist it before it is
@@ -376,6 +380,12 @@ export class Live {
   // Sent the first to an idle pi: the rest wait for its run to start, or
   // for as long as a prompt may take to, not counting a compaction first.
   private starting = false;
+  // A prompt has come in (pi's input) and its run has not started: a
+  // question asked now (in before_agent_start) holds that run up.
+  private runComing = false;
+  // Until when the run coming is to be stopped as it starts: a dismissed
+  // question held it up (the answer case below).
+  private stopComing = 0;
   private startTimer: NodeJS.Timeout | undefined;
   // A Compact being run, answered when pi finishes it.
   private compaction: { respond: Respond } | undefined;
@@ -743,8 +753,18 @@ export class Live {
     this.progress.delete(toolCallId);
   }
 
+  // pi has taken a prompt in; its run starts after before_agent_start.
+  onInput(): void {
+    if (!this.working) this.runComing = true;
+  }
+
   onWorking(working: boolean): void {
     this.catchUp();
+    this.runComing = false;
+    // Dismissed while it was held up: pi 1.0.0 starts it all the same (an
+    // abort before the run is lost), so it is stopped here, as it starts.
+    if (working && Date.now() < this.stopComing) this.ctx.abort();
+    this.stopComing = 0;
     if (working && !this.working) this.reply = undefined;
     if (!working && this.working) this.raise(turnNotice(this.reply, this.nextNumber()));
     if (working) {
@@ -1135,8 +1155,14 @@ export class Live {
         if (why) return respond(errorReply(requestId, ErrorCode.INVALID, why));
         // Dismiss stops the turn too: the question is closed already, so
         // this works whether or not the asking extension gave it pi's
-        // signal.
-        if (value.case === "dismissed" && (turn || !this.ctx.isIdle())) this.ctx.abort();
+        // signal. A question asked before the run (before_agent_start)
+        // holds a run that has not started: pi 1.5 counts it as busy and
+        // stops it; pi 1.0.0 drops an abort made then, so it is stopped as
+        // it starts, a moment after the answer (onWorking).
+        if (value.case === "dismissed") {
+          if (turn || !this.ctx.isIdle()) this.ctx.abort();
+          if (!turn && this.runComing) this.stopComing = Date.now() + STOP_COMING_MS;
+        }
         if (note && !turn) setImmediate(this.guard("note", () => this.pi.sendUserMessage(note, { deliverAs: "followUp" })));
         return respond(accepted(requestId));
       }

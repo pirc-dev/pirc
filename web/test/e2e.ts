@@ -377,10 +377,17 @@ try {
     assert.equal(q.placeholder, "e.g. fix/login");
     assert.ok((await answer(q.id, { text: "fix/e2e" })).ok);
     await settled(3);
+    // Dismissed, a question asked before the run (before_agent_start)
+    // stops the run it held up: no model call, pi idle.
     await ask("input");
     q = await asked("input");
+    const held = pi.modelRequests.length;
     assert.ok((await answer(q.id, { dismissed: true })).ok);
-    await settled(4);
+    for (let i = 0; i < 100 && answers().length < 4; i++) await sleep(100);
+    await prompted;
+    await until("the held run stopped", () => !session?.questions?.length && !session?.working);
+    await sleep(500);
+    assert.equal(pi.modelRequests.length, held, "the run a dismissed question held up went on");
     assert.deepEqual(answers().slice(1), ["confirm=false", 'input="fix/e2e"', "input=null"]);
 
     // Answered in the terminal first: the app's answer comes too late.
@@ -457,6 +464,12 @@ try {
     await until("the command's question gone", () => !session?.questions?.length && !session?.working);
     for (let i = 0; i < 50 && answers().at(-1) !== "command=false"; i++) await sleep(100);
     assert.equal(answers().at(-1), "command=false", `${JSON.stringify(q)} ${JSON.stringify(answers())}\n${pi.screen()}`);
+    // No run was held up by it: a prompt straight after still runs.
+    const after = requests.length;
+    await send("hello again");
+    await prompted;
+    await until("the prompt after it answered", (items) => requests.length > after && !session?.working
+      && items.at(-1)?.kind === "assistant" && !(items.at(-1) as { streaming: boolean }).streaming);
     await send("/ask-from-command");
     q = await asked("confirm");
     const before = requests.length;
