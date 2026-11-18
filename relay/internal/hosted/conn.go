@@ -23,6 +23,8 @@ type conn struct {
 	addr   string
 	remote string
 	key    []byte
+	// The login's challenge, which an attestation binds (AttestContext).
+	nonce []byte
 	// The account and the key's role on its latest version; nil and
 	// unspecified when logged in without an account. Under Server.mu.
 	acct *account

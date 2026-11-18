@@ -403,6 +403,7 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.key = pub
+	c.nonce = nonce
 	if len(id) == 0 {
 		s.conns[c] = struct{}{}
 		c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{

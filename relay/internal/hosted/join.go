@@ -97,7 +97,7 @@ func (s *Server) joinWait(ctx context.Context, c *conn, w *pb.JoinWait) *frameEr
 		if s.cfg.Verifier == nil {
 			return denied("this relay takes no attestations")
 		}
-		a, err := s.cfg.Verifier.Attest(ctx, w.GetAttestation(), c.key)
+		a, err := s.cfg.Verifier.Attest(ctx, w.GetAttestation(), s.attestData(c))
 		if err != nil {
 			return denied("attestation refused: " + err.Error())
 		}

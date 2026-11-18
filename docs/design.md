@@ -2370,6 +2370,52 @@ Each step ends with something that can be seen working.
        sandbox purchases, which every TestFlight and App Review purchase
        is, and with an account whose subscription lapses (TestFlight's do,
        within days).
+
+       Tried 2026-11-18: an iPhone from TestFlight and an Android phone
+       from Play's internal track (1.0.2, build 12, built with
+       `PIRC_HOSTED`) each signed up on a temporary hosted relay at
+       `wss://hosted-test.pirc.dev`, with a real attestation and a
+       sandbox subscription, both checked by the stores. The checks are
+       `hosted.Stores` (`relay/internal/hosted/stores.go` and the files
+       beside it), turned on by `serve-hosted`'s store flags; the phone's
+       side is a screen in Settings, compiled in only with `PIRC_HOSTED`
+       (`app/lib/hosted/try_stores.dart`), over an `attest` channel and
+       the store channel's `proof`. Decided while building it:
+       - an attestation binds framed("pirc-attest-v1alpha2", the relay's
+         origin, the login's nonce, the device's key): App Attest takes
+         its SHA-256 as clientDataHash, Play Integrity's classic request
+         base64url of it as its nonce. So one attestation is good for one
+         login of one key, with no round trip of its own, and App Attest
+         makes a new key for each sign-up or join;
+       - App Attest needs no capability on the App ID: a TestFlight build
+         without the entitlement attested in the production environment.
+         The development environment, and the stores' sandbox and test
+         purchases, are taken only by a relay started with
+         `--store-sandbox`, which a relay of test builds is;
+       - the subscription is proved by the store, not the app: Apple's
+         signed transaction (`jwsRepresentation`), checked to Apple Root
+         CA - G3, then its state asked of the App Store Server API by the
+         original transaction ID with an In-App Purchase key; Google's
+         purchase token, asked of the Play Developer API
+         (`subscriptionsv2`). A cancelled subscription counts until its
+         paid time ends; grace counts; billing retry, expiry and refunds
+         do not;
+       - the relay keeps each account's subscriptions (store, ID, end,
+         sandbox) and asks the store again daily, and hourly once one is
+         past its end, logging renewals and lapses;
+       - Google's side uses the Firebase project's service account, given
+         the app's financial data (the purchases API) in Play Console,
+         with the Play Integrity API linked to that project; Apple's an
+         In-App Purchase key of its own;
+       - the native `attest` code and the Play Integrity library are in
+         every build, unreachable without the screen, which only a
+         `PIRC_HOSTED` build has.
+       Found on the way: the relay closed a removed device's connection
+       as soon as it queued the version that removed it, and the close
+       could win over the frame, so that the device never learned of its
+       removal (one run in eight of `web/test/hosted.test.ts`); it now
+       closes once the version is written. Still open: what a lapse does
+       to the account.
     5. **The app**: sign-up (the phone makes version 1), the list and all
        that stage 3 does in TypeScript, in Dart; the join screen (typing a
        code, approving by role); additions and removals shown; the keys

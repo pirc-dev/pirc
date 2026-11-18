@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
@@ -75,6 +76,20 @@ CREATE TABLE IF NOT EXISTS attestations (
   kind TEXT NOT NULL,
   ident BLOB NOT NULL,
   PRIMARY KEY (account, device, kind)
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+  account BLOB NOT NULL,
+  kind TEXT NOT NULL,
+  ident BLOB NOT NULL,
+  expires_ms INTEGER NOT NULL,
+  trial INTEGER NOT NULL,
+  grace INTEGER NOT NULL,
+  sandbox INTEGER NOT NULL,
+  checked_ms INTEGER NOT NULL,
+  -- What the store said at checked_ms: live, or why not.
+  lapsed INTEGER NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (account, kind, ident)
 );
 `
 
@@ -375,10 +390,68 @@ func (s *Store) AddAttestation(account, device []byte, kind string, ident []byte
 	return err
 }
 
+// AddSubscription keeps what a store said of an account's subscription,
+// checked at checkedMs, or what it says now of one kept already: live, or
+// lapsed for reason.
+func (s *Store) AddSubscription(account []byte, sub Subscription, checkedMs int64) error {
+	return s.setSubscription(account, sub, checkedMs, "")
+}
+
+// LapseSubscription keeps that the store no longer has sub live, and why.
+func (s *Store) LapseSubscription(account []byte, sub Subscription, checkedMs int64, reason string) error {
+	return s.setSubscription(account, sub, checkedMs, reason)
+}
+
+func (s *Store) setSubscription(account []byte, sub Subscription, checkedMs int64, reason string) error {
+	var expires int64
+	if !sub.Expires.IsZero() {
+		expires = sub.Expires.UnixMilli()
+	}
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		account, sub.Kind, sub.Ident, expires, sub.Trial, sub.Grace, sub.Sandbox, checkedMs, reason != "", reason)
+	return err
+}
+
+// KeptSubscription is a subscription as the store last said, and of which
+// account.
+type KeptSubscription struct {
+	Account   []byte
+	Sub       Subscription
+	CheckedMs int64
+	Lapsed    bool
+	Reason    string
+}
+
+// SubscriptionsDue are those to ask the store about again at nowMs: any
+// not asked about for a day, and those past their end (lapsed ones
+// included, which a late payment can bring back) not asked about for
+// an hour.
+func (s *Store) SubscriptionsDue(nowMs int64) ([]KeptSubscription, error) {
+	rows, err := s.db.Query(`SELECT account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason FROM subscriptions
+		WHERE checked_ms <= ? OR (expires_ms <= ? AND checked_ms <= ?) ORDER BY checked_ms`, nowMs-24*3600_000, nowMs, nowMs-3600_000)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KeptSubscription
+	for rows.Next() {
+		var k KeptSubscription
+		var expires int64
+		if err := rows.Scan(&k.Account, &k.Sub.Kind, &k.Sub.Ident, &expires, &k.Sub.Trial, &k.Sub.Grace, &k.Sub.Sandbox, &k.CheckedMs, &k.Lapsed, &k.Reason); err != nil {
+			return nil, err
+		}
+		if expires != 0 {
+			k.Sub.Expires = time.UnixMilli(expires)
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // DeleteAccount removes the account and everything of it.
 func (s *Store) DeleteAccount(account []byte) error {
 	return s.tx(func(t *sql.Tx) error {
-		for _, table := range []string{"versions", "withdrawals", "pre_keys", "labels", "label_key_wraps", "devices", "attestations"} {
+		for _, table := range []string{"versions", "withdrawals", "pre_keys", "labels", "label_key_wraps", "devices", "attestations", "subscriptions"} {
 			if _, err := t.Exec(`DELETE FROM `+table+` WHERE account = ?`, account); err != nil {
 				return err
 			}

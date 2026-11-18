@@ -37,11 +37,14 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 		return denied("this relay takes no sign-ups")
 	}
 	// Outside the lock: the real checks ask the stores.
-	att, err := s.cfg.Verifier.Attest(ctx, su.GetAttestation(), c.key)
+	att, err := s.cfg.Verifier.Attest(ctx, su.GetAttestation(), s.attestData(c))
 	if err != nil {
+		s.log.Info("sign-up refused", "key", shortKey(c.key), "kind", attestationKind(su.GetAttestation()), "err", err)
 		return denied("attestation refused: " + err.Error())
 	}
-	if err := s.cfg.Verifier.Subscribed(ctx, v.Hash, su.GetAttestation()); err != nil {
+	sub, err := s.cfg.Verifier.Subscribed(ctx, v.Hash, su.GetAttestation())
+	if err != nil {
+		s.log.Info("sign-up refused", "key", shortKey(c.key), "subscription", sub.Kind, "sandbox", sub.Sandbox, "err", err)
 		return denied("no live subscription: " + err.Error())
 	}
 	s.mu.Lock()
@@ -60,7 +63,10 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 		if err := s.store.AddAttestation(v.Hash, c.key, att.Kind, att.Ident); err != nil {
 			s.log.Error("cannot store an attestation", "err", err)
 		}
-		s.log.Info("account made", "account", shortKey(v.Hash))
+		if err := s.store.AddSubscription(v.Hash, sub, s.cfg.Now().UnixMilli()); err != nil {
+			s.log.Error("cannot store a subscription", "err", err)
+		}
+		s.log.Info("account made", "account", shortKey(v.Hash), "attestation", att.Kind, "subscription", sub.Kind, "expires", sub.Expires, "trial", sub.Trial, "sandbox", sub.Sandbox)
 	}
 	c.queue(&pb.Frame{Body: &pb.Frame_SignedUp{SignedUp: &pb.SignedUp{RequestId: su.GetRequestId(), AccountId: v.Hash}}})
 	return nil
@@ -121,10 +127,11 @@ func (s *Server) publishVersion(c *conn, obj *pb.SignedObject) *frameError {
 	a.latest = v
 	toAccountLocked(a, b)
 	// A device acts on its removal only from a version it checked; the
-	// close says only that the relay refuses its key now.
+	// close says only that the relay refuses its key now. After the
+	// version is written: closing at once can drop it from the queue.
 	for o := range a.conns {
 		if e2e.Device(v.Body, o.key) == nil {
-			o.close(websocket.StatusPolicyViolation, "key revoked")
+			o.closeAfterFlush(websocket.StatusPolicyViolation, "key revoked")
 		}
 	}
 	s.log.Info("version taken", "account", shortKey(a.id), "number", n, "devices", len(v.Body.GetDevices()), "removed", len(removed))
