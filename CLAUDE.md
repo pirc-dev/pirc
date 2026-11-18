@@ -21,8 +21,6 @@ it when a decision is made or changed.
 - **Decisions are recorded.** A choice that changes scope, protocol, identity,
   trust or stack goes into `docs/design.md` with its reason, in the same
   change. Open questions stay marked as open until they are decided.
-- **Nothing is a dead end.** A decision that ties a person to some state says
-  how they change, undo or leave it; a review asks what a user can no longer do.
 - **The protocol is defined once.** Message types live in one schema, and each
   language's types are generated from it; never hand-write a second copy.
 - **Reuse is deliberate.** Code adapted from another project is recorded under
