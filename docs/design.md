@@ -556,6 +556,19 @@ The questions, as settled:
      gets that link again, and a link that comes before the app asks is
      held for it, the newest winning.
 
+     Following the relay to a new address (decided 2026-11-18, for a
+     self-hosting tester who moved his relay off port 443): the phone's
+     keys and chats are kept under the relay's address, and a second
+     join link is refused while joined, so a moved relay left
+     reinstalling as the only way out. Settings shows the relay's
+     address, and "Change address" takes a new one, checked as a join
+     link's is. The phone logs in there with the main key it has, no
+     token; only once the relay answers it as one of its own (a ready
+     login, which another relay, not knowing the key, refuses) are both
+     keys kept under the new address, the address saved, and the old
+     keys dropped. Otherwise it says why and connects to the old address
+     again. The protocol is unchanged.
+
    The adapter offered none of these either (retired 2026-11-07). With
    the hosted relay each becomes a signed version of the device list.
 4. **How a client joins.** The relay issues a one-time registration link or

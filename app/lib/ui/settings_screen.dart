@@ -1,8 +1,8 @@
 // Settings, over the session list from its button, as the web page's
 // Settings.tsx in the Native look: this phone's settings, kept on it (the
-// lock, how long it holds, notifications), its subscription, then the
-// hosts and the clients registered with the relay, and last the licences
-// of what the app is built from. The web page's look and keys have nothing to set here.
+// lock, how long it holds, notifications), its subscription, the relay's
+// address, then the hosts and the clients registered with the relay, and
+// last the licences of what the app is built from. The web page's look and keys have nothing to set here.
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 // Only for the licences: Flutter's page of them is Material's.
@@ -15,9 +15,10 @@ import '../app/store.dart';
 import '../push/push.dart';
 import 'devices.dart';
 import 'look.dart';
+import 'relay_address.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.version = appVersion, this.wide = false});
+  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.version = appVersion, this.wide = false});
   final PhoneSettings settings;
   // The relay's, for its hosts and clients; none before joining.
   final PircModel? model;
@@ -25,6 +26,9 @@ class SettingsScreen extends StatefulWidget {
   // it; none where there is no store.
   final ValueListenable<StoreStatus?>? subscription;
   final Future<void> Function()? manage;
+  // Follows the relay to a new address (RelayAddressScreen); none before
+  // joining.
+  final Future<String?> Function(String to)? follow;
   // The app's version as the build gave it, for the licences.
   final Future<String?> Function() version;
   // Beside the list (a wide screen): no way back, as the web page's.
@@ -114,6 +118,14 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               if (sub.access == Access.allowed) _Row(label: _subscribed(sub), sub: _until(sub), problem: sub.graceEnds != null ? _grace(sub) : null),
               if (widget.manage != null) _Link(label: 'Manage subscription', onTap: () => widget.manage!()),
             ]),
+            if (s.relay case final relay? when widget.follow != null)
+              _Section(title: 'Relay', sub: 'Where this phone reaches your hosts.', rows: [
+                _Row(label: relay),
+                _Link(
+                  label: 'Change address',
+                  onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => RelayAddressScreen(relay: relay, follow: widget.follow!))),
+                ),
+              ]),
             if (widget.model != null) ...[
               _Section(title: 'Hosts', sub: 'Computers running pi, whose sessions show here.', rows: [DeviceList(model: widget.model!, role: 'host', relay: s.relay)]),
               _Section(title: 'Clients', sub: 'This phone, the web app and the other phones, each reaching every host.', rows: [DeviceList(model: widget.model!, role: 'client', relay: s.relay)]),

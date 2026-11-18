@@ -619,7 +619,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage)));
+    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -690,6 +690,37 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _model = null;
       _holder = null;
     });
+  }
+
+  // The relay at another address (Settings, Relay address): the phone logs
+  // in there with its key, and only then keeps it under the new address,
+  // which it saves, and drops the old. Null when it did; otherwise why
+  // not, connected to the old address again.
+  Future<String?> _follow(String to) async {
+    final from = _relay, key = _key;
+    if (from == null || key == null) return 'Unlock PiRC first.';
+    to = to.trim();
+    _conn?.stop();
+    try {
+      await goingOutside(() => follow(from, to, key, widget.store, protect: _settings!.lock));
+    } on JoinFailed catch (e) {
+      if (mounted && identical(_key, key)) _conn?.start();
+      return e.reason;
+    }
+    await widget.prefs.setRelay(to);
+    await widget.store.delete(from);
+    if (!mounted) return null;
+    // The list, over the new connection; what was open was the old one's.
+    _detail = null;
+    _nav.currentState?.popUntil((r) => r.isFirst);
+    _chat.value = null;
+    _inSettings = false;
+    _notes?.detach();
+    _holder?.forget();
+    _holder = KeyHolder(widget.store, to, holdFor: _settings!.hold, protect: widget.protect);
+    setState(() => _relay = to);
+    _connect(to, key);
+    return null;
   }
 
   // The camera's scan, over the join screen; the link it read, or null.
@@ -792,7 +823,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                 Container(width: 0.5, color: look.rule),
                 Expanded(
                   child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, wide: true)
+                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, wide: true)
                       : _chat.value != null
                           ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
                           : CupertinoPageScaffold(

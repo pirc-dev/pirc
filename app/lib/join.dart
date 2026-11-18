@@ -1,7 +1,8 @@
 // Joining a relay by a link or QR code from another client (docs/web.md,
 // section 5: "Add an app"): pirc://join?relay=<url>&token=<token>. The phone
 // makes its two keys, logs in with the main one and the token, which
-// registers it, then registers its read-only key under it.
+// registers it, then registers its read-only key under it. And following
+// the relay it joined to a new address, with the keys it has.
 import 'dart:async';
 
 import 'core/protocol.dart';
@@ -98,5 +99,66 @@ Future<({DeviceKey main, DeviceKey read})> join(
     rethrow;
   } finally {
     conn.stop();
+  }
+}
+
+// Follows the relay to another address, as when it moved to another port:
+// the phone logs in there with the main key it has, and only once the
+// relay answers it as one of its own are both keys kept under the new
+// address too. The caller then saves the address and drops the old keys;
+// on failure nothing is kept, and the old address stays.
+Future<void> follow(
+  String from,
+  String to,
+  DeviceKey main,
+  KeyStore store, {
+  bool protect = true,
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  try {
+    relayUri(to);
+  } on FormatException catch (e) {
+    throw JoinFailed(e.message);
+  }
+  if (to == from) throw const JoinFailed('This is the address the phone uses now.');
+  final read = await store.load(from, KeyKind.read);
+  if (read == null) throw const JoinFailed("This phone's keys for the relay are gone. Join it again.");
+  final done = Completer<void>();
+  var lastReason = '';
+  final conn = RelayConnection(
+    url: to,
+    key: main,
+    onState: (s) {
+      if (done.isCompleted) return;
+      switch (s) {
+        case Ready():
+          done.complete();
+        case Refused():
+          done.completeError(JoinFailed(s.code == ErrorCode.ERROR_CODE_UNAUTHENTICATED
+              ? "The relay at this address doesn't know this phone. Check that it is the same relay."
+              : 'The relay refused this phone: ${s.reason}'));
+        case AwaitingApproval():
+          done.completeError(const JoinFailed("The relay at this address doesn't know this phone. Check that it is the same relay."));
+        case Offline(:final reason):
+          lastReason = reason;
+        default:
+      }
+    },
+    onFrame: (_) {},
+  );
+  conn.start();
+  try {
+    await done.future.timeout(timeout, onTimeout: () {
+      throw JoinFailed(lastReason.isEmpty ? 'The relay did not answer.' : 'Could not reach the relay: $lastReason');
+    });
+  } finally {
+    conn.stop();
+  }
+  try {
+    await store.store(to, KeyKind.main, main.seed, protect: protect);
+    await store.store(to, KeyKind.read, read, protect: false);
+  } on KeyUnavailable catch (e) {
+    await store.delete(to);
+    throw JoinFailed(e.cancelled ? 'Changing the address was cancelled.' : e.reason);
   }
 }

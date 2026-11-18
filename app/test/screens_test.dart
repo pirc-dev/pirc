@@ -45,6 +45,7 @@ import 'package:pirc/ui/launch.dart';
 import 'package:pirc/ui/look.dart';
 import 'package:pirc/ui/markdown.dart';
 import 'package:pirc/ui/paywall_screen.dart';
+import 'package:pirc/ui/relay_address.dart';
 import 'package:pirc/ui/sessions_screen.dart';
 import 'package:pirc/ui/settings_screen.dart';
 import 'package:pirc/ui/sheet.dart';
@@ -2264,7 +2265,8 @@ void main() {
     ];
 
     // Settings for a phone whose key is the 3s, on a relay listing all.
-    Future<PircModel> open(WidgetTester tester, {Brightness brightness = Brightness.light, bool ready = true}) async {
+    // With follow, the relay's address above them, as the app shows it.
+    Future<PircModel> open(WidgetTester tester, {Brightness brightness = Brightness.light, bool ready = true, bool follow = false}) async {
       out = [];
       var n = 0;
       final model = PircModel(send: (f) {
@@ -2275,19 +2277,40 @@ void main() {
       model.client.onFrame(Frame(keys: Keys(keys: all)));
       final settings = await PhoneSettings.load(store: MemoryKeyStore(), prefs: MemoryPrefs('ws://127.0.0.1:9'));
       settings.relay = 'wss://relay.example:8443';
-      await tester.pumpWidget(frame(SettingsScreen(settings: settings, model: model), brightness: brightness));
+      await tester.pumpWidget(frame(SettingsScreen(settings: settings, model: model, follow: follow ? (_) async => null : null), brightness: brightness));
       await tester.pumpAndSettle();
       return model;
     }
 
     Frame sentOf(String which) => out.lastWhere((f) => f.whichBody().name == which);
 
+    testWidgets("the relay's address, changed: what the relay at the new one said, and the old kept", (tester) async {
+      tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final asked = <String>[];
+      await tester.pumpWidget(frame(RelayAddressScreen(
+        relay: 'wss://relay.example',
+        follow: (to) async {
+          asked.add(to);
+          return "The relay at this address doesn't know this phone. Check that it is the same relay.";
+        },
+      )));
+      expect(find.text('wss://relay.example'), findsOneWidget, reason: 'the address in use, to edit');
+      await tester.enterText(find.byType(CupertinoTextField), 'wss://relay.example:8443');
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(asked, ['wss://relay.example:8443']);
+      expect(find.textContaining("doesn't know this phone"), findsOneWidget);
+      await expectLater(find.byType(RelayAddressScreen), matchesGoldenFile('goldens/relay_address_light.png'));
+    }, skip: !drawsGoldens);
+
     for (final b in Brightness.values) {
       testWidgets('listed, ${b.name}', (tester) async {
         tester.view.physicalSize = const Size(390 * 3, 1100 * 3);
         tester.view.devicePixelRatio = 3;
         addTearDown(tester.view.reset);
-        await open(tester, brightness: b);
+        await open(tester, brightness: b, follow: true);
         expect(find.text('This phone'), findsOneWidget, reason: 'first among the clients');
         expect(find.text('Online · Notifications on · key AwMDAwMD…'), findsOneWidget);
         expect(find.text('Offline · key AgICAgIC…'), findsOneWidget);

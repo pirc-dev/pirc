@@ -19,10 +19,21 @@ class Relay {
     final bin = '${dir.path}/pirc-relay';
     final built = await Process.run('go', ['build', '-o', bin, './cmd/pirc-relay'], workingDirectory: '../relay');
     if (built.exitCode != 0) throw StateError('go build: ${built.stderr}');
+    return _serve(bin, '${dir.path}/relay');
+  }
+
+  // The same relay, its registry and all, stopped and started on another
+  // port, as when its operator moves it.
+  Future<Relay> moved() async {
+    kill();
+    await _proc.exitCode;
+    return _serve(bin, data);
+  }
+
+  static Future<Relay> _serve(String bin, String data) async {
     final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = probe.port;
     await probe.close();
-    final data = '${dir.path}/relay';
     final proc = await Process.start(bin, ['serve', '--plaintext', '--listen', '127.0.0.1:$port', '--data-dir', data]);
     proc.stdout.drain<void>();
     proc.stderr.drain<void>();
