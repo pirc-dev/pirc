@@ -1,4 +1,5 @@
-PiRC: the relay (relay/cmd/pirc-relay, relay/internal/server, relay/internal/registry)
+PiRC: the relay (relay/cmd/pirc-relay, relay/internal/server, relay/internal/registry,
+relay/internal/hosted)
 Copyright (c) 2026 Justino Ltd
 
 This program is free software: you can redistribute it and/or modify it

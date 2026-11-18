@@ -2223,6 +2223,39 @@ Each step ends with something that can be seen working.
        lookup; routing within an account; no labels anywhere; attestation
        and the subscription check behind an interface, with a test
        verifier. Tested by Go tests and the extended exchanges, locally.
+
+       Done 2026-11-18 but for the exchanges, which come with stage 3:
+       `relay/internal/hosted` (AGPL-3.0, as the rest of the relay), run
+       by `pirc-relay serve-hosted --origin wss://…`, a command built only
+       with the Go build tag `hosted`, so that until stage 6 no release
+       has it and the release binary links what it did. The store is
+       `hosted.db` in the data directory, by `modernc.org/sqlite`
+       (BSD-3-Clause, a translation of SQLite to Go, so the relay still
+       builds with `CGO_ENABLED=0`); it and its modules join `NOTICE` and
+       `third_party/` when the hosted mode first ships. Decided while
+       building it, and written into `relay.proto`:
+       - after `SignedUp` the phone logs in again with the account's ID,
+         rather than the connection changing account;
+       - a host's announcement is refused until its process has published
+         a bundle under that key ID; the relay keeps a process's bundles
+         from the oldest a live announcement uses on, and its newest
+         while its connection lasts, in memory, as sessions are;
+       - the relay takes a withdrawal without the version withdrawn,
+         which it never took: it checks the signature, that the winner is
+         its own version with that number, and that the signer was a
+         client in the version before;
+       - label records and wraps under an older label key than the
+         newest the relay has, and records with a lower counter, are
+         refused with `CONFLICT`; a wrap is taken only for its
+         recipient's current pre-key, one per recipient and label key;
+       - a join's wait ends with `TIMEOUT` after the code's ten minutes,
+         and a join paired from it ten minutes after the wait began.
+       Waking phones through the push gateway comes with the app's
+       notifications (stage 5): the relay stores push handles and reports
+       them in `Devices`, but wakes nobody yet. The subscription is
+       checked at sign-up only, until stage 4 decides what a lapse does.
+       The relay serialises every change under one lock, store writes
+       included, which is enough for a beta.
     3. **Hosts, and the client logic in TypeScript**:
        - the extension as a host of a hosted account: the anchor's
          folder, `/pirc join`, `/pirc leave`, the `pirc-e2e:` address;

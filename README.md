@@ -121,8 +121,8 @@ Copyright Justino Ltd. Three licences, by part:
   push gateway (`relay/cmd/pirc-gateway`, `relay/internal/gateway`) and
   everything else without a licence of its own.
 - **AGPL-3.0 only**: the relay (`relay/cmd/pirc-relay`,
-  `relay/internal/server`, `relay/internal/registry`) and the web app
-  (`web/`).
+  `relay/internal/server`, `relay/internal/registry`,
+  `relay/internal/hosted`) and the web app (`web/`).
 - **GPL-3.0 only**: the mobile app (`app/`).
 
 Each AGPL and GPL directory has its licence as `LICENSE`. `NOTICE` lists the

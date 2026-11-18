@@ -4,8 +4,8 @@ Copyright (c) 2026 Justino Ltd
 
 This licence covers everything in this repository except the directories
 under licences of their own: relay/cmd/pirc-relay, relay/internal/server,
-relay/internal/registry and web/, under the GNU Affero General Public
-License, version 3; app/, under the GNU General Public License, version 3; and
+relay/internal/registry, relay/internal/hosted and web/, under the GNU
+Affero General Public License, version 3; app/, under the GNU General Public License, version 3; and
 third_party/, which holds other projects' licences for code that PiRC's
 releases carry (see NOTICE).
 

@@ -154,7 +154,8 @@ enum FrameKind {
 }
 
 // Host to relay, as in v1alpha1; the payload is a SignedObject
-// (AnnouncementBody), encrypted.
+// (AnnouncementBody), encrypted. Refused with INVALID unless this process
+// has published a bundle with keys.key_id (PublishBundle) first.
 message SessionAnnounce {
   pirc.v1alpha1.SessionRef session = 1;
   FrameKeys keys = 2;
@@ -171,7 +172,8 @@ message SessionEnd {
 // stored announcement uses it, and sent to clients with the session list.
 // Answered by Done; a bundle whose signer is not this connection's key,
 // or whose list version is not one the relay has, is refused with
-// INVALID.
+// INVALID. The relay keeps a process's bundles from the oldest a live
+// announcement uses on, and its newest while its connection lasts.
 message PublishBundle {
   string request_id = 1;
   SignedObject bundle = 2;
@@ -252,8 +254,12 @@ message PublishVersion {
   SignedObject version = 2;
 }
 
-// Client to relay: a SignedObject (WithdrawalBody). Answered as
-// PublishVersion is.
+// Client to relay: a SignedObject (WithdrawalBody) of a version that lost
+// to the relay's version with its number, signed by a client in the
+// version before. The relay never took the version withdrawn, so it
+// cannot check the withdrawal against it; the devices that took it do.
+// Answered by Done, after Versions to every device the first time; or by
+// Error with INVALID.
 message PublishWithdrawal {
   string request_id = 1;
   SignedObject withdrawal = 2;
@@ -289,13 +295,21 @@ message PreKeys {
   bool all = 2;
 }
 
-// Client to relay: a SignedObject (LabelsBody). Answered by Done.
+// Client to relay: a SignedObject (LabelsBody), signed by a client on the
+// latest version, its label key and list version naming versions the
+// relay has. Answered by Done; or by Error with CONFLICT, after LabelState,
+// when the relay has a newer label key, or a higher counter under this
+// one.
 message PublishLabels {
   string request_id = 1;
   SignedObject labels = 2;
 }
 
-// Client to relay: SignedObjects (LabelKeyWrapBody). Answered by Done.
+// Client to relay: SignedObjects (LabelKeyWrapBody), each for a client or
+// read-only key on the latest version and wrapped for its current pre-key;
+// the relay keeps one per recipient and label key, the latest. Answered
+// by Done; or by Error with CONFLICT when the relay has a newer label
+// key.
 message PublishLabelKeyWraps {
   string request_id = 1;
   repeated SignedObject wraps = 2;
@@ -316,7 +330,8 @@ message Done {
 // New device to relay, logged in without an account: wait for a client to
 // type the code whose first four characters are `lookup`. The relay
 // answers JoinPaired when one does, or Error with RATE_LIMITED or INVALID
-// (a lookup already waiting). The wait ends after ten minutes.
+// (a lookup already waiting). The wait ends after ten minutes, with Error
+// TIMEOUT, and a join paired from it ten minutes after the wait began.
 message JoinWait {
   // Four Crockford base32 characters, upper case.
   string lookup = 1;
@@ -354,7 +369,10 @@ message JoinEnded {
 // Phone to relay, logged in without an account, with the key of version
 // 1's one device: make an account. Answered by SignedUp, or Error with
 // the request_id: PERMISSION_DENIED when sign-ups are closed and the
-// invite code is not good; INVALID when version 1 does not check.
+// invite code is not good, or the attestation or subscription is refused;
+// INVALID when version 1 does not check. The phone then logs in again,
+// with the account's ID. The same version 1 sent again is answered by
+// SignedUp again.
 message SignUp {
   string request_id = 1;
   // A SignedObject (ListVersionBody) of number 1.

@@ -50,6 +50,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -63,6 +64,9 @@ import (
 	"pirc.dev/relay/internal/registry"
 	"pirc.dev/relay/internal/server"
 )
+
+// Commands only some builds have, by name.
+var extraCommands = map[string]func([]string) error{}
 
 // Set at release time with -ldflags "-X main.version=..."; see sh/release.sh.
 var version = "dev"
@@ -99,6 +103,11 @@ func main() {
 	case "version":
 		fmt.Println(version)
 	default:
+		// serve-hosted, in a build with the hosted tag (hosted.go).
+		if c := extraCommands[cmd]; c != nil {
+			err = c(args)
+			break
+		}
 		usage()
 	}
 	if err != nil {
@@ -189,89 +198,77 @@ func envInt(name string, def int) (int, error) {
 	return n, nil
 }
 
-func serve(args []string) error {
-	fs, dataDir := flags("serve")
+// netFlags are serve's flags for where and how it listens, which
+// serve-hosted shares.
+type netFlags struct {
+	listen, cert, key, proxyList *string
+	plaintext                    *bool
+	maxFrame                     *int
+}
+
+func addNetFlags(fs *flag.FlagSet) (*netFlags, error) {
 	plainDefault, err := envBool("PIRC_RELAY_PLAINTEXT")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	frameDefault, err := envInt("PIRC_RELAY_MAX_FRAME_BYTES", 16<<20)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	listen := fs.String("listen", envString("PIRC_RELAY_LISTEN", "127.0.0.1:8443"), "address to listen on (PIRC_RELAY_LISTEN)")
-	cert := fs.String("tls-cert", envString("PIRC_RELAY_TLS_CERT", ""), "TLS certificate file (PIRC_RELAY_TLS_CERT)")
-	key := fs.String("tls-key", envString("PIRC_RELAY_TLS_KEY", ""), "TLS key file (PIRC_RELAY_TLS_KEY)")
-	plaintext := fs.Bool("plaintext", plainDefault, "serve without TLS: only on a network that already encrypts, or behind a proxy that terminates TLS (PIRC_RELAY_PLAINTEXT)")
-	maxFrame := fs.Int("max-frame-bytes", frameDefault, "largest frame accepted or sent (PIRC_RELAY_MAX_FRAME_BYTES)")
-	gatewayFlag := fs.String("push-gateway", envString("PIRC_RELAY_PUSH_GATEWAY", ""), "push gateway to wake clients registered for push through, such as phones; none when empty (PIRC_RELAY_PUSH_GATEWAY)")
-	closedDefault, err := envBool("PIRC_RELAY_CLOSED_TO_HOSTS")
-	if err != nil {
-		return err
-	}
-	closed := fs.Bool("closed-to-hosts", closedDefault, "no new hosts but those added with add-host: none asking for approval, no host tokens for clients (PIRC_RELAY_CLOSED_TO_HOSTS)")
-	proxyList := fs.String("trusted-proxies", envString("PIRC_RELAY_TRUSTED_PROXIES", ""), "comma-separated addresses or CIDR prefixes of proxies whose X-Forwarded-For is believed (PIRC_RELAY_TRUSTED_PROXIES)")
-	if err := parse(fs, dataDir, args); err != nil {
-		return err
-	}
+	return &netFlags{
+		listen:    fs.String("listen", envString("PIRC_RELAY_LISTEN", "127.0.0.1:8443"), "address to listen on (PIRC_RELAY_LISTEN)"),
+		cert:      fs.String("tls-cert", envString("PIRC_RELAY_TLS_CERT", ""), "TLS certificate file (PIRC_RELAY_TLS_CERT)"),
+		key:       fs.String("tls-key", envString("PIRC_RELAY_TLS_KEY", ""), "TLS key file (PIRC_RELAY_TLS_KEY)"),
+		plaintext: fs.Bool("plaintext", plainDefault, "serve without TLS: only on a network that already encrypts, or behind a proxy that terminates TLS (PIRC_RELAY_PLAINTEXT)"),
+		maxFrame:  fs.Int("max-frame-bytes", frameDefault, "largest frame accepted or sent (PIRC_RELAY_MAX_FRAME_BYTES)"),
+		proxyList: fs.String("trusted-proxies", envString("PIRC_RELAY_TRUSTED_PROXIES", ""), "comma-separated addresses or CIDR prefixes of proxies whose X-Forwarded-For is believed (PIRC_RELAY_TRUSTED_PROXIES)"),
+	}, nil
+}
 
-	if *listen == "" {
-		return errors.New("--listen is empty")
+// check checks the flags once parsed: whether TLS is used, and the
+// trusted proxies.
+func (n *netFlags) check() (useTLS bool, proxies []netip.Prefix, err error) {
+	if *n.listen == "" {
+		return false, nil, errors.New("--listen is empty")
 	}
-	proxies, err := proxy.Parse(*proxyList)
-	if err != nil {
-		return err
+	if proxies, err = proxy.Parse(*n.proxyList); err != nil {
+		return false, nil, err
 	}
-	gateway, err := server.ParseGateway(*gatewayFlag)
-	if err != nil {
-		return err
-	}
-	useTLS := *cert != "" || *key != ""
+	useTLS = *n.cert != "" || *n.key != ""
 	switch {
-	case useTLS && (*cert == "" || *key == ""):
-		return errors.New("--tls-cert and --tls-key go together")
-	case useTLS && *plaintext:
-		return errors.New("--plaintext contradicts --tls-cert")
-	case !useTLS && !*plaintext:
-		return errors.New("TLS is required: give --tls-cert and --tls-key, or --plaintext to serve without it")
+	case useTLS && (*n.cert == "" || *n.key == ""):
+		return false, nil, errors.New("--tls-cert and --tls-key go together")
+	case useTLS && *n.plaintext:
+		return false, nil, errors.New("--plaintext contradicts --tls-cert")
+	case !useTLS && !*n.plaintext:
+		return false, nil, errors.New("TLS is required: give --tls-cert and --tls-key, or --plaintext to serve without it")
 	}
+	return useTLS, proxies, nil
+}
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+func warnProxies(log *slog.Logger, proxies []netip.Prefix) {
 	for _, p := range proxy.Wide(proxies) {
 		log.Warn("a trusted proxy prefix covers more than one address: any peer inside it can give any address as its own", "prefix", p)
 	}
-	if gateway == "" {
-		log.Info("no push gateway: clients registered for push are not woken (--push-gateway)")
-	}
-	if err := registry.New(*dataDir).Create(); err != nil {
-		return err
-	}
-	server.Software = "pirc-relay/" + version
-	srv, err := server.New(server.Config{
-		Registry:       registry.New(*dataDir),
-		MaxFrameBytes:  *maxFrame,
-		TrustedProxies: proxies,
-		PushGateway:    gateway,
-		ClosedToHosts:  *closed,
-		Logger:         log,
-	})
-	if err != nil {
-		return err
-	}
+}
+
+// run serves handler until SIGINT or SIGTERM, then shuts down: the
+// relay's own connections first, with shutdown, then the HTTP server.
+// path is the WebSocket's, for the log line; attrs are logged with it.
+func run(log *slog.Logger, n *netFlags, useTLS bool, handler http.Handler, shutdown func(context.Context), path string, attrs ...any) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	go srv.Run(ctx)
 
 	// IdleTimeout closes keep-alive connections nobody uses; a WebSocket,
 	// hijacked, is the relay's own to time out.
-	hs := &http.Server{Addr: *listen, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
+	hs := &http.Server{Addr: *n.listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() {
 		<-ctx.Done()
 		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		// WebSockets are hijacked connections, which http.Server.Shutdown
 		// leaves alone: close them first, so peers see a close frame.
-		srv.Shutdown(sctx)
+		shutdown(sctx)
 		hs.Shutdown(sctx)
 	}()
 	scheme := "wss"
@@ -281,17 +278,17 @@ func serve(args []string) error {
 	// The certificate is loaded and the address taken before the relay says
 	// it listens, so that a bad file or a busy port is the last word logged.
 	if useTLS {
-		pair, err := tls.LoadX509KeyPair(*cert, *key)
+		pair, err := tls.LoadX509KeyPair(*n.cert, *n.key)
 		if err != nil {
 			return fmt.Errorf("TLS certificate: %w", err)
 		}
 		hs.TLSConfig = &tls.Config{Certificates: []tls.Certificate{pair}}
 	}
-	ln, err := net.Listen("tcp", *listen)
+	ln, err := net.Listen("tcp", *n.listen)
 	if err != nil {
 		return err
 	}
-	log.Info("listening", "url", fmt.Sprintf("%s://%s/v1alpha1", scheme, *listen), "data_dir", *dataDir, "version", version, "trusted_proxies", *proxyList)
+	log.Info("listening", append([]any{"url", fmt.Sprintf("%s://%s%s", scheme, *n.listen, path)}, attrs...)...)
 	if useTLS {
 		err = hs.ServeTLS(ln, "", "")
 	} else {
@@ -301,6 +298,57 @@ func serve(args []string) error {
 		return nil
 	}
 	return err
+}
+
+func serve(args []string) error {
+	fs, dataDir := flags("serve")
+	nf, err := addNetFlags(fs)
+	if err != nil {
+		return err
+	}
+	gatewayFlag := fs.String("push-gateway", envString("PIRC_RELAY_PUSH_GATEWAY", ""), "push gateway to wake clients registered for push through, such as phones; none when empty (PIRC_RELAY_PUSH_GATEWAY)")
+	closedDefault, err := envBool("PIRC_RELAY_CLOSED_TO_HOSTS")
+	if err != nil {
+		return err
+	}
+	closed := fs.Bool("closed-to-hosts", closedDefault, "no new hosts but those added with add-host: none asking for approval, no host tokens for clients (PIRC_RELAY_CLOSED_TO_HOSTS)")
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+
+	useTLS, proxies, err := nf.check()
+	if err != nil {
+		return err
+	}
+	gateway, err := server.ParseGateway(*gatewayFlag)
+	if err != nil {
+		return err
+	}
+
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	warnProxies(log, proxies)
+	if gateway == "" {
+		log.Info("no push gateway: clients registered for push are not woken (--push-gateway)")
+	}
+	if err := registry.New(*dataDir).Create(); err != nil {
+		return err
+	}
+	server.Software = "pirc-relay/" + version
+	srv, err := server.New(server.Config{
+		Registry:       registry.New(*dataDir),
+		MaxFrameBytes:  *nf.maxFrame,
+		TrustedProxies: proxies,
+		PushGateway:    gateway,
+		ClosedToHosts:  *closed,
+		Logger:         log,
+	})
+	if err != nil {
+		return err
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go srv.Run(ctx)
+	return run(log, nf, useTLS, srv.Handler(), srv.Shutdown, "/v1alpha1", "data_dir", *dataDir, "version", version, "trusted_proxies", *nf.proxyList)
 }
 
 func add(role registry.Role, args []string, stdout, stderr io.Writer) error {

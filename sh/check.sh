@@ -26,12 +26,14 @@ step "generate"
 sh/generate.sh
 
 step "go vet, test"
-(cd relay && go vet ./... && go test ./...)
+# The hosted mode is built only with its tag until it ships (docs/design.md,
+# step 14), so both builds are vetted and the tagged one is tested too.
+(cd relay && go vet ./... && go vet -tags hosted ./... && go test ./... && go test -tags hosted ./cmd/pirc-relay)
 
 step "push gateway: no AGPL package among its dependencies"
-# The gateway is MIT; the relay's server and registry are AGPL-3.0.
+# The gateway is MIT; the relay's server, registry and hosted mode are AGPL-3.0.
 agpl=$(cd relay && go list -deps -test ./cmd/pirc-gateway ./internal/gateway \
-  | grep -E '^pirc\.dev/relay/internal/(server|registry)( |$)' || true)
+  | grep -E '^pirc\.dev/relay/internal/(server|registry|hosted)( |$)' || true)
 if [ -n "$agpl" ]; then
   echo "the gateway depends on: $agpl" >&2
   exit 1
