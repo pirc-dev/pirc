@@ -21,10 +21,16 @@ import "pirc/v1alpha1/common.proto";
 // only in list version 1, whose body's hash is the account ID, and in a
 // join's JoinDeviceBody, whose signer knows no account yet. An object's
 // hash is SHA-256 over its body.
+//
+// `signer` is the signing key, so that the signature is checked before the
+// body is parsed; once parsed, the body's own field for its signer (which
+// the hash covers) must be the same key, or the object is refused.
 message SignedObject {
   bytes body = 1;
   // 64 bytes.
   bytes signature = 2;
+  // Ed25519, 32 bytes.
+  bytes signer = 3;
 }
 
 // A version of the account's device list, by number and hash.

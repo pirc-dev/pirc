@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./index.ts"
+    ".": "./index.ts",
+    "./v1alpha2": "./v1alpha2.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0"

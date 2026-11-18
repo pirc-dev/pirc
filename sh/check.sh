@@ -50,7 +50,7 @@ node --experimental-transform-types --no-warnings sh/roundtrip.ts encode \
   | node --experimental-transform-types --no-warnings sh/roundtrip.ts compare
 
 step "relay client, extension and web app: unit tests"
-node --experimental-transform-types --no-warnings --test relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
+node --experimental-transform-types --no-warnings --test crypto/test/*.test.ts relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
 
 step "mobile app: generate, analyze, test"
 if command -v flutter >/dev/null; then

@@ -170,8 +170,10 @@ must reproduce or accept byte for byte.
   `*Body` messages, encoded by its signer) and an Ed25519 signature over
   framed(`pirc-e2e-v1 <kind>`, account ID, body). The account ID is empty
   in list version 1 alone, and in the join's own signature, whose signer
-  has no account yet. An object's hash, and so the account ID, is SHA-256
-  over its body.
+  has no account yet. The signer's key travels beside the body too, so
+  that the signature is checked before the body is parsed, and must then
+  match the body's own field for it. An object's hash, and so the account
+  ID, is SHA-256 over its body, which names its signer.
 - The sending keys are HKDF-SHA256 of the day's secret, with the key ID as
   salt and framed(`pirc-e2e-v1 announcement key` or `… conversation key`,
   account ID, host key) as info. A bundle's two wraps per recipient are

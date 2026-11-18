@@ -1213,6 +1213,11 @@ commit it came from.
 |---|---|---|---|
 | -- | nothing yet | -- | -- |
 
+Test data from elsewhere, in `cases/e2e/` and in no release (2026-11-18),
+listed in `NOTICE`: the 12 vectors of ed25519-speccheck (Apache-2.0, its
+licence in `third_party/ed25519-speccheck/`), one vector of the CFRG's HPKE
+test vectors, and CPace's draft-21 vectors.
+
 ## 12. Plan
 
 Each step ends with something that can be seen working.
@@ -2290,7 +2295,7 @@ Each step ends with something that can be seen working.
     - **Licences**, all open source, by part (decided 2026-11-07):
       - MIT for what runs on other people's machines or is meant to be
         reused: the extension, what it shares with the clients
-        (`proto/`, `protocol/`, `relay-client/`, `cases/`), the push
+        (`proto/`, `protocol/`, `crypto/`, `relay-client/`, `cases/`), the push
         gateway, and the rest of the tree (`sh/`, `test/`, `docs/`).
       - AGPL-3.0 for the relay and the web app, which run as services:
         whoever runs a changed copy for others must publish their

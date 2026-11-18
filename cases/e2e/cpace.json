@@ -1,0 +1,338 @@
+{
+ "about": "CPACE-X25519-SHA512 test vectors decoded from draft-irtf-cfrg-cpace-21, appendix A and B.1 (base64 JSON blocks)",
+ "draft": "draft-irtf-cfrg-cpace-21",
+ "calculate_generator": {
+  "section": "B.1.1.1",
+  "H": "sha-512",
+  "H.s_in_bytes": 128,
+  "PRS": "50617373776f7264",
+  "ZPAD length": 109,
+  "DSI": "4350616365323535",
+  "CI": "0b415f696e69746961746f720b425f726573706f6e646572",
+  "sid": "7e4b4791d6a8ef019b936c79fb7f2c57",
+  "generator_string(G.DSI,PRS,CI,sid,H.s_in_bytes)": "0843506163653235350850617373776f72646d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000180b415f696e69746961746f720b425f726573706f6e646572107e4b4791d6a8ef019b936c79fb7f2c57",
+  "hash generator string": "03998087bdb1a2617bbe25ef5a7c18cd4f84f902328701790958755ee4aed1d3",
+  "decoded field element of 255 bits": "03998087bdb1a2617bbe25ef5a7c18cd4f84f902328701790958755ee4aed153",
+  "generator g": "d04bf6d41f6a289632a2e929fa29bebd51092512a7829fdde7d314b62f05a73f"
+ },
+ "exchange": {
+  "section": "B.1.9",
+  "PRS": "50617373776f7264",
+  "CI": "0b415f696e69746961746f720b425f726573706f6e646572",
+  "sid": "7e4b4791d6a8ef019b936c79fb7f2c57",
+  "g": "d04bf6d41f6a289632a2e929fa29bebd51092512a7829fdde7d314b62f05a73f",
+  "ya": "21b4f4bd9e64ed355c3eb676a28ebedaf6d8f17bdc365995b319097153044080",
+  "ADa": "414461",
+  "Ya": "1d13c89278cdadd826f6d8d7f887701430f8380ddc17611cdd6dc989ce0c9f32",
+  "yb": "848b0779ff415f0af4ea14df9dd1d3c29ac41d836c7808896c4eba19c51ac40a",
+  "ADb": "414462",
+  "Yb": "248cccf6d5cdc3646f0ad593f9e6cef4e69d4945f8372e623512ecea32185623",
+  "K": "5b067effbdc0b2a0e1d907b21ebb25cfedb96a852179a847c37e43ee71322c6b",
+  "ISK_IR": "6e19b875f7a561d6b3ca3dbb9ef42ac55de3e717881018204b8922b4d5e53bb2aa82c300bea7b65d2b671da71922ddf6472301b79bc270adfa8bf413285f2263",
+  "ISK_SY": "eef745e2f6e7ae2b1a1e53da340e777167a07fe150436648c51fb199c11f3cbabfc683a2b48e1af5881940dc398d375c95e6b4ae9948a45b8770de0656382be4",
+  "sid_output_ir": "cbc73f62589bbc96ab6a95ec2363df621e93bc3b0cea83ba6b9571d005fa8f5d2d08f7165622777fa484c02a9e6b20a84ee2dbebae8c53be757dcfc0eebdeb5f",
+  "sid_output_oc": "3a504e9c7f1f7fa7314861e2c487d13f28566f3043f0ca760d22c4911aca0dd8b1f12a7ad0862eb92d08a76120140412ae6b8322e99d75cf1d20d8cfde2b40fe"
+ },
+ "scalar_mult_vfy_low_order": {
+  "section": "B.1.10.1",
+  "Invalid Y0": "0000000000000000000000000000000000000000000000000000000000000000",
+  "Invalid Y1": "0100000000000000000000000000000000000000000000000000000000000000",
+  "Invalid Y2": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "Invalid Y3": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+  "Invalid Y4": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+  "Invalid Y5": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "Invalid Y6": "daffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "Invalid Y7": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "Invalid Y8": "dbffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "Invalid Y9": "d9ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "Invalid Y10": "cdeb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+  "Invalid Y11": "4c9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+  "s": "af46e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449aff",
+  "q": {
+   "Invalid Y0": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y1": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y2": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y3": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y4": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y5": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y6": "d8e2c776bbacd510d09fd9278b7edcd25fc5ae9adfba3b6e040e8d3b71b21806",
+   "Invalid Y7": "0000000000000000000000000000000000000000000000000000000000000000",
+   "Invalid Y8": "c85c655ebe8be44ba9c0ffde69f2fe10194458d137f09bbff725ce58803cdb38",
+   "Invalid Y9": "db64dafa9b8fdd136914e61461935fe92aa372cb056314e1231bc4ec12417456",
+   "Invalid Y10": "e062dcd5376d58297be2618c7498f55baa07d7e03184e8aada20bca28888bf7a",
+   "Invalid Y11": "993c6ad11c4c29da9a56f7691fd0ff8d732e49de6250b6c2e80003ff4629a175"
+  },
+  "must_abort": [
+   "Invalid Y0",
+   "Invalid Y1",
+   "Invalid Y2",
+   "Invalid Y3",
+   "Invalid Y4",
+   "Invalid Y5",
+   "Invalid Y7"
+  ]
+ },
+ "utils": [
+  {
+   "fn": "prepend_len",
+   "args": [
+    ""
+   ],
+   "out": "00",
+   "section": "A.1.2.1"
+  },
+  {
+   "fn": "prepend_len",
+   "args": [
+    "31323334"
+   ],
+   "out": "0431323334",
+   "section": "A.1.2.1"
+  },
+  {
+   "fn": "prepend_len",
+   "args": [
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e"
+   ],
+   "out": "7f000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e",
+   "section": "A.1.2.1"
+  },
+  {
+   "fn": "prepend_len",
+   "args": [
+    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f"
+   ],
+   "out": "8001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+   "section": "A.1.2.1"
+  },
+  {
+   "fn": "lv_cat",
+   "args": [
+    "31323334",
+    "35",
+    "",
+    "363738"
+   ],
+   "out": "043132333401350003363738",
+   "section": "A.1.4.1"
+  },
+  {
+   "fn": "o_cat",
+   "args": [
+    "41424344",
+    "424344"
+   ],
+   "out": "6f6342434441424344",
+   "section": "A.3.3.1"
+  },
+  {
+   "fn": "o_cat",
+   "args": [
+    "424344",
+    "4142434445"
+   ],
+   "out": "6f634243444142434445",
+   "section": "A.3.3.1"
+  },
+  {
+   "fn": "transcript_ir",
+   "args": [
+    "313233",
+    "506172747941",
+    "323334",
+    "506172747942"
+   ],
+   "out": "03313233065061727479410332333406506172747942",
+   "section": "A.3.5.1"
+  },
+  {
+   "fn": "transcript_ir",
+   "args": [
+    "33343536",
+    "506172747941",
+    "32333435",
+    "506172747942"
+   ],
+   "out": "043334353606506172747941043233343506506172747942",
+   "section": "A.3.5.1"
+  },
+  {
+   "fn": "transcript_oc",
+   "args": [
+    "313233",
+    "506172747941",
+    "323334",
+    "506172747942"
+   ],
+   "out": "6f6303323334065061727479420331323306506172747941",
+   "section": "A.3.7.1"
+  },
+  {
+   "fn": "transcript_oc",
+   "args": [
+    "33343536",
+    "506172747941",
+    "32333435",
+    "506172747942"
+   ],
+   "out": "6f63043334353606506172747941043233343506506172747942",
+   "section": "A.3.7.1"
+  }
+ ],
+ "x25519_inputs": {
+  "about": "X25519(scalar, u) for peer public keys u, per RFC 7748 (bit 255 masked, u reduced mod p); 'identity' means the all-zero output CPace must abort on",
+  "scalar": "af46e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449aff",
+  "cases": [
+   {
+    "class": "valid",
+    "about": "basepoint u=9",
+    "u": "0900000000000000000000000000000000000000000000000000000000000000",
+    "rfc7748": "7403316ada5f61536e65d4336c9bdf83ffc4bfee8c2bed98c825fd06d19d0232"
+   },
+   {
+    "class": "valid",
+    "about": "random valid point (RFC 7748 6.1 Alice's public key)",
+    "u": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+    "rfc7748": "3c16f3f26e68e9170afc54b036528d7289990fcdae9ce773c8354e134b4c015a"
+   },
+   {
+    "class": "top-bit",
+    "about": "Alice's public key with bit 255 set",
+    "u": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4eea",
+    "rfc7748": "3c16f3f26e68e9170afc54b036528d7289990fcdae9ce773c8354e134b4c015a"
+   },
+   {
+    "class": "top-bit",
+    "about": "u=9 with bit 255 set",
+    "u": "0900000000000000000000000000000000000000000000000000000000000080",
+    "rfc7748": "7403316ada5f61536e65d4336c9bdf83ffc4bfee8c2bed98c825fd06d19d0232"
+   },
+   {
+    "class": "non-canonical",
+    "about": "p+2 (= 2 mod p)",
+    "u": "efffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "f263b11a45efdfd769a7b07a84d4173540e6fadae55aae96ed2e8019dcd45d60"
+   },
+   {
+    "class": "non-canonical",
+    "about": "p+9 (= basepoint, non-canonical)",
+    "u": "f6ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "7403316ada5f61536e65d4336c9bdf83ffc4bfee8c2bed98c825fd06d19d0232"
+   },
+   {
+    "class": "non-canonical",
+    "about": "2^255-1 (= 18 mod p)",
+    "u": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "ec2bbaab63edf0622311987669e11414ee24206ca80894a4941f063a97422e11"
+   },
+   {
+    "class": "non-canonical+top-bit",
+    "about": "2^256-1 (masks to 2^255-1)",
+    "u": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "rfc7748": "ec2bbaab63edf0622311987669e11414ee24206ca80894a4941f063a97422e11"
+   },
+   {
+    "class": "low-order (draft B.1.10 u0)",
+    "about": "0 (order 2)",
+    "u": "0000000000000000000000000000000000000000000000000000000000000000",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u1)",
+    "about": "1 (order 4)",
+    "u": "0100000000000000000000000000000000000000000000000000000000000000",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u2)",
+    "about": "p-1 (order 4 on twist)",
+    "u": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u3)",
+    "about": "order-8 point",
+    "u": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u4)",
+    "about": "order-8 point",
+    "u": "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u5)",
+    "about": "p (= 0)",
+    "u": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u6)",
+    "about": "2^256-38, top bit set: masks to p-19; 0 mod p if bit 255 kept",
+    "u": "daffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "rfc7748": "d8e2c776bbacd510d09fd9278b7edcd25fc5ae9adfba3b6e040e8d3b71b21806"
+   },
+   {
+    "class": "low-order (draft B.1.10 u7)",
+    "about": "p+1 (= 1)",
+    "u": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order (draft B.1.10 u8)",
+    "about": "2^256-37, top bit set: masks to p-18; 1 mod p if bit 255 kept",
+    "u": "dbffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "rfc7748": "c85c655ebe8be44ba9c0ffde69f2fe10194458d137f09bbff725ce58803cdb38"
+   },
+   {
+    "class": "low-order (draft B.1.10 u9)",
+    "about": "2^256-39, top bit set: masks to p-20; p-1 if bit 255 kept",
+    "u": "d9ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "rfc7748": "db64dafa9b8fdd136914e61461935fe92aa372cb056314e1231bc4ec12417456"
+   },
+   {
+    "class": "low-order (draft B.1.10 ua)",
+    "about": "u3+p with top bit (low order only if bit 255 kept)",
+    "u": "cdeb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+    "rfc7748": "e062dcd5376d58297be2618c7498f55baa07d7e03184e8aada20bca28888bf7a"
+   },
+   {
+    "class": "low-order (draft B.1.10 ub)",
+    "about": "u4+p with top bit (low order only if bit 255 kept)",
+    "u": "4c9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f11d7",
+    "rfc7748": "993c6ad11c4c29da9a56f7691fd0ff8d732e49de6250b6c2e80003ff4629a175"
+   },
+   {
+    "class": "low-order",
+    "about": "p-1 with bit 255 set (masks to p-1)",
+    "u": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "low-order",
+    "about": "order-8 point u3 with bit 255 set",
+    "u": "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880",
+    "rfc7748": "identity"
+   },
+   {
+    "class": "elligator2",
+    "about": "generator g of draft B.1.1",
+    "u": "d04bf6d41f6a289632a2e929fa29bebd51092512a7829fdde7d314b62f05a73f",
+    "rfc7748": "ebafbc43925e0db02ca17b302ce14fdcc1e749b59fa44276e8bacab5cca95679"
+   },
+   {
+    "class": "elligator2",
+    "about": "Ya of draft B.1.2 (ya*g)",
+    "u": "1d13c89278cdadd826f6d8d7f887701430f8380ddc17611cdd6dc989ce0c9f32",
+    "rfc7748": "b46c61fd572b37cd0db953165def52df57345373b53f56e20e8c9514e2fd6809"
+   },
+   {
+    "class": "elligator2",
+    "about": "Yb of draft B.1.3 (yb*g)",
+    "u": "248cccf6d5cdc3646f0ad593f9e6cef4e69d4945f8372e623512ecea32185623",
+    "rfc7748": "d209a27c1fbbb870d16ddef0717ce08301b54279731140bed049a24753148562"
+   }
+  ]
+ }
+}

@@ -27,6 +27,15 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  crypto:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.16.0
+        version: 2.16.0
+      '@pirc/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
   extension:
     dependencies:
       '@bufbuild/protobuf':

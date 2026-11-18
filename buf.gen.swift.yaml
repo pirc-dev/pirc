@@ -5,4 +5,4 @@ version: v2
 plugins:
   - local: sh/protoc-gen-swift
     out: app/ios/PircNotices/Sources/PircNotices/gen
-    opt: FileNaming=DropPath
+    opt: FileNaming=PathToUnderscores

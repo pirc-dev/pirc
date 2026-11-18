@@ -4,7 +4,7 @@ Copyright (c) 2026 Justino Ltd
 PiRC is open source, under three licences by part:
 
   - MIT (LICENSE): the pi extension (extension/), the code it shares
-    with clients (proto/, protocol/, relay-client/, cases/), the push
+    with clients (proto/, protocol/, crypto/, relay-client/, cases/), the push
     gateway (relay/cmd/pirc-gateway, relay/internal/gateway), and the
     rest of the repository.
   - AGPL-3.0 only: the relay (relay/cmd/pirc-relay, relay/internal/server,
@@ -21,6 +21,24 @@ Code adapted from other projects
 None yet. Anything adapted keeps its project's copyright notice and is
 listed here and in docs/design.md, section 11, with the upstream commit it
 came from.
+
+Test vectors from other projects
+--------------------------------
+
+cases/e2e/ holds test data from elsewhere, in no release:
+
+  - ed25519.json: the 12 vectors of ed25519-speccheck, commit
+    65519336fda78a3d016e947df6d82848aca0c9da
+    (https://github.com/novifinancial/ed25519-speccheck), Copyright (c)
+    Facebook, Inc. and its affiliates. Apache-2.0:
+    third_party/ed25519-speccheck/
+  - hpke.json: one vector of the CFRG's HPKE test-vectors.json, commit
+    b1f7cb0cdeab6906c61b3d6574e8bdfdbe1cd3fb
+    (https://github.com/cfrg/draft-irtf-cfrg-hpke), published with
+    RFC 9180.
+  - cpace.json: the test vectors of draft-irtf-cfrg-cpace-21, appendix B.1,
+    code components of an IETF document under the Revised BSD License
+    (IETF Trust Legal Provisions, section 4).
 
 Third-party code in PiRC's releases
 -----------------------------------

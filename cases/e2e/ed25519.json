@@ -1,0 +1,269 @@
+{
+ "about": "Ed25519 as every PiRC verifier must decide it (docs/e2e.md, section 2): the byte checks, then the cofactorless equation. The 12 vectors of ed25519-speccheck ('Taming the many EdDSAs', https://github.com/novifinancial/ed25519-speccheck/blob/65519336fda78a3d016e947df6d82848aca0c9da/cases.json) and 21 more, made for PiRC on 2026-11-17.",
+ "vectors": [
+  {
+   "name": "speccheck-0",
+   "about": "S = 0, small-order A and R",
+   "public_key": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+   "message": "8c93255d71dcab10e8f379c26200f3c7bd5f09d9bc3068d3ef4edeb4853022b6",
+   "signature": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a0000000000000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "speccheck-1",
+   "about": "small-order A, mixed-order R",
+   "public_key": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+   "message": "9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79",
+   "signature": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43a5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+   "valid": false
+  },
+  {
+   "name": "speccheck-2",
+   "about": "mixed-order A, small-order R",
+   "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+   "message": "aebf3f2601a0c8c5d39cc7d8911642f740b78168218da8471772b35f9d35b9ab",
+   "signature": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa8c4bd45aecaca5b24fb97bc10ac27ac8751a7dfe1baff8b953ec9f5833ca260e",
+   "valid": false
+  },
+  {
+   "name": "speccheck-3",
+   "about": "mixed-order A and R; valid both ways",
+   "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+   "message": "9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79",
+   "signature": "9046a64750444938de19f227bb80485e92b83fdb4b6506c160484c016cc1852f87909e14428a7a1d62e9f22f3d3ad7802db02eb2e688b6c52fcd6648a98bd009",
+   "valid": true
+  },
+  {
+   "name": "speccheck-4",
+   "about": "mixed-order A and R; cofactored only",
+   "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+   "message": "e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c",
+   "signature": "160a1cb0dc9c0258cd0a7d23e94d8fa878bcb1925f2c64246b2dee1796bed5125ec6bc982a269b723e0668e540911a9a6a58921d6925e434ab10aa7940551a09",
+   "valid": false
+  },
+  {
+   "name": "speccheck-5",
+   "about": "mixed-order A; cofactored only if 8h is not pre-reduced",
+   "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+   "message": "e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c",
+   "signature": "21122a84e0b5fca4052f5b1235c80a537878b38f3142356b2c2384ebad4668b7e40bc836dac0f71076f9abe3a53f9c03c1ceeeddb658d0030494ace586687405",
+   "valid": false
+  },
+  {
+   "name": "speccheck-6",
+   "about": "S > L (S - L < L)",
+   "public_key": "442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623",
+   "message": "85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40",
+   "signature": "e96f66be976d82e60150baecff9906684aebb1ef181f67a7189ac78ea23b6c0e547f7690a0e2ddcd04d87dbc3490dc19b3b3052f7ff0538cb68afb369ba3a514",
+   "valid": false
+  },
+  {
+   "name": "speccheck-7",
+   "about": "S >> L",
+   "public_key": "442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623",
+   "message": "85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40",
+   "signature": "8ce5b96c8f26d0ab6c47958c9e68b937104cd36e13c33566acd2fe8d38aa19427e71f98a473474f2f13f06f97c20d58cc3f54b8bd0d272f42b695dd7e89a8c22",
+   "valid": false
+  },
+  {
+   "name": "speccheck-8",
+   "about": "non-canonical R (small order), reduced for hash",
+   "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+   "message": "9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41",
+   "signature": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff03be9678ac102edcd92b0210bb34d7428d12ffc5df5f37e359941266a4e35f0f",
+   "valid": false
+  },
+  {
+   "name": "speccheck-9",
+   "about": "non-canonical R (small order), not reduced for hash",
+   "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+   "message": "9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41",
+   "signature": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffca8c5b64cd208982aa38d4936621a4775aa233aa0505711d8fdcfdaa943d4908",
+   "valid": false
+  },
+  {
+   "name": "speccheck-10",
+   "about": "non-canonical A (small order), reduced for hash",
+   "public_key": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "message": "e96b7021eb39c1a163b6da4e3093dcd3f21387da4cc4572be588fafae23c155b",
+   "signature": "a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+   "valid": false
+  },
+  {
+   "name": "speccheck-11",
+   "about": "non-canonical A (small order), not reduced for hash",
+   "public_key": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "message": "39a591f5321bbe07fd5a23dc2f39d025d74526615746727ceefd6e82ae65c06f",
+   "signature": "a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+   "valid": false
+  },
+  {
+   "name": "valid",
+   "about": "an ordinary RFC 8032 signature",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a2076616c6964202330",
+   "signature": "ebc09817d8cf271731013dc3dddd2e91b9dc0a8d3f6dbf2c129cf0ddf278533af20283c8e86304a60486a6e5952712e42043b156dd3c70db564b68cfbb894909",
+   "valid": true
+  },
+  {
+   "name": "s-plus-l",
+   "about": "valid signature with S + L (L <= S < 2^253)",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a2076616c6964202330",
+   "signature": "ebc09817d8cf271731013dc3dddd2e91b9dc0a8d3f6dbf2c129cf0ddf278533adfd6782503c716feda229e887421f1f82043b156dd3c70db564b68cfbb894919",
+   "valid": false
+  },
+  {
+   "name": "s-ge-2^253",
+   "about": "valid signature with S + nL, 2^253 <= S < 2^254 (top 3 bits not clear)",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a2076616c6964202330",
+   "signature": "ebc09817d8cf271731013dc3dddd2e91b9dc0a8d3f6dbf2c129cf0ddf278533accaa6e821d2a2956b1bf952b531bd00d2143b156dd3c70db564b68cfbb894929",
+   "valid": false
+  },
+  {
+   "name": "s-ge-2^255",
+   "about": "valid signature with S + nL, S >= 2^255 (top bit set)",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a2076616c6964202330",
+   "signature": "ebc09817d8cf271731013dc3dddd2e91b9dc0a8d3f6dbf2c129cf0ddf278533a5aa231b0bb7c9766b76c63fd8af6098b2143b156dd3c70db564b68cfbb894989",
+   "valid": false
+  },
+  {
+   "name": "s-eq-l",
+   "about": "speccheck case 0 with S = L instead of S = 0",
+   "public_key": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+   "message": "8c93255d71dcab10e8f379c26200f3c7bd5f09d9bc3068d3ef4edeb4853022b6",
+   "signature": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037aedd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010",
+   "valid": false
+  },
+  {
+   "name": "small-a-identity",
+   "about": "small-order A (identity), canonical; [h]A = 0, R = [r]B, S = r",
+   "public_key": "0100000000000000000000000000000000000000000000000000000000000000",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2041206964656e74697479202330",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "small-a-order2",
+   "about": "small-order A (order 2), canonical; [h]A = 0, R = [r]B, S = r",
+   "public_key": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2041206f726465722032202332",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "small-a-order4",
+   "about": "small-order A (order 4), canonical; [h]A = 0, R = [r]B, S = r",
+   "public_key": "0000000000000000000000000000000000000000000000000000000000000000",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2041206f726465722034202334",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "small-a-order8",
+   "about": "small-order A (order 8), canonical; [h]A = 0, R = [r]B, S = r",
+   "public_key": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2041206f72646572203820233138",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "noncanon-a-x0withsignbit",
+   "about": "non-canonical A (identity, x = 0 with sign bit); [h]A = 0, R = [r]B, S = r",
+   "public_key": "0100000000000000000000000000000000000000000000000000000000000080",
+   "message": "706972632d653265206564323535313920766563746f723a206e6f6e63616e6f6e2041206964656e746974792c2078203d20302077697468207369676e20626974202330",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "noncanon-a-yp+1",
+   "about": "non-canonical A (identity, y = p + 1); [h]A = 0, R = [r]B, S = r",
+   "public_key": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+   "message": "706972632d653265206564323535313920766563746f723a206e6f6e63616e6f6e2041206964656e746974792c2079203d2070202b2031202330",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "noncanon-a-yp",
+   "about": "non-canonical A (order 4, y = p); [h]A = 0, R = [r]B, S = r",
+   "public_key": "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+   "message": "706972632d653265206564323535313920766563746f723a206e6f6e63616e6f6e2041206f7264657220342c2079203d2070202331",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd76745230100000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "small-r-identity",
+   "about": "R = identity, canonical; S = h*a",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2d722d6964656e74697479202330",
+   "signature": "0100000000000000000000000000000000000000000000000000000000000000b629632c635584a14feed3e4cc60eb9a6a4c823767874f2279d84ed53c87810b",
+   "valid": false
+  },
+  {
+   "name": "small-r-order8",
+   "about": "R of order 8, canonical (cofactored only); S = h*a",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a20736d616c6c2d722d6f7264657238202330",
+   "signature": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc0590b8063c43611c8cd98f4065d30b4a791fc838c1c647897eaef2b5da839bf007",
+   "valid": false
+  },
+  {
+   "name": "noncanon-r-xsign",
+   "about": "R = identity, x = 0 with sign bit; S = h*a",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a206e6f6e63616e6f6e2d722d787369676e202330",
+   "signature": "0100000000000000000000000000000000000000000000000000000000000080a22d3f72c381977e3d28f5b95da24b329422dab9596dfd72f93ef08efb1d650c",
+   "valid": false
+  },
+  {
+   "name": "noncanon-r-p+1",
+   "about": "R = identity, y = p + 1; S = h*a",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a206e6f6e63616e6f6e2d722d702b31202330",
+   "signature": "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f8fb86e66ac4b9cfd261f2ebb5762cfb124c0d8605432b5d9005f7b543a82b609",
+   "valid": false
+  },
+  {
+   "name": "mixed-a-h0",
+   "about": "mixed-order A = [a]B + T8, R = [r]B, S = r + h*a; h mod L = 0 mod 8: valid both ways",
+   "public_key": "b502ff3d92e31d8190b4aa4ea0414005167fad089c4de9dac8a2fc850fed4f58",
+   "message": "706972632d653265206564323535313920766563746f723a206d697865642d612d683020233136",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd70d9b59779079fb66f44a43bf4e0a70b09fdd140aaa69c044a89f73f2de06050c",
+   "valid": true
+  },
+  {
+   "name": "mixed-a-h1",
+   "about": "mixed-order A = [a]B + T8, R = [r]B, S = r + h*a; h mod L != 0 mod 8: cofactored only",
+   "public_key": "b502ff3d92e31d8190b4aa4ea0414005167fad089c4de9dac8a2fc850fed4f58",
+   "message": "706972632d653265206564323535313920766563746f723a206d697865642d612d6831202330",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd745250d392f03bcfcf4ea27d7ce59c082a191c68e68f12a18db6f8bd69fa7df01",
+   "valid": false
+  },
+  {
+   "name": "mixed-r",
+   "about": "mixed-order R = [r]B + T8, prime A, S = r + h*a: cofactored only",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a206d697865642d72202330",
+   "signature": "afe985e432d16abaeed0fbd848db44520ef193bdde65d944b6a942a8f97ab11cbfa117bd425134cad58fd5befeb19db2c6d7ef88711fcb5357bd0b328485150e",
+   "valid": false
+  },
+  {
+   "name": "x-only-r",
+   "about": "R = -[r]B + T2, S = r - h*a: invalid both ways, but same x as [S]B",
+   "public_key": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+   "message": "706972632d653265206564323535313920766563746f723a20782d6f6e6c792d72202330",
+   "signature": "5a36bb641b1c68a0866596e0ee2c42547539cb745d5042046cef02494cd142a8c48c9a94351f4c458f7e684c9f8851c3188dfb2d359a7f7ba69c1aa316898300",
+   "valid": false
+  },
+  {
+   "name": "x-only-a",
+   "about": "A = [a]B + T2, h odd, R = [r]B, S = -(r + h*a): invalid both ways, same x",
+   "public_key": "ea5ef8400c31ef41e28f22e718b43f66981b29cf645af2a0e223799bedaace47",
+   "message": "706972632d653265206564323535313920766563746f723a20782d6f6e6c792d61202332",
+   "signature": "93c9449be4e3975f799a691f11d3bdab8ac6348ba2afbdfb9310fdb6b32ebdd74b8ea36ba62ea9423c33fcba2c869befd751c959660cb39200c2cbd89b102b0d",
+   "valid": false
+  }
+ ]
+}

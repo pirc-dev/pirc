@@ -1,5 +1,6 @@
 packages:
   - protocol
+  - crypto
   - relay-client
   - extension
   - web
