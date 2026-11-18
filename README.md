@@ -59,8 +59,8 @@ instead.
 4. **Add your phone.** In the web app's Settings, "Add an app" shows a
    code. Scan it with PiRC's app ([`app/README.md`](app/README.md)).
    The iPhone and iPad app is on the
-   [App Store](https://apps.apple.com/app/id6830395005); the Android app
-   is on its way to Google Play.
+   [App Store](https://apps.apple.com/app/id6830395005), and the Android
+   app on [Google Play](https://play.google.com/store/apps/details?id=dev.pirc.app).
 
 Phones are woken through PiRC's push gateway, `push.pirc.dev`. It learns
 which relay woke which phone, and when, and nothing about your sessions
