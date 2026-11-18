@@ -1,12 +1,14 @@
 # End-to-end encryption
 
-Status: **Open**. A proposal, 2026-11-15, for the first step towards a
-hosted relay (`design.md`, section 5.1 and section 12, step 14), revised
-2026-11-17 after two independent reviews, corrected the same day by
-tests of its riskiest assumptions on every platform (sections 2, 5 and
-11), and revised again after a third review, by Kimi K3 and GLM 5.3. Nothing here is built. The
-owner's decisions it takes as given are marked **Decided**; the rest is
-proposed.
+Status: **Decided** (2026-11-18). A proposal, 2026-11-15, for the first
+step towards a hosted relay (`design.md`, section 5.1 and section 12,
+step 14), revised 2026-11-17 after two independent reviews, corrected
+the same day by tests of its riskiest assumptions on every platform
+(sections 2, 5 and 11), revised again after a third review, by Kimi K3
+and GLM 5.3, and accepted by the owner as the design on 2026-11-18.
+Nothing here is built yet; the order of the build is in `design.md`,
+step 14. The owner's earlier decisions it takes as given are marked
+**Decided**; the open items are in section 11.
 
 The aim: a relay that routes every session but can read none of them, and
 cannot add a device to an account. A browser is the exception: it runs the

@@ -2080,14 +2080,15 @@ Each step ends with something that can be seen working.
       tools or fastlane, with no hosted service of its own.
 14. **Hosted relay**: multi-tenancy, end-to-end encryption and device-signed
     registration (section 5). End-to-end encryption and the
-    device-signed list are proposed in `docs/e2e.md`, open (2026-11-15),
+    device-signed list are in `docs/e2e.md`, proposed 2026-11-15,
     revised after two independent reviews (2026-11-16 and 2026-11-17),
     and corrected after tests of its riskiest assumptions on every
     platform (2026-11-17): the join's CPace, Ed25519 verifiers, and HPKE
     in the iOS notification extension. They found a bug in the app's
     Ed25519 verifier (Dart `cryptography` 2.9.0), to be patched. A third
     review (Kimi K3 and GLM 5.3, 2026-11-17) found no better design, and
-    gaps that are now closed in it.
+    gaps that are now closed in it. The owner accepted it as the design
+    on 2026-11-18.
 
     **Decided** (2026-11-16, one at a time with the owner):
     1. **Price.** The hosted relay comes with the app's subscription: an
@@ -2156,6 +2157,117 @@ Each step ends with something that can be seen working.
        controls every account with a browser on it; with the page apart,
        that takes Cloudflare Pages or the publisher's deploy of it, not the
        relay (`e2e.md`, section 9).
+
+    **Planned** (2026-11-17): the order of the build, reviewed
+    independently the same day (Claude Opus 5.5). Each stage ends tested.
+    The self-hosted product keeps shipping from master meanwhile,
+    unchanged (`e2e.md`, section 8), so until stage 6 the hosted code is
+    kept out of every release: compiled out of the app by a
+    `--dart-define`, as `PIRC_STORE` is (a switch at run time would be a
+    hidden feature, which App Review refuses), and not registered in the
+    extension. Until stage 7, `v1alpha2`, the anchor's folder and the
+    `pirc-e2e:` value may change; the first public release fixes them.
+
+    0. **`e2e.md` decided**, its proposed parts taken as the design, before
+       any code. Done 2026-11-18.
+    1. **Foundations**, with no change anyone sees:
+       - the `v1alpha2` messages in `proto/` (`e2e.md`, section 9), with
+         those of signing up, joining, invite codes and deleting an
+         account, named before any code, so that `buf breaking` and
+         `cases/` cover them;
+       - `cases/e2e/`: the vectors, from the tests of 2026-11-17 and new
+         ones: Ed25519 with the byte checks, HPKE, CPace (draft 21), and
+         each signed object's exact bytes (list versions, withdrawals,
+         pre-keys, bundles, announcements, envelopes, label records),
+         frames' additional data, and the refusals (old key, replayed
+         counter, read-only signer); and `cases/exchanges` extended to
+         encrypted frames, with keys and randomness from fixed seeds;
+       - the cryptography, once per language, held to those vectors:
+         TypeScript, one package for the extension and the browser
+         (WebCrypto, so the same code runs in Node and in browsers); Dart,
+         in the app, with `cryptography` patched (vendored in
+         `third_party/`, recorded under "Reuse and attribution" and in
+         `NOTICE`); Go, in the relay, only what it checks (the list's
+         chain and signatures, pre-keys, the join's lookup); Swift, in
+         `PircNotices`, only what a notification needs.
+    2. **The relay's hosted mode**: chosen when the relay starts, refusing
+       `v1alpha1` altogether, beside the self-hosted mode, whose registry
+       stays as it is. Hosted accounts in a store of their own (SQLite),
+       since today's registry is one JSON file rewritten whole on every
+       change. Versions and withdrawals stored and checked; pre-keys,
+       bundles, label records and wraps stored and sent; the join's
+       lookup; routing within an account; no labels anywhere; attestation
+       and the subscription check behind an interface, with a test
+       verifier. Tested by Go tests and the extended exchanges, locally.
+    3. **Hosts, and the client logic in TypeScript**:
+       - the extension as a host of a hosted account: the anchor's
+         folder, `/pirc join`, `/pirc leave`, the `pirc-e2e:` address;
+         daily keys per `Host` object, bundles, signed and encrypted
+         announcements, encrypted frames; requests decrypted and checked
+         in order, with the clock window's error; removal acted on only
+         from a checked version, never from a 1008 close; what `/pirc
+         join` does to processes already connected by `v1alpha1`, and to
+         other pi processes on the machine;
+       - idempotency handed over by `Host.succeeding`, which today hands
+         over none (replies are kept by the relay's `clientKey`, 1,000 of
+         them), tested across a `/reload` both ways: from code before
+         encryption to code with it, and back;
+       - `web/core`'s hosted logic, the reference that `cases/` is
+         recorded from and Dart is held to: the list and its checks,
+         freshness and "not yet confirmed", withdrawals and forks, bundles,
+         envelopes, the label key (made new on a removal, wrapped for every
+         pre-key, wrapped again after one expires), weekly pre-keys, and
+         joining as the side that types the code; with a browser's relay
+         connection of its own. It is the stage's test client. The
+         self-hosted web app's server shares `web/core` and stays on
+         `v1alpha1`;
+       - the test that the last unencrypted release does not connect to a
+         joined host.
+    4. **The stores' checks, tried first**: App Attest on a real iPhone,
+       Play Integrity on a build from Play's internal track (it gives a
+       real verdict only there), and the App Store Server API and the Play
+       Developer API for subscriptions; and what the relay does with
+       sandbox purchases, which every TestFlight and App Review purchase
+       is, and with an account whose subscription lapses (TestFlight's do,
+       within days).
+    5. **The app**: sign-up (the phone makes version 1), the list and all
+       that stage 3 does in TypeScript, in Dart; the join screen (typing a
+       code, approving by role); additions and removals shown; the keys
+       stored as `e2e.md` section 2 says; notifications from the read-only
+       key on both platforms (Dart on Android, `PircNotices` on iOS, which
+       now also logs in with `v1alpha2` and renews the read-only pre-key);
+       account deletion; the China mainland storefront check (decision 6).
+       Chosen at first run: a relay of one's own, as now, or the hosted
+       one. The export compliance answer is looked at again before the
+       first upload with this code in it.
+    6. **Running it**: the abuse guards (caps, the sign-up switch and
+       invite codes); the relay's own domain; the shared server (decision
+       3), deployed from release tags, with the hourly off-site backup and
+       the outside check; the terms and privacy policy on `pirc.dev`
+       (decision 4), `SECURITY.md` on the push gateway and the relay having
+       one operator, and the App Privacy answers; `abuse@`; deleting an
+       account removes its attestation key IDs and store transaction IDs
+       too, says how long backups keep it, and tells the person to cancel
+       the subscription in the store; and a way through for the stores'
+       reviewers: review installs exempt from invites and the
+       subscription, and a demo host that shows a fresh join code where a
+       reviewer can read it.
+    7. **A closed beta**: sign-ups by invite code only, the owner's devices
+       and a few others, on TestFlight (whose outside testers bring Beta
+       App Review) and Play's internal track; the extension on a
+       prerelease channel (an npm dist-tag, which the release scripts do
+       not offer yet). It ends with a review run start to finish. What it
+       finds is fixed here.
+    8. **Open**: sign-ups opened, the apps' production releases, and the
+       store listings and `pirc.dev` saying the hosted relay exists.
+    9. **The hosted web client** (decision 7): the page, keys by WebCrypto
+       in IndexedDB, joining by showing a code, served from Cloudflare
+       Pages, on stage 3's `web/core`; then accounts with no phone, paid on
+       the web (decision 1). After the phones, since an account's first
+       device is a phone.
+
+    Still to be chosen, before the stage that needs it: the relay's domain
+    (stage 6), and who is in the beta (stage 7).
 15. **Open**: licence, public repository, pirc.dev, store listings.
     Planned 2026-11-07, for self-hosters first: it does not wait for the
     hosted relay (step 14), which comes after as its own release, and
