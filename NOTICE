@@ -18,9 +18,14 @@ do not cover (TRADEMARKS.md).
 Code adapted from other projects
 --------------------------------
 
-None yet. Anything adapted keeps its project's copyright notice and is
-listed here and in docs/design.md, section 11, with the upstream commit it
-came from.
+Anything adapted keeps its project's copyright notice and is listed here
+and in docs/design.md, section 11, with the upstream commit it came from.
+
+  - third_party/dart-cryptography/: the Dart package cryptography 2.9.0, as
+    published on pub.dev (https://github.com/dint-dev/cryptography),
+    Copyright 2019-2020 Gohilla. Apache-2.0. Two lines changed, to fix
+    Ed25519's point comparison (README.pirc.md and equals-y.patch there).
+    The mobile app uses it in place of the published package.
 
 Test vectors from other projects
 --------------------------------
@@ -83,7 +88,8 @@ Geist, Geist Mono and IBM Plex Sans, are under the SIL Open Font License
 1.1 and are listed there with it.
 
 The mobile app (app/): its Dart and Flutter packages, among them image,
-re_highlight, mobile_scanner and qr, and Flutter's engine and framework,
+re_highlight, mobile_scanner, qr and cryptography (from
+third_party/dart-cryptography/, above), and Flutter's engine and framework,
 each with its licence in full, are listed in the NOTICES file that
 Flutter's build writes from the packages themselves and ships inside every
 build of the app (flutter_assets/NOTICES.Z, read by the framework's

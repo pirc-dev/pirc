@@ -1211,7 +1211,7 @@ commit it came from.
 
 | From | What | Upstream commit | Where in PiRC |
 |---|---|---|---|
-| -- | nothing yet | -- | -- |
+| dint-dev/cryptography | The Dart package `cryptography`, with Ed25519's point comparison fixed (two lines) | 2.9.0, as published on pub.dev | `third_party/dart-cryptography/`, used by the app through `dependency_overrides` |
 
 Test data from elsewhere, in `cases/e2e/` and in no release (2026-11-18),
 listed in `NOTICE`: the 12 vectors of ed25519-speccheck (Apache-2.0, its
@@ -2206,6 +2206,14 @@ Each step ends with something that can be seen working.
          `NOTICE`); Go, in the relay, only what it checks (the list's
          chain and signatures, pre-keys, the join's lookup); Swift, in
          `PircNotices`, only what a notification needs.
+
+       Done 2026-11-18 but for `cases/exchanges`: `v1alpha2` in
+       `proto/pirc/v1alpha2`; `cases/e2e`; `crypto/` (TypeScript),
+       `relay/internal/e2e` (Go), `app/lib/e2e` (Dart) and `E2E/` in
+       `PircNotices` (Swift), each passing every vector it uses. Without
+       the byte checks, Go's verifier takes 12 of the 33 Ed25519 vectors it
+       should refuse, and CryptoKit's 8. The exchanges come with stage 3's
+       client logic, which they record.
     2. **The relay's hosted mode**: chosen when the relay starts, refusing
        `v1alpha1` altogether, beside the self-hosted mode, whose registry
        stays as it is. Hosted accounts in a store of their own (SQLite),

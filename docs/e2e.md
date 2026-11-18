@@ -185,6 +185,13 @@ must reproduce or accept byte for byte.
   the direction and kind a byte each, and the recipient empty but for an
   answer to one client. Frames carry the list version's number; the
   signed announcement and bundle carry its hash too.
+- A signer encodes a body with every field at its default value left out,
+  as proto3 and Go and TypeScript's encoders do; Dart's writes a field set
+  to its default (a whole second's `nanos = 0`), so the app clears those
+  first. Bodies are verified as received, so this matters only for
+  `cases/`, where every language must make the same bytes. A string that
+  is not valid UTF-8 refuses the object: Go's and TypeScript's decoders
+  refuse it already, and the app's needs a check of its own (stage 5).
 - The label key is named by the list version that made it (number and
   hash). A label record's labels are AES-256-GCM under it with a random
   nonce, since several clients write under one key.
