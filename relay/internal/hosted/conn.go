@@ -25,6 +25,9 @@ type conn struct {
 	key    []byte
 	// The login's challenge, which an attestation binds (AttestContext).
 	nonce []byte
+	// Logged in to a locked account (lock.go): it may only renew or
+	// delete it. Under Server.mu.
+	locked bool
 	// The account and the key's role on its latest version; nil and
 	// unspecified when logged in without an account. Under Server.mu.
 	acct *account

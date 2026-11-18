@@ -2,8 +2,8 @@ package hosted
 
 // The subscriptions kept, asked about again (docs/design.md, step 14,
 // stage 4): each one a day, and hourly once past its end, so that the
-// relay sees a lapse, a refund or a late payment. What a lapse does to the
-// account is not decided yet: for now it is only kept and logged.
+// relay sees a lapse, a refund or a late payment. A lapse of the last one
+// locks the account (lock.go).
 
 import (
 	"context"
@@ -24,6 +24,7 @@ func (s *Server) RecheckSubscriptions(ctx context.Context, r Rechecker, interval
 	defer t.Stop()
 	for {
 		s.recheckDue(ctx, r)
+		s.deleteExpired()
 		select {
 		case <-ctx.Done():
 			return
@@ -52,7 +53,9 @@ func (s *Server) recheckDue(ctx context.Context, r Rechecker) {
 			if !k.Lapsed {
 				s.log.Info("subscription lapsed", "account", shortKey(k.Account), "kind", sub.Kind, "expires", sub.Expires, "sandbox", sub.Sandbox, "reason", err)
 			}
-			err = s.store.LapseSubscription(k.Account, sub, now, err.Error())
+			if err = s.store.LapseSubscription(k.Account, sub, now, err.Error()); err == nil && !k.Lapsed {
+				s.lockIfLapsed(k.Account)
+			}
 		default:
 			if k.Lapsed {
 				s.log.Info("subscription live again", "account", shortKey(k.Account), "kind", sub.Kind, "expires", sub.Expires)

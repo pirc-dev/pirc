@@ -80,6 +80,8 @@ type Config struct {
 	MaxSessionsPerConn      int
 	// How long a join code is good for (docs/e2e.md, section 5).
 	JoinTimeout time.Duration
+	// How long an account stays locked before it is deleted (lock.go).
+	LockedFor time.Duration
 	// Join lookups per hour, per account and per address; and joins one
 	// address may be waiting on at once.
 	MaxLookupsPerAccount int
@@ -112,6 +114,7 @@ func (c *Config) defaults() error {
 	set(&c.HelloTimeout, 5*time.Second)
 	set(&c.PingInterval, 25*time.Second)
 	set(&c.JoinTimeout, 10*time.Minute)
+	set(&c.LockedFor, 60*24*time.Hour)
 	seti := func(p *int, n int) {
 		if *p == 0 {
 			*p = n
@@ -426,6 +429,19 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 		}
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotListed)
 	}
+	locked, _, err := s.store.Locked(id)
+	if err != nil {
+		s.unloadLocked(a)
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+	}
+	if locked {
+		if d.GetRole() != pb.DeviceRole_DEVICE_ROLE_CLIENT {
+			s.unloadLocked(a)
+			return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errLocked)
+		}
+		s.admitLockedAccountLocked(c, a)
+		return nil
+	}
 	s.admitLocked(c, a, d.GetRole())
 	return nil
 }
@@ -532,10 +548,28 @@ func (s *Server) encode(f *pb.Frame) ([]byte, *frameError) {
 // themselves, since signing up and attesting ask the stores first.
 func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 	s.mu.Lock()
-	a, role := c.acct, c.role
+	a, role, locked := c.acct, c.role, c.locked
 	if a == nil {
 		s.mu.Unlock()
 		return s.handleNoAccount(ctx, c, f)
+	}
+	// Renewing asks the store first, outside the lock.
+	if r := f.GetRenewSubscription(); r != nil {
+		s.mu.Unlock()
+		if role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
+			return denied("only clients renew the subscription").withID(r.GetRequestId())
+		}
+		return s.renew(ctx, c, r).withID(r.GetRequestId())
+	}
+	if locked {
+		defer s.mu.Unlock()
+		switch b := f.GetBody().(type) {
+		case *pb.Frame_DeleteAccount:
+			return s.deleteAccount(c, b.DeleteAccount.GetRequestId()).withID(b.DeleteAccount.GetRequestId())
+		case *pb.Frame_Error:
+			return nil
+		}
+		return denied(errLocked).withID(requestIDOf(f))
 	}
 	// Every handler of an account's frames runs under the lock, so that
 	// none acts on an account deleted meanwhile.

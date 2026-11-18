@@ -88,6 +88,7 @@ message Frame {
     DeleteAccount delete_account = 92;
     RegisterPush register_push = 93;
     UnregisterPush unregister_push = 94;
+    RenewSubscription renew_subscription = 95;
 
     // Either direction, as in v1alpha1. A device is never removed by a
     // close: 1008 means only that the relay refuses its key now
@@ -126,6 +127,14 @@ message Welcome {
   // The account's latest version, by number and hash: a device that has
   // an older one asks for the rest (GetVersions).
   VersionRef list_version = 4;
+  // The account is locked: every subscription its phones had has lapsed,
+  // and the stores' own grace with it (docs/design.md, step 14, stage 4).
+  // Only a client logs in to a locked account, and it may only renew
+  // (RenewSubscription) or delete the account; hosts and read-only keys
+  // are refused, with PERMISSION_DENIED. A locked account is deleted 60
+  // days after it locked. A lock coming while devices are connected
+  // closes them with 1008, which says only that, as ever.
+  bool locked = 5;
 }
 
 // A frame's clear part: which keys, and where in their stream. Announced
@@ -410,6 +419,21 @@ message AppAttest {
 
 message PlayIntegrity {
   string token = 1;
+}
+
+// Client to relay: a subscription the store proves, for an account that
+// is locked or is to have one more. Answered by Done once the store says
+// it is live, and then, on a locked account, the connection closes (1000
+// "renewed") so that every device logs in again to an unlocked account;
+// or by Error with PERMISSION_DENIED and the store's reason.
+message RenewSubscription {
+  string request_id = 1;
+  oneof proof {
+    // StoreKit's signed transaction (jwsRepresentation).
+    string app_store_transaction = 2;
+    // Google Play's purchase token.
+    string google_play_token = 3;
+  }
 }
 
 // Client to relay: delete this account, every version, pre-key, bundle and

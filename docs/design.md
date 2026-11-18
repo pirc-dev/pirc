@@ -2428,8 +2428,27 @@ Each step ends with something that can be seen working.
        as soon as it queued the version that removed it, and the close
        could win over the frame, so that the device never learned of its
        removal (one run in eight of `web/test/hosted.test.ts`); it now
-       closes once the version is written. Still open: what a lapse does
-       to the account.
+       closes once the version is written.
+
+       **Decided** by the owner (2026-11-18), with the reasons given then:
+       - an account whose every subscription has lapsed, past the stores'
+         own grace and billing retry, is locked: its hosts and read-only
+         keys are refused at login, and a client logs in (`Welcome`'s
+         `locked`) only to renew, with a subscription the store proves
+         (`RenewSubscription`), or to delete the account. A renewal
+         unlocks it at once. Locked for 60 days, it is deleted, its
+         attestation and store IDs with it. Keeping an account costs
+         about 10 KB, so the deletion is for privacy, not space: the
+         relay would otherwise hold, for good and in its backups, the
+         device lists and store IDs of people who have left;
+       - the stores' sandbox and test purchases count only on the closed
+         beta's relay (stage 7), since every TestFlight purchase is one;
+         the public relay (stage 8) refuses them, but for the stores'
+         review installs (stage 6).
+       The relay does both (`relay/internal/hosted/lock.go`); the app's
+       side, a locked account's screen with Renew, comes with stage 5.
+
+       Stage 4 done 2026-11-18.
     5. **The app**: sign-up (the phone makes version 1), the list and all
        that stage 3 does in TypeScript, in Dart; the join screen (typing a
        code, approving by role); additions and removals shown; the keys

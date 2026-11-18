@@ -1,0 +1,149 @@
+package hosted
+
+// A lapse (docs/design.md, step 14, stage 4, decided 2026-11-18): an
+// account whose every subscription has lapsed, past the stores' own grace
+// and billing retry, is locked. Its hosts and read-only keys are refused
+// at login; a client logs in and may only renew, with a subscription the
+// store proves, or delete the account. A renewal unlocks it at once. An
+// account locked for LockedFor (60 days) is deleted, with its attestation
+// and store IDs.
+
+import (
+	"context"
+
+	"github.com/coder/websocket"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
+)
+
+const errLocked = "the account is locked: its subscription has ended"
+
+// admitLockedAccountLocked logs a client in to a locked account: Welcome,
+// saying so, and nothing else. Under s.mu.
+func (s *Server) admitLockedAccountLocked(c *conn, a *account) {
+	c.acct, c.role, c.locked = a, pb.DeviceRole_DEVICE_ROLE_CLIENT, true
+	s.conns[c] = struct{}{}
+	a.conns[c] = struct{}{}
+	c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{
+		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
+		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
+		Role:            pb.DeviceRole_DEVICE_ROLE_CLIENT,
+		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
+		Locked:          true,
+	}}})
+	s.log.Info("logged in to a locked account", "account", shortKey(a.id), "key", shortKey(c.key))
+}
+
+// renew asks the store of the subscription r proves and keeps it; on a
+// locked account, it unlocks it and closes the account's connections, so
+// that each logs in again unlocked.
+func (s *Server) renew(ctx context.Context, c *conn, r *pb.RenewSubscription) *frameError {
+	if s.cfg.Verifier == nil {
+		return denied("this relay checks no subscriptions")
+	}
+	// The store is named by the proof; Subscribed reads the kind only.
+	att := &pb.Attestation{}
+	switch p := r.GetProof().(type) {
+	case *pb.RenewSubscription_AppStoreTransaction:
+		att.Kind, att.Subscription = &pb.Attestation_AppAttest{AppAttest: &pb.AppAttest{}}, p.AppStoreTransaction
+	case *pb.RenewSubscription_GooglePlayToken:
+		att.Kind, att.Subscription = &pb.Attestation_PlayIntegrity{PlayIntegrity: &pb.PlayIntegrity{}}, p.GooglePlayToken
+	default:
+		return invalid("a subscription's proof is needed")
+	}
+	s.mu.Lock()
+	a := c.acct
+	s.mu.Unlock()
+	sub, err := s.cfg.Verifier.Subscribed(ctx, a.id, att)
+	if err != nil {
+		s.log.Info("renewal refused", "account", shortKey(a.id), "subscription", sub.Kind, "err", err)
+		return denied("no live subscription: " + err.Error())
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if a.deleted {
+		return denied("account deleted")
+	}
+	if err := s.store.AddSubscription(a.id, sub, s.cfg.Now().UnixMilli()); err != nil {
+		s.log.Error("cannot store a subscription", "err", err)
+		return internal()
+	}
+	s.done(c, r.GetRequestId())
+	if !c.locked {
+		s.log.Info("subscription added", "account", shortKey(a.id), "subscription", sub.Kind, "expires", sub.Expires, "sandbox", sub.Sandbox)
+		return nil
+	}
+	s.log.Info("account unlocked", "account", shortKey(a.id), "subscription", sub.Kind, "expires", sub.Expires, "sandbox", sub.Sandbox)
+	for o := range a.conns {
+		if o.locked {
+			o.closeAfterFlush(websocket.StatusNormalClosure, "renewed")
+		}
+	}
+	return nil
+}
+
+// lockIfLapsed locks the account once its last subscription has lapsed:
+// its connections close, and log in again to a locked account.
+func (s *Server) lockIfLapsed(account []byte) {
+	locked, _, err := s.store.Locked(account)
+	if err != nil || !locked {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a := s.accounts[string(account)]
+	if a == nil {
+		s.log.Info("account locked", "account", shortKey(account))
+		return
+	}
+	n := 0
+	for o := range a.conns {
+		if !o.locked {
+			o.close(websocket.StatusPolicyViolation, "subscription ended")
+			n++
+		}
+	}
+	s.log.Info("account locked", "account", shortKey(account), "closed", n)
+}
+
+// deleteExpired deletes the accounts locked for longer than LockedFor.
+func (s *Server) deleteExpired() {
+	ids, err := s.store.LockedBefore(s.cfg.Now().Add(-s.cfg.LockedFor).UnixMilli())
+	if err != nil {
+		s.log.Error("cannot read the locked accounts", "err", err)
+		return
+	}
+	for _, id := range ids {
+		s.mu.Lock()
+		if err := s.store.DeleteAccount(id); err != nil {
+			s.mu.Unlock()
+			s.log.Error("cannot delete a locked account", "err", err)
+			continue
+		}
+		if a := s.accounts[string(id)]; a != nil {
+			a.deleted = true
+			delete(s.accounts, string(id))
+			for o := range a.conns {
+				o.close(websocket.StatusPolicyViolation, "account deleted")
+			}
+		}
+		s.mu.Unlock()
+		s.log.Info("locked account deleted", "account", shortKey(id), "after", s.cfg.LockedFor)
+	}
+}
+
+// requestIDOf is the request_id of the frame's body, if it has one.
+func requestIDOf(f *pb.Frame) string {
+	m := f.ProtoReflect()
+	od := m.Descriptor().Oneofs().ByName("body")
+	fd := m.WhichOneof(od)
+	if fd == nil || fd.Kind() != protoreflect.MessageKind {
+		return ""
+	}
+	body := m.Get(fd).Message()
+	if id := body.Descriptor().Fields().ByName("request_id"); id != nil && id.Kind() == protoreflect.StringKind {
+		return body.Get(id).String()
+	}
+	return ""
+}

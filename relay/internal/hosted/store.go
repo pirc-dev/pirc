@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   -- What the store said at checked_ms: live, or why not.
   lapsed INTEGER NOT NULL DEFAULT 0,
   reason TEXT NOT NULL DEFAULT '',
+  -- When it was first seen lapsed, while it stays so; else 0.
+  lapsed_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (account, kind, ident)
 );
 `
@@ -407,9 +409,45 @@ func (s *Store) setSubscription(account []byte, sub Subscription, checkedMs int6
 	if !sub.Expires.IsZero() {
 		expires = sub.Expires.UnixMilli()
 	}
-	_, err := s.db.Exec(`INSERT OR REPLACE INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := s.db.Exec(`INSERT INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason, lapsed_ms)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CASE WHEN ?9 THEN ?8 ELSE 0 END)
+		ON CONFLICT (account, kind, ident) DO UPDATE SET expires_ms = excluded.expires_ms, trial = excluded.trial, grace = excluded.grace,
+		  sandbox = excluded.sandbox, checked_ms = excluded.checked_ms, lapsed = excluded.lapsed, reason = excluded.reason,
+		  lapsed_ms = CASE WHEN NOT excluded.lapsed THEN 0 WHEN subscriptions.lapsed THEN subscriptions.lapsed_ms ELSE excluded.checked_ms END`,
 		account, sub.Kind, sub.Ident, expires, sub.Trial, sub.Grace, sub.Sandbox, checkedMs, reason != "", reason)
 	return err
+}
+
+// Locked says whether every subscription the account has had has lapsed,
+// and since when: the last one's lapse. An account with none, which only
+// a relay without the stores' checks makes, is never locked.
+func (s *Store) Locked(account []byte) (bool, int64, error) {
+	var n, live int
+	var since int64
+	err := s.db.QueryRow(`SELECT count(*), coalesce(sum(NOT lapsed), 0), coalesce(max(lapsed_ms), 0) FROM subscriptions WHERE account = ?`, account).Scan(&n, &live, &since)
+	if err != nil || n == 0 || live > 0 {
+		return false, 0, err
+	}
+	return true, since, nil
+}
+
+// LockedBefore lists the accounts locked since before ms; never one with
+// a lapse of no known time.
+func (s *Store) LockedBefore(ms int64) ([][]byte, error) {
+	rows, err := s.db.Query(`SELECT account FROM subscriptions GROUP BY account HAVING sum(NOT lapsed) = 0 AND min(lapsed_ms) > 0 AND max(lapsed_ms) < ?`, ms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][]byte
+	for rows.Next() {
+		var a []byte
+		if err := rows.Scan(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // KeptSubscription is a subscription as the store last said, and of which

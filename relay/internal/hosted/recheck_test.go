@@ -60,7 +60,9 @@ func TestRecheckSubscriptions(t *testing.T) {
 	}
 
 	// The store saying it has ended: kept as lapsed, with why.
-	f.answer = func(s Subscription) (Subscription, error) { return s, errors.New("the subscription is not live (SUBSCRIPTION_STATE_EXPIRED)") }
+	f.answer = func(s Subscription) (Subscription, error) {
+		return s, errors.New("the subscription is not live (SUBSCRIPTION_STATE_EXPIRED)")
+	}
 	srv.recheckDue(context.Background(), f)
 	due, _ = store.SubscriptionsDue(now.Add(2 * time.Hour).UnixMilli())
 	if len(due) != 1 || !due[0].Lapsed || due[0].Reason == "" {
