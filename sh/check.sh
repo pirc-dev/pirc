@@ -74,6 +74,9 @@ if command -v pi >/dev/null && command -v tmux >/dev/null; then
   echo "pi $(pi --version)"
   node --experimental-transform-types --no-warnings extension/test/e2e.ts
   node --experimental-transform-types --no-warnings web/test/e2e.ts
+  # The hosted account, with the extension from the tree (its release
+  # bundle leaves the hosted code out) and the last release before it.
+  node --experimental-transform-types --no-warnings extension/test/hosted-e2e.ts
 else
   echo "skipped: needs pi and tmux on PATH"
 fi

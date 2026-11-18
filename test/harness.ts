@@ -122,7 +122,7 @@ export async function startHostedRelay(h: Harness): Promise<{ origin: string; lo
   const port = await freePort();
   const origin = `ws://127.0.0.1:${port}`;
   let log = "";
-  const proc = spawn(bin, ["serve-hosted", "--plaintext", "--listen", `127.0.0.1:${port}`, "--origin", origin, "--test-attestation", "--data-dir", join(h.dir, "hosted")], { stdio: ["ignore", "ignore", "pipe"] });
+  const proc = spawn(bin, ["serve-hosted", "--plaintext", "--listen", `127.0.0.1:${port}`, "--origin", origin, "--test-attestation", "--data-dir", join(h.dir, "hosted-relay")], { stdio: ["ignore", "ignore", "pipe"] });
   proc.stderr!.on("data", (b) => (log += b));
   h.onCleanup(() => proc.kill());
   const deadline = Date.now() + 10_000;
@@ -142,6 +142,8 @@ export async function startHostedRelay(h: Harness): Promise<{ origin: string; lo
 }
 
 export interface Pi {
+  // Its host.json.
+  config: string;
   // The tmux session and window pi runs in, on the harness's own server.
   tmuxSession: string;
   tmuxWindow: string;
@@ -158,7 +160,11 @@ export interface Pi {
 // An empty hostToken starts a host that asks the relay's operator to
 // approve it.
 // extensions: more pi extensions to load beside PiRC's.
-export async function startPi(h: Harness, relay: Relay, hostToken: string, name = "pi", extensions: string[] = []): Promise<Pi> {
+// relay: undefined for a host enrolled nowhere, as before /pirc join.
+// o.extension: PiRC's extension to load, else PIRC_E2E_EXTENSION or the
+// tree's; o.config: another pi's host.json, for a second install on the
+// same machine.
+export async function startPi(h: Harness, relay: Relay | undefined, hostToken: string, name = "pi", extensions: string[] = [], o: { extension?: string; config?: string } = {}): Promise<Pi> {
   const model = await startFakeModel();
   h.onCleanup(() => model.server.close());
   const agentDir = join(h.dir, `${name}-agent`);
@@ -180,9 +186,9 @@ export async function startPi(h: Harness, relay: Relay, hostToken: string, name 
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ compaction: { keepRecentTokens: 1 } }));
   const work = join(h.dir, `${name}-work`);
   mkdirSync(work);
-  const config = join(h.dir, `${name}-host.json`);
+  const config = o.config ?? join(h.dir, `${name}-host.json`);
   // A key of its own, so that each pi is a host of its own.
-  writeFileSync(config, JSON.stringify({ relay: relay.url, label: `e2e-${name}`, keyFile: join(h.dir, `${name}-host.key`) }));
+  if (!o.config) writeFileSync(config, JSON.stringify({ ...(relay && { relay: relay.url }), label: `e2e-${name}`, keyFile: join(h.dir, `${name}-host.key`) }));
   const logFile = join(h.dir, `${name}-extension.log`);
   const env = {
     PI_CODING_AGENT_DIR: agentDir,
@@ -194,7 +200,7 @@ export async function startPi(h: Harness, relay: Relay, hostToken: string, name 
   };
   const session = `pirc-e2e-${process.pid}-${name}`;
   // A release's staged package (sh/release.sh), else the source tree.
-  const extension = process.env.PIRC_E2E_EXTENSION || join(repo, "extension");
+  const extension = o.extension || process.env.PIRC_E2E_EXTENSION || join(repo, "extension");
   const piArgs = ["-ne", "-e", extension, ...extensions.flatMap((e) => ["-e", e]), "-ns", "-np", "-nc", "--model", "fake/fake-1", "--session-dir", join(h.dir, `${name}-sessions`)];
   // Each pi gets a tmux server of its own, by socket name: the tests often
   // run inside someone's tmux, where $TMUX would otherwise send every
@@ -221,6 +227,7 @@ export async function startPi(h: Harness, relay: Relay, hostToken: string, name 
     rmSync(join(process.env.TMUX_TMPDIR || "/tmp", `tmux-${process.getuid!()}`, session), { force: true });
   });
   return {
+    config,
     tmuxSession: session,
     tmuxWindow: `${name}-window`,
     work,
