@@ -2277,7 +2277,7 @@ void main() {
       model.client.onFrame(Frame(keys: Keys(keys: all)));
       final settings = await PhoneSettings.load(store: MemoryKeyStore(), prefs: MemoryPrefs('ws://127.0.0.1:9'));
       settings.relay = 'wss://relay.example:8443';
-      await tester.pumpWidget(frame(SettingsScreen(settings: settings, model: model, follow: follow ? (_) async => null : null), brightness: brightness));
+      await tester.pumpWidget(frame(SettingsScreen(settings: settings, model: model, follow: follow ? (_) async => null : null, leave: follow ? ({phoneOnly = false}) async => null : null), brightness: brightness));
       await tester.pumpAndSettle();
       return model;
     }

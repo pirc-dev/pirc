@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show DefaultMaterialLocalizations;
 import 'package:flutter/services.dart';
 
+import '../core/protocol.dart';
 import '../core/view.dart';
 import '../join.dart';
 import '../keys/key_holder.dart';
@@ -20,6 +21,7 @@ import '../ui/chat_screen.dart';
 import '../ui/join_screen.dart';
 import '../ui/lock_screen.dart';
 import '../ui/notify_screen.dart';
+import '../ui/leave.dart';
 import '../ui/paywall_screen.dart';
 import '../ui/scan_screen.dart';
 import '../ui/look.dart';
@@ -218,6 +220,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   var _refreshAgain = false;
   Future<void>? _unlocking;
   var _shuts = 0;
+  // Leaving the relay: the request's id and its answer; and removing, once.
+  var _leaves = 0;
+  String? _leaveId;
+  Completer<LeaveFailed?>? _leaving;
+  Future<void>? _removing;
   late final Notifications? _notes = widget.push == null ? null : Notifications(platform: widget.push!, prefs: widget.prefs, open: _openChat);
 
   @override
@@ -391,14 +398,33 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     }
     // After the next frame: a link that brings the app back comes before
     // the return, which may lock it again and close what is open.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _alreadyAdded());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _alreadyAdded(link));
     WidgetsBinding.instance.scheduleFrame();
   }
 
-  void _alreadyAdded() {
+  // A link while joined. To another relay, once connected: leaving this
+  // one first is offered, then the join screen with the link, each only on
+  // the person's tap.
+  Future<void> _alreadyAdded([String? link]) async {
     final context = _nav.currentState?.overlay?.context;
     if (context == null) return;
-    showCupertinoDialog<void>(
+    final other = link == null ? null : parseJoinLink(link);
+    final relay = _relay;
+    if (other != null && relay != null && other.relay != relay && _model != null) {
+      final left = await leaveRelay(
+        context,
+        relay: relay,
+        leave: _leave,
+        onlyClient: onlyClient(_model!),
+        title: 'Leave ${hostOf(relay)} and join this one?',
+        intro: 'This phone has joined ${hostOf(relay)}, and joins one relay at a time. The link is for ${hostOf(other.relay)}.',
+        action: 'Leave and join',
+      );
+      if (left && mounted) _opened(link!);
+      return;
+    }
+    if (!context.mounted) return;
+    await showCupertinoDialog<void>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('This phone is already added'),
@@ -514,11 +540,17 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       url: relay,
       key: key,
       onFrame: (f) {
+        _leaveAnswer(f);
         _notes?.onFrame(f);
         model.client.onFrame(f);
       },
       onState: (s) {
-        if (s is Refused && s.removed) _removed(relay);
+        if (s is Refused && s.removed) {
+          // Closed as left: the relay took the key, as asked.
+          final leaving = _leaving;
+          if (leaving != null && !leaving.isCompleted) leaving.complete(null);
+          _removed(relay);
+        }
         _notes?.onState(s is Ready);
         model.client.onState(switch (s) {
         Ready() => const RelayView(state: 'ready'),
@@ -619,7 +651,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow)));
+    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, leave: _leave)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -667,9 +699,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     }
   }
 
-  // Removed from the relay by another client: its keys and kept chats go,
-  // and the app is back to joining.
-  Future<void> _removed(String relay) async {
+  // Removed from the relay by another client, or left: its keys and kept
+  // chats go, and the app is back to joining. Once, when both the relay's
+  // answer and its closing say so.
+  Future<void> _removed(String relay) => _removing ??= _removedOnce(relay).whenComplete(() => _removing = null);
+
+  Future<void> _removedOnce(String relay) async {
     _conn?.stop();
     await widget.store.delete(relay);
     await widget.cache?.clear();
@@ -683,6 +718,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _chat.value = null;
     _inSettings = false;
     _detail = null;
+    _nav.currentState?.popUntil((r) => r.isFirst);
+    if (!mounted) return;
     setState(() {
       _relay = null;
       _key = null;
@@ -690,6 +727,47 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _model = null;
       _holder = null;
     });
+  }
+
+  // Leaves the relay (Settings, Leave this relay): asks it to take this
+  // phone's keys off its list, then, once it has, what _removed does. With
+  // phoneOnly, that alone, the relay unasked, its entry staying on the list.
+  // Null when left; otherwise why not.
+  Future<LeaveFailed?> _leave({bool phoneOnly = false}) async {
+    final relay = _relay;
+    if (relay == null) return null;
+    if (!phoneOnly) {
+      const unreachable = LeaveFailed("The relay can't be reached, so it can't take this phone off its list.", phoneOnly: true);
+      final conn = _conn;
+      if (conn == null || conn.current is! Ready) return unreachable;
+      final id = 'leave-${++_leaves}';
+      final done = _leaving = Completer<LeaveFailed?>();
+      _leaveId = id;
+      if (!conn.send(Frame(leaveRelay: LeaveRelay(requestId: id)))) return unreachable;
+      final failed = await done.future.timeout(const Duration(seconds: 10), onTimeout: () => const LeaveFailed('The relay did not answer.', phoneOnly: true));
+      _leaving = null;
+      _leaveId = null;
+      if (failed != null) return failed;
+    }
+    await _removed(relay);
+    return null;
+  }
+
+  // The relay's answer to leaving: its key gone (KeyChanged), or refused.
+  // A relay before 0.3.12 does not know the request, and says so with no
+  // request id.
+  void _leaveAnswer(Frame f) {
+    final done = _leaving;
+    if (done == null || done.isCompleted) return;
+    if (f.hasKeyChanged() && f.keyChanged.requestId == _leaveId) {
+      done.complete(null);
+    } else if (f.hasError() && f.error.requestId == _leaveId) {
+      done.complete(LeaveFailed(f.error.code == ErrorCode.ERROR_CODE_PERMISSION_DENIED
+          ? "The relay doesn't let this phone leave: ${f.error.message}"
+          : 'The relay refused: ${f.error.message}'));
+    } else if (f.hasError() && f.error.requestId.isEmpty && f.error.code == ErrorCode.ERROR_CODE_INVALID) {
+      done.complete(const LeaveFailed('This relay is too old to leave from the app. It needs PiRC 0.3.12 or later.', phoneOnly: true));
+    }
   }
 
   // The relay at another address (Settings, Relay address): the phone logs
@@ -823,7 +901,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                 Container(width: 0.5, color: look.rule),
                 Expanded(
                   child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, wide: true)
+                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, leave: _leave, wide: true)
                       : _chat.value != null
                           ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
                           : CupertinoPageScaffold(

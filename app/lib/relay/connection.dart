@@ -292,6 +292,10 @@ class RelayConnection {
         if (phase == 'ready' && ws.closeCode == 1008 && ws.closeReason == 'key revoked') {
           return _refuse(ErrorCode.ERROR_CODE_UNAUTHENTICATED, 'this key was removed from the relay', removed: true);
         }
+        // Left, as this client asked (LeaveRelay): its key is gone too.
+        if (phase == 'ready' && ws.closeCode == 1000 && ws.closeReason == 'left') {
+          return _refuse(ErrorCode.ERROR_CODE_UNAUTHENTICATED, 'this phone left the relay', removed: true);
+        }
         final code = ws.closeCode;
         _retry(code == null
             ? 'relay stopped answering'

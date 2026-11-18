@@ -162,3 +162,13 @@ Future<void> follow(
     throw JoinFailed(e.cancelled ? 'Changing the address was cancelled.' : e.reason);
   }
 }
+
+// Why the phone could not leave the relay (Settings, Leave this relay).
+// phoneOnly when the relay could not be asked, as when it is unreachable
+// or too old: the phone may still leave on its own, its entry staying on
+// the relay's list.
+class LeaveFailed {
+  const LeaveFailed(this.reason, {this.phoneOnly = false});
+  final String reason;
+  final bool phoneOnly;
+}

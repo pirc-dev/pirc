@@ -569,6 +569,23 @@ The questions, as settled:
      keys dropped. Otherwise it says why and connects to the old address
      again. The protocol is unchanged.
 
+     Leaving the relay (decided the same day; the relay's half is
+     `LeaveRelay`, 0.3.12): Settings' "Leave this relay" asks first,
+     saying plainly when the relay lists this phone as its only app,
+     since after it leaves only `pirc-relay add-client` lets anyone back
+     in. The relay's KeyChanged, or its closing with 1000 "left", is the
+     phone's cue to drop what `_removed` drops (keys, kept chats, drafts,
+     the address) and go back to joining. When the relay cannot be asked
+     (unreachable, no answer in 10 seconds, or a relay before 0.3.12,
+     which answers the unknown frame with INVALID and no request id), the
+     app asks again whether to leave this phone only, saying that its
+     entry stays on the relay's list until another client or `pirc-relay
+     remove` takes it off; nothing is left half done without that tap. A
+     join link to another relay, opened while joined, offers "Leave … and
+     join this one?": the leave, then the join screen with the link
+     filled in, joined on its own tap. A link to the same relay is
+     refused as before.
+
    The adapter offered none of these either (retired 2026-11-07). With
    the hosted relay each becomes a signed version of the device list.
 4. **How a client joins.** The relay issues a one-time registration link or
