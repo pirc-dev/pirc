@@ -19,6 +19,7 @@ public final class PircPlatformPlugin: NSObject, FlutterPlugin, FlutterSceneLife
     Files.register(with: registrar.messenger())
     Clipboard.register(with: registrar.messenger())
     About.register(with: registrar.messenger())
+    Attest.register(with: registrar.messenger())
     let plugin = PircPlatformPlugin()
     plugin.screen = Screen.register(with: registrar.messenger())
     plugin.push = Push(channel: FlutterMethodChannel(name: "dev.pirc.app/push", binaryMessenger: registrar.messenger()))

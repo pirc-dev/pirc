@@ -27,6 +27,7 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/files").apply { setMethodCallHandler(Files(context)) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/clipboard").apply { setMethodCallHandler(Clipboard(context)) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/about").apply { setMethodCallHandler(About(context)) }
+        channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/attest").apply { setMethodCallHandler(Attest(context)) }
         val sc = Screen { activity }
         screen = sc
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/screen").apply { setMethodCallHandler(sc) }

@@ -56,6 +56,7 @@ kotlin {
 dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("com.android.billingclient:billing:9.1.0")
+    implementation("com.google.android.play:integrity:1.4.0")
     implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
     implementation("com.google.firebase:firebase-messaging")
 }

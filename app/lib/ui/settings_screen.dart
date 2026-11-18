@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import '../app/model.dart';
 import '../app/settings.dart';
 import '../app/store.dart';
+import '../hosted/try_stores.dart';
 import '../push/push.dart';
 import 'devices.dart';
 import 'look.dart';
@@ -130,6 +131,10 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               _Section(title: 'Hosts', sub: 'Computers running pi, whose sessions show here.', rows: [DeviceList(model: widget.model!, role: 'host', relay: s.relay)]),
               _Section(title: 'Clients', sub: 'This phone, the web app and the other phones, each reaching every host.', rows: [DeviceList(model: widget.model!, role: 'client', relay: s.relay)]),
             ],
+            if (hostedBuild)
+              _Section(title: 'Hosted relay', sub: 'A test build: tries what the stores say of this phone.', rows: [
+                _Link(label: "Try the stores' checks", onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const TryStoresScreen()))),
+              ]),
             _Section(title: 'About', sub: 'PiRC and what it is built from.', rows: [_Link(label: 'Licences', onTap: _licences)]),
           ],
         ),

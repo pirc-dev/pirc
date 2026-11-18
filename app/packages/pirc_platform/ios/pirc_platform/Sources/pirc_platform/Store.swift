@@ -207,6 +207,10 @@ final class Store {
         case "status": result(await Subscription.status())
         case "product": result(try await Subscription.product())
         case "buy": result(try await Subscription.buy(in: self.scene()))
+        // The hosted relay's subscription check (docs/design.md, step 14):
+        // the latest transaction as Apple signed it, which the relay
+        // verifies and asks the App Store about.
+        case "proof": result(await Transaction.latest(for: Subscription.yearly)?.jwsRepresentation)
         case "restore":
           try await AppStore.sync()
           result(nil)

@@ -57,6 +57,7 @@ class Store(private val context: Context, private val activity: () -> Activity?)
             // with each status.
             "restore" -> result.success(null)
             "manage" -> manage(result)
+            "proof" -> proof(result)
             else -> result.notImplemented()
         }
     }
@@ -87,6 +88,18 @@ class Store(private val context: Context, private val activity: () -> Activity?)
                     // not allowed either way, so nothing kept is extended.
                     else -> details { d, _ -> result.success(mapOf("state" to if (d != null && trial(d) == null) "ended" else "never")) }
                 }
+            }
+        }
+    }
+
+    // The hosted relay's subscription check (docs/design.md, step 14): the
+    // purchase token, which the relay asks the Play Developer API about.
+    private fun proof(result: MethodChannel.Result) = ready(result) {
+        val params = QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).includeSuspendedSubscriptions(true).build()
+        client.queryPurchasesAsync(params) { r, purchases ->
+            main.post {
+                if (r.responseCode != BillingResponseCode.OK) return@post fail(result, r)
+                result.success(purchases.firstOrNull { PRODUCT in it.products && it.purchaseState == Purchase.PurchaseState.PURCHASED }?.purchaseToken)
             }
         }
     }

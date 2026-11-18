@@ -199,7 +199,8 @@ abstract class Notices : DefaultTask() {
                     url.contains("apache.org/licenses/LICENSE-2.0") -> add(pkg, dir.resolve("Apache-2.0.txt").readText())
                     url.contains("opensource.org/licenses/BSD-3-Clause") ->
                         add(pkg, dir.resolve(bsd[pkg] ?: throw GradleException("notices: $coords is BSD-3-Clause; add its copyright to ../notices/")).readText())
-                    url.contains("developer.android.com/studio/terms") || url.contains("developers.google.com/ml-kit/terms") -> add(pkg, "$name\n$url")
+                    url.contains("developer.android.com/studio/terms") || url.contains("developers.google.com/ml-kit/terms") ||
+                        url.contains("developer.android.com/google/play/integrity/overview#tos") || url.contains("developer.android.com/guide/playcore/license") -> add(pkg, "$name\n$url")
                     else -> throw GradleException("notices: $coords has a licence this build does not know: $name $url")
                 }
             }
