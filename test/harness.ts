@@ -114,6 +114,33 @@ export async function startRelay(h: Harness): Promise<Relay> {
   return relay;
 }
 
+// The relay's hosted mode (relay/internal/hosted), built with its tag,
+// taking test attestations: its origin is the URL devices sign.
+export async function startHostedRelay(h: Harness): Promise<{ origin: string; log: () => string; kill(): Promise<void> }> {
+  const bin = join(h.dir, "pirc-relay-hosted");
+  execFileSync("go", ["build", "-tags", "hosted", "-o", bin, "./cmd/pirc-relay"], { cwd: join(repo, "relay"), stdio: "inherit" });
+  const port = await freePort();
+  const origin = `ws://127.0.0.1:${port}`;
+  let log = "";
+  const proc = spawn(bin, ["serve-hosted", "--plaintext", "--listen", `127.0.0.1:${port}`, "--origin", origin, "--test-attestation", "--data-dir", join(h.dir, "hosted")], { stdio: ["ignore", "ignore", "pipe"] });
+  proc.stderr!.on("data", (b) => (log += b));
+  h.onCleanup(() => proc.kill());
+  const deadline = Date.now() + 10_000;
+  while (!log.includes("msg=listening")) {
+    if (proc.exitCode !== null || Date.now() > deadline) throw new Error(`hosted relay did not start:\n${log}`);
+    await sleep(20);
+  }
+  return {
+    origin,
+    log: () => log,
+    async kill() {
+      if (proc.exitCode !== null) return;
+      proc.kill();
+      await new Promise((r) => proc.once("exit", r));
+    },
+  };
+}
+
 export interface Pi {
   // The tmux session and window pi runs in, on the harness's own server.
   tmuxSession: string;

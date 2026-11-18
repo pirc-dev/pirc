@@ -66,6 +66,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.16.0
         version: 2.16.0
+      '@pirc/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@pirc/protocol':
         specifier: workspace:*
         version: link:../protocol

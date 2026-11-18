@@ -4,10 +4,13 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./service": "./service.ts"
+    "./service": "./service.ts",
+    "./hosted": "./hosted.ts",
+    "./hosted-ws": "./hosted-ws.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",
+    "@pirc/crypto": "workspace:*",
     "@pirc/protocol": "workspace:*",
     "ws": "8.22.0"
   },

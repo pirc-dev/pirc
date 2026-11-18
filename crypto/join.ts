@@ -3,9 +3,22 @@
 // for CPace's password; CPace's key confirmed both ways, then one sealing
 // key per direction, each message's additional data the transcript so far.
 
+import { create, fromBinary, toBinary, type MessageInitShape } from "@bufbuild/protobuf";
+import {
+  DeviceRole,
+  JoinDeviceBodySchema,
+  JoinDeviceSchema,
+  JoinResultSchema,
+  JoinStepSchema,
+  type JoinResult,
+  type JoinStep,
+  type SignedObject,
+} from "@pirc/protocol/v1alpha2";
 import { concat, equal, framed, random, u64, utf8 } from "./bytes.ts";
 import * as cp from "./cpace.ts";
+import type { Signer } from "./ed25519.ts";
 import * as hpke from "./hpke.ts";
+import { open, sign } from "./objects.ts";
 
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
@@ -98,3 +111,150 @@ export class Channel {
 
 export const deviceChannel = (k: JoinKeys) => new Channel(k.deviceSeal, k.clientSeal, k.transcript);
 export const clientChannel = (k: JoinKeys) => new Channel(k.clientSeal, k.deviceSeal, k.transcript);
+
+// --- the two sides of a join, step by step (relay.proto's JoinMessage
+// carries each step, encoded) ---
+
+/** Why a join ended: a wrong code, a relay that changed something, or a step out of order. */
+export class JoinFailed extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JoinFailed";
+  }
+}
+
+const step = (s: MessageInitShape<typeof JoinStepSchema>["step"]): Uint8Array => toBinary(JoinStepSchema, create(JoinStepSchema, { step: s }));
+
+function readStep(b: Uint8Array): JoinStep["step"] {
+  try {
+    return fromBinary(JoinStepSchema, b).step;
+  } catch {
+    throw new JoinFailed("an undecodable step");
+  }
+}
+
+const NONE = new Uint8Array(0);
+const MAX_NAME_BYTES = 128;
+
+/**
+ * The device that shows the code: it offers CPace's first share, checks
+ * the client's confirmation, sends its own with what it is, and reads
+ * the approval. Forgets the code at the first failure.
+ */
+export class DeviceJoin {
+  private channel: Channel | undefined;
+  private constructor(
+    private readonly ci: Uint8Array,
+    private readonly nonce: Uint8Array,
+    private readonly party: cp.Party,
+    private readonly me: { role: DeviceRole; signer: Signer; name: string },
+  ) {}
+
+  /** The join and its first step, for a code from newCode. */
+  static async start(origin: string, code: { lookup: string; secret: string }, me: { role: DeviceRole; signer: Signer; name: string }): Promise<{ join: DeviceJoin; offer: Uint8Array }> {
+    const ci = channelId(origin, code.lookup);
+    const nonce = random(16);
+    const party = await cp.start(env, { prs: utf8(code.secret), ci, sid: nonce, ad: NONE });
+    return { join: new DeviceJoin(ci, nonce, party, me), offer: step({ case: "offer", value: { nonce, share: party.Y } }) };
+  }
+
+  /** The client's answer: its share and confirmation. Gives the confirm step. */
+  async onAnswer(b: Uint8Array): Promise<Uint8Array> {
+    const s = readStep(b);
+    if (s.case !== "answer" || this.channel) throw new JoinFailed("expected the client's answer");
+    let isk: Uint8Array;
+    try {
+      isk = (await cp.finish(env, this.party, "initiator", s.value.share, NONE)).isk;
+    } catch {
+      throw new JoinFailed("the client's share is not a point to use");
+    }
+    const k = await keys(isk, this.ci, this.nonce, this.party.Y, s.value.share);
+    if (!(await confirmed(k.clientConfirm, k.transcript, s.value.confirmation))) throw new JoinFailed("the code does not match");
+    this.channel = deviceChannel(k);
+    const name = cutName(this.me.name);
+    const device = await sign("join", NONE, this.me.signer, create(JoinDeviceBodySchema, { transcript: k.transcript, role: this.me.role, publicKey: this.me.signer.publicKey, name }));
+    const sealed = await this.channel.seal(toBinary(JoinDeviceSchema, create(JoinDeviceSchema, { device })));
+    return step({ case: "confirm", value: { confirmation: await confirmation(k.deviceConfirm, k.transcript), device: { ciphertext: sealed } } });
+  }
+
+  /** The client's sealed result. */
+  async onResult(b: Uint8Array): Promise<JoinResult["result"]> {
+    const s = readStep(b);
+    if (s.case !== "sealed" || !this.channel) throw new JoinFailed("expected the client's result");
+    const plain = await this.channel.open(s.value.ciphertext);
+    if (!plain) throw new JoinFailed("the result does not open");
+    try {
+      return fromBinary(JoinResultSchema, plain).result;
+    } catch {
+      throw new JoinFailed("an undecodable result");
+    }
+  }
+}
+
+/** Cuts a name to 128 bytes of UTF-8, on a character boundary. */
+export function cutName(s: string): string {
+  const b = utf8(s);
+  if (b.length <= MAX_NAME_BYTES) return s;
+  let end = MAX_NAME_BYTES;
+  while (end > 0 && (b[end] & 0xc0) === 0x80) end--;
+  return new TextDecoder().decode(b.subarray(0, end));
+}
+
+export type JoiningDevice = { role: DeviceRole.HOST | DeviceRole.CLIENT; publicKey: Uint8Array; name: string };
+
+/**
+ * The client that types the code: it answers the offer, checks the
+ * device's confirmation and what the device says it is, and seals the
+ * person's decision.
+ */
+export class ClientJoin {
+  private constructor(
+    private readonly k: JoinKeys,
+    private readonly channel: Channel,
+  ) {}
+
+  /** The join and the answer step, from the code as typed and the device's offer. */
+  static async answer(origin: string, code: { lookup: string; secret: string }, offer: Uint8Array): Promise<{ join: ClientJoin; answer: Uint8Array }> {
+    const s = readStep(offer);
+    if (s.case !== "offer" || s.value.nonce.length !== 16) throw new JoinFailed("expected the device's offer");
+    const ci = channelId(origin, code.lookup);
+    const me = await cp.start(env, { prs: utf8(code.secret), ci, sid: s.value.nonce, ad: NONE });
+    let isk: Uint8Array;
+    try {
+      isk = (await cp.finish(env, me, "responder", s.value.share, NONE)).isk;
+    } catch {
+      throw new JoinFailed("the device's share is not a point to use");
+    }
+    const k = await keys(isk, ci, s.value.nonce, s.value.share, me.Y);
+    return {
+      join: new ClientJoin(k, clientChannel(k)),
+      answer: step({ case: "answer", value: { share: me.Y, confirmation: await confirmation(k.clientConfirm, k.transcript) } }),
+    };
+  }
+
+  /** The device's confirmation and what it is: a host or a client, its key, its name. */
+  async onConfirm(b: Uint8Array): Promise<JoiningDevice> {
+    const s = readStep(b);
+    if (s.case !== "confirm") throw new JoinFailed("expected the device's confirmation");
+    if (!(await confirmed(this.k.deviceConfirm, this.k.transcript, s.value.confirmation))) throw new JoinFailed("the code does not match");
+    const plain = await this.channel.open(s.value.device?.ciphertext ?? NONE);
+    if (!plain) throw new JoinFailed("the device's message does not open");
+    let signed: SignedObject | undefined;
+    try {
+      signed = fromBinary(JoinDeviceSchema, plain).device;
+    } catch {
+      throw new JoinFailed("an undecodable device");
+    }
+    const body = signed && (await open("join", NONE, signed));
+    if (!body || !equal(body.transcript, this.k.transcript)) throw new JoinFailed("the device's signature does not check");
+    if (body.role !== DeviceRole.HOST && body.role !== DeviceRole.CLIENT) throw new JoinFailed("the device is neither a host nor a client");
+    if (utf8(body.name).length > MAX_NAME_BYTES) throw new JoinFailed("the device's name is too long");
+    return { role: body.role, publicKey: body.publicKey, name: body.name };
+  }
+
+  /** The person's decision, sealed for the device. */
+  async result(r: JoinResult["result"]): Promise<Uint8Array> {
+    const plain = toBinary(JoinResultSchema, create(JoinResultSchema, { result: r }));
+    return step({ case: "sealed", value: { ciphertext: await this.channel.seal(plain) } });
+  }
+}
