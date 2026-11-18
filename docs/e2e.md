@@ -158,6 +158,35 @@ object (a list version's, say) is over its signed body, without the
 signature. `cases/` holds each object's encoding, which every language
 must reproduce or accept byte for byte.
 
+**Exact bytes.** Settled with the protocol (`proto/pirc/v1alpha2`,
+2026-11-18):
+
+- Every string that is signed, or used as HKDF's or HPKE's info or as
+  AES-GCM's additional data, is *framed*: a context in ASCII, a NUL byte,
+  then each part prefixed by its length as an unsigned LEB128 (as CPace's
+  `lv_cat`). Numbers inside are 8 bytes big-endian. One rule, so no two
+  uses can be read as each other.
+- A signed object is `SignedObject`: the body (one of `e2e.proto`'s
+  `*Body` messages, encoded by its signer) and an Ed25519 signature over
+  framed(`pirc-e2e-v1 <kind>`, account ID, body). The account ID is empty
+  in list version 1 alone, and in the join's own signature, whose signer
+  has no account yet. An object's hash, and so the account ID, is SHA-256
+  over its body.
+- The sending keys are HKDF-SHA256 of the day's secret, with the key ID as
+  salt and framed(`pirc-e2e-v1 announcement key` or `… conversation key`,
+  account ID, host key) as info. A bundle's two wraps per recipient are
+  sealed with the additional data `announcement key` or `conversation
+  key`, so neither can be passed off as the other.
+- A frame's nonce is four zero bytes and its counter; its additional data
+  is framed(`pirc-e2e-v1 frame`, account ID, key ID, host key, session ID,
+  instance ID, direction, kind, recipient, list version number, counter),
+  the direction and kind a byte each, and the recipient empty but for an
+  answer to one client. Frames carry the list version's number; the
+  signed announcement and bundle carry its hash too.
+- The label key is named by the list version that made it (number and
+  hash). A label record's labels are AES-256-GCM under it with a random
+  nonce, since several clients write under one key.
+
 **Every signature has its own context.** What a device signs starts with
 a fixed string ending in a NUL byte, so that no context is a prefix of
 another, followed by the account ID. The strings are `pirc-e2e-v1 `
@@ -628,9 +657,11 @@ per address (section 6).
    carries the hash of the transcript so far.
 3. Under those keys the new device sends its role (host or client), its
    Ed25519 key, the name it would like to be shown by (the machine's
-   name, for a host), for a client its first pre-key, and its signature,
-   with its own context, over the transcript and all of these, which
-   proves it holds the key it hands over.
+   name, for a host), and its signature, with its own context, over the
+   transcript and all of these, which proves it holds the key it hands
+   over. A new client publishes its first pre-key once it has the
+   account, at step 5: it needs none before, since the label key comes
+   in the approval.
 4. The client shows what is about to happen, by role, in words, before the
    name: for a host, "a computer: you will be able to control it from
    here"; for a client, "a new browser or app: it will have full control of
@@ -648,6 +679,22 @@ per address (section 6).
 
 The name travels only in step 3 and in the label record, never in `Hello`
 (section 7).
+
+**The join's bytes** (2026-11-18). The device sends its nonce and
+CPace's first share; the client answers with its share and its key
+confirmation; the device checks it and sends its own, with step 3 sealed;
+the client checks that and, after the person confirms, seals the
+approval or a refusal. The transcript hash starts as SHA-256 of
+framed(`pirc-join-v1 transcript`, channel identifier, nonce, first share,
+second share), and after each sealed message becomes SHA-256 of
+framed(`pirc-join-v1 transcript`, the hash before, the ciphertext). HKDF-SHA256
+of CPace's key, with framed(`pirc-join-v1 keys`, first transcript hash)
+as info, gives 128 bytes: the device's and the client's confirmation keys
+(each an HMAC-SHA256 over the first transcript hash), then the device's
+and the client's sealing keys. A sealed message's nonce is four zero
+bytes and the count of messages its side has sealed before; its
+additional data, the transcript hash. The code's last five characters,
+upper case, are CPace's password.
 
 **CPace on each platform.** The platform's X25519 does CPace's scalar
 multiplications. Before it, the other side's point is made canonical (bit

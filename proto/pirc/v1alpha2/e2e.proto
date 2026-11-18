@@ -1,0 +1,303 @@
+// The end-to-end encrypted account (docs/e2e.md): what devices sign, wrap
+// and encrypt for each other. None of these is a frame of its own; they
+// travel inside relay.proto's frames, mostly as SignedObject.
+//
+// Exact bytes (docs/e2e.md, section 2, "Exact bytes"): a signed object
+// travels as the bytes that were signed, and is verified on those bytes
+// before it is parsed; nothing is encoded again to check it. Every string
+// that is signed, hashed, used as HPKE's info or AES-GCM's additional data
+// is framed(context, part...): the context's ASCII, a NUL byte, then each
+// part prefixed by its length as an unsigned LEB128.
+syntax = "proto3";
+
+package pirc.v1alpha2;
+
+import "google/protobuf/timestamp.proto";
+import "pirc/v1alpha1/common.proto";
+
+// A signed object: `body` is one of the *Body messages below, encoded by
+// its signer, and `signature` is the signer's Ed25519 signature over
+// framed("pirc-e2e-v1 <kind>", account ID, body). The account ID is empty
+// only in list version 1, whose body's hash is the account ID, and in a
+// join's JoinDeviceBody, whose signer knows no account yet. An object's
+// hash is SHA-256 over its body.
+message SignedObject {
+  bytes body = 1;
+  // 64 bytes.
+  bytes signature = 2;
+}
+
+// A version of the account's device list, by number and hash.
+message VersionRef {
+  // From 1.
+  uint64 number = 1;
+  // SHA-256 of the version's body, 32 bytes.
+  bytes hash = 2;
+}
+
+enum DeviceRole {
+  DEVICE_ROLE_UNSPECIFIED = 0;
+  // A machine running pi: it signs bundles and announcements, never a
+  // version.
+  DEVICE_ROLE_HOST = 1;
+  // A phone, a browser or another app: a shell on every host, and the only
+  // role that signs versions, label records and label-key wraps.
+  DEVICE_ROLE_CLIENT = 2;
+  // A phone's second key, readable while it is locked: announcements and
+  // labels only.
+  DEVICE_ROLE_READ_ONLY = 3;
+}
+
+message Device {
+  DeviceRole role = 1;
+  // Ed25519, 32 bytes.
+  bytes public_key = 2;
+  // The client that added it, by its key. Empty for version 1's device.
+  bytes added_by = 3;
+  google.protobuf.Timestamp added_at = 4;
+  // For a read-only key, the client whose it is; empty otherwise.
+  bytes owner = 5;
+}
+
+// Signed with context "pirc-e2e-v1 list" by a client in the version
+// before it (version 1: by its one device).
+message ListVersionBody {
+  // From 1.
+  uint64 number = 1;
+  // The version before, by hash; empty in version 1.
+  bytes previous = 2;
+  // Ordered by public key, bytewise. Version 1 holds exactly one, a
+  // client, which signs it.
+  repeated Device devices = 3;
+  // The hashes of versions withdrawn (Withdrawal) that this version
+  // knows of, if any.
+  repeated bytes withdrawn = 4;
+  // The signing client's key, 32 bytes.
+  bytes signer = 5;
+}
+
+// Signed with context "pirc-e2e-v1 withdrawal" by the client that signed
+// the version withdrawn: that version lost to another with its number.
+message WithdrawalBody {
+  VersionRef withdrawn = 1;
+  // The version that got there first.
+  VersionRef winner = 2;
+  bytes signer = 3;
+}
+
+// Signed with context "pirc-e2e-v1 pre-key" by a client or a read-only
+// key: the X25519 key that hosts wrap sending keys for, and clients label
+// keys. Valid only while expires_at is at most 14 days after made_at and
+// has not passed.
+message PreKeyBody {
+  // The device's Ed25519 key, 32 bytes.
+  bytes signer = 1;
+  // X25519, 32 bytes.
+  bytes pre_key = 2;
+  google.protobuf.Timestamp made_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+// One device's wraps in a bundle.
+message BundleRecipient {
+  // Ed25519, 32 bytes.
+  bytes public_key = 1;
+  // The pre-key wrapped for, X25519, 32 bytes.
+  bytes pre_key = 2;
+  // HPKE's encapsulated key followed by its ciphertext, sealing a 32-byte
+  // key with info framed("pirc-e2e-v1 wrap", account ID, host key, key ID,
+  // recipient's Ed25519 key) and additional data the ASCII "announcement
+  // key" or "conversation key". Empty for a read-only key's conversation
+  // key.
+  bytes announcement_key = 3;
+  bytes conversation_key = 4;
+}
+
+// Signed with context "pirc-e2e-v1 bundle" by the host: one process's
+// keys of the day, wrapped for every current pre-key on the list.
+message BundleBody {
+  bytes host_key = 1;
+  // The process's, as in SessionRef.
+  string instance_id = 2;
+  // 16 bytes, naming this day's keys.
+  bytes key_id = 3;
+  google.protobuf.Timestamp made_at = 4;
+  // The list version the host had.
+  VersionRef list_version = 5;
+  // The X25519 key requests are sealed to.
+  bytes request_key = 6;
+  // Ordered by public key, bytewise.
+  repeated BundleRecipient recipients = 7;
+}
+
+// Signed with context "pirc-e2e-v1 announcement" by the host, then
+// encrypted under the announcement key as a frame (relay.proto's
+// SessionAnnounce).
+message AnnouncementBody {
+  pirc.v1alpha1.SessionRef session = 1;
+  bytes key_id = 2;
+  VersionRef list_version = 3;
+  google.protobuf.Timestamp made_at = 4;
+  // An encoded session.proto SessionAnnouncement.
+  bytes announcement = 5;
+}
+
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_CLIENT_TO_HOST = 1;
+  DIRECTION_HOST_TO_CLIENT = 2;
+}
+
+// Signed with context "pirc-e2e-v1 request" by a client, then sealed with
+// HPKE to the process's request key, with info framed("pirc-e2e-v1
+// request", account ID, host key, key ID) and no additional data: the
+// payload of a client's Routed.
+message EnvelopeBody {
+  // The target.
+  pirc.v1alpha1.SessionRef session = 1;
+  bytes key_id = 2;
+  Direction direction = 3;
+  google.protobuf.Timestamp sent_at = 4;
+  // From 1, one up for each envelope this client sends under this request
+  // key; written to the client's storage before it is sent.
+  uint64 counter = 5;
+  // The client's latest version, and those the host is missing, oldest
+  // first, with the withdrawals it is missing.
+  VersionRef list_version = 6;
+  repeated SignedObject versions = 7;
+  repeated SignedObject withdrawals = 8;
+  // An encoded session.proto SessionMessage.
+  bytes request = 9;
+  // The client's key, 32 bytes.
+  bytes signer = 10;
+}
+
+// A label key, named by the list version whose client made it: that
+// client's removal of a device, or version 1.
+message LabelKeyRef {
+  VersionRef version = 1;
+}
+
+// What a label record encrypts.
+message Labels {
+  repeated Label labels = 1;
+}
+
+message Label {
+  bytes public_key = 1;
+  // At most 128 bytes.
+  string label = 2;
+}
+
+// Signed with context "pirc-e2e-v1 labels" by a client: every device's
+// label, encrypted. The latest is the one whose label key's version is
+// highest, then whose counter is, then whose hash is.
+message LabelsBody {
+  LabelKeyRef label_key = 1;
+  // From 1 under each label key.
+  uint64 counter = 2;
+  VersionRef list_version = 3;
+  // AES-256-GCM under the label key: a random 12-byte nonce, then the
+  // ciphertext of an encoded Labels, with additional data
+  // framed("pirc-e2e-v1 labels", account ID, the label key's version
+  // number as 8 bytes big-endian, its hash, the counter as 8 bytes
+  // big-endian).
+  bytes sealed = 4;
+  bytes signer = 5;
+}
+
+// Signed with context "pirc-e2e-v1 label-key" by the client that made the
+// label key, or one wrapping it again for a renewed pre-key.
+message LabelKeyWrapBody {
+  LabelKeyRef label_key = 1;
+  // The recipient's Ed25519 key and the pre-key wrapped for.
+  bytes recipient = 2;
+  bytes pre_key = 3;
+  // HPKE's encapsulated key, then its ciphertext, sealing the 32-byte
+  // label key with info framed("pirc-e2e-v1 label-key", account ID, the
+  // label key's version number as 8 bytes big-endian, its hash, the
+  // recipient's Ed25519 key) and no additional data.
+  bytes wrap = 4;
+  bytes signer = 5;
+}
+
+// The join (docs/e2e.md, section 5): one step between the device that
+// shows the code and the client that types it, carried by the relay in
+// JoinMessage.
+message JoinStep {
+  oneof step {
+    JoinOffer offer = 1;
+    JoinAnswer answer = 2;
+    JoinConfirm confirm = 3;
+    JoinSealed sealed = 4;
+  }
+}
+
+// Device to client, first.
+message JoinOffer {
+  // The device's nonce, 16 bytes: CPace's session ID.
+  bytes nonce = 1;
+  // CPace's Ya, 32 bytes.
+  bytes share = 2;
+}
+
+// Client to device: CPace's Yb, and the client's key confirmation.
+message JoinAnswer {
+  bytes share = 1;
+  // HMAC-SHA256 under the client's confirmation key over the transcript
+  // hash, 32 bytes.
+  bytes confirmation = 2;
+}
+
+// Device to client: its key confirmation, and its JoinDevice, sealed.
+message JoinConfirm {
+  bytes confirmation = 1;
+  JoinSealed device = 2;
+}
+
+// AES-256-GCM under the sender's direction's key, nonce four zero bytes
+// and the count of messages that direction has sealed before, as 8 bytes
+// big-endian, additional data the transcript hash so far.
+message JoinSealed {
+  bytes ciphertext = 1;
+}
+
+// What the device seals in JoinConfirm.
+message JoinDevice {
+  // A JoinDeviceBody, signed with context "pirc-e2e-v1 join" and an empty
+  // account ID by the key it hands over.
+  SignedObject device = 1;
+}
+
+message JoinDeviceBody {
+  // The transcript hash when it was sealed.
+  bytes transcript = 1;
+  // Host or client.
+  DeviceRole role = 2;
+  bytes public_key = 3;
+  // What it would like to be shown as; at most 128 bytes.
+  string name = 4;
+}
+
+// What the client seals after the person confirms, or JoinRefused.
+message JoinResult {
+  oneof result {
+    JoinApproval approval = 1;
+    JoinRefused refused = 2;
+  }
+}
+
+message JoinApproval {
+  // 32 bytes.
+  bytes account_id = 1;
+  // The version that adds the device, as published.
+  SignedObject version = 2;
+  // The approving client's key.
+  bytes approver = 3;
+  // For a client: the label key, and the current label record's counter.
+  LabelKeyRef label_key_ref = 4;
+  bytes label_key = 5;
+  uint64 label_counter = 6;
+}
+
+message JoinRefused {}

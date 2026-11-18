@@ -758,6 +758,17 @@ Message groups:
 - **Errors**: a fixed taxonomy, timeouts included.
 - **Limits**: a maximum frame size; images travel inline.
 
+**`v1alpha2`, the hosted relay's** (named 2026-11-18, for `docs/e2e.md`):
+`proto/pirc/v1alpha2`, with the relay's frames in `relay.proto` and what
+devices sign and seal for each other in `e2e.proto`. `session.proto`
+stays `v1alpha1`: what changes is how its bytes travel. The registration
+frames of `v1alpha1` (`ApproveHost`, `RenameKey`, `RemoveKey`,
+`IssueToken`, `RegisterReadKey`) have no counterpart; versions of the
+list, pre-keys, bundles, labels, the join and sign-up take their place.
+A self-hosted relay speaks only `v1alpha1`, a hosted one only
+`v1alpha2`. Until the first public release of the hosted relay (step 14,
+stage 7), `v1alpha2` may change incompatibly, as `v1alpha1` may.
+
 ## 8. What pi allows
 
 Verified against pi 1.0.0 (`@earendil-works/pi-coding-agent`), 2026-10-17 and
