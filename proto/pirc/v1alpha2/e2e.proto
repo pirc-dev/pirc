@@ -172,7 +172,8 @@ message EnvelopeBody {
   VersionRef list_version = 6;
   repeated SignedObject versions = 7;
   repeated SignedObject withdrawals = 8;
-  // An encoded session.proto SessionMessage.
+  // An encoded session.proto SessionMessage; empty in an envelope that only
+  // carries versions to a host behind the client's list.
   bytes request = 9;
   // The client's key, 32 bytes.
   bytes signer = 10;

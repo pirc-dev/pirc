@@ -407,6 +407,9 @@ export class HostedTransport {
     const ck = `${hex(body.signer)}/${hex(keyId)}`;
     if (body.counter <= (this.counters.get(ck) ?? 0n)) return refuse("a request older than one already taken from this client");
     this.counters.set(ck, body.counter);
+    // An envelope with no request carries only versions, which step 3
+    // took (docs/e2e.md, section 3, Freshness).
+    if (body.request.length === 0) return;
     this.ev.onFrame(create(Frame1Schema, { body: { case: "routed", value: { session, clientKey: body.signer, payload: body.request } } }));
   }
 }

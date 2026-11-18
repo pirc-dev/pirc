@@ -8,7 +8,7 @@
 // only under such a bundle, with a counter higher than the last; requests
 // go in envelopes, signed, with a counter written down before they go, and
 // the versions the host is missing.
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs, timestampMs } from "@bufbuild/protobuf/wkt";
 import {
   FrameSchema as Frame1Schema,
@@ -24,6 +24,7 @@ import {
   Direction,
   EnvelopeBodySchema,
   FrameKind,
+  FrameSchema,
   VersionRefSchema,
   type BundleBody,
   type Frame,
@@ -36,8 +37,31 @@ import { equal, hex } from "@pirc/crypto/bytes";
 import * as keys from "@pirc/crypto/keys";
 import { decode, encode, open, sign } from "@pirc/crypto/objects";
 
-import type { HostedClient } from "./account.ts";
+import type { Chain } from "@pirc/crypto/chain";
+import type { Signer } from "@pirc/crypto/ed25519";
+import type { X25519Pair } from "@pirc/crypto/hpke";
+import type { Version } from "@pirc/crypto/list";
+
 import type { Store } from "./store.ts";
+
+/** What the sessions need of the account (account.ts's HostedClient; a fixed one in cases/exchanges/hosted). */
+export interface SessionsAccount {
+  readonly accountId: Uint8Array;
+  readonly latest: Version;
+  readonly list: Chain;
+  readonly publicKey: Uint8Array;
+  readonly signer: Signer;
+  myPreKeys(): X25519Pair[];
+  label(key: Uint8Array): string | undefined;
+  send2(body: Parameters<HostedSend>[0]): boolean;
+}
+type HostedSend = (body: MessageInitShape<typeof FrameSchema>["body"]) => boolean;
+
+export interface SessionsOptions {
+  now?: () => number;
+  /** For recorded cases: the ephemeral key each envelope is sealed with. */
+  ephemeral?: () => Promise<X25519Pair>;
+}
 
 /** How long a bundle is read at all, and an older bundle after a newer one is made. */
 export const BUNDLE_LIFE_MS = 26 * 3600_000;
@@ -67,14 +91,20 @@ export class Sessions {
   private ready = false;
 
   constructor(
-    private readonly c: HostedClient,
+    private readonly c: SessionsAccount,
     private readonly store: Store,
     private readonly emit: (f: Frame1) => void,
     private readonly log: (m: string) => void,
+    private readonly opts: SessionsOptions = {},
   ) {}
 
   private now(): number {
-    return Date.now();
+    return (this.opts.now ?? Date.now)();
+  }
+
+  /** Resolves once every frame taken so far has been handled. */
+  settled(): Promise<void> {
+    return this.out;
   }
 
   onState(s: HostedState): void {
@@ -167,6 +197,12 @@ export class Sessions {
     if (seen && madeAt < seen.madeAt) return void this.log("an announcement older than one seen");
     if (!this.counterOk(k.keyId, ref, k.counter, true)) return void this.log("an announcement replayed out of order");
     this.announced.set(sessionKey(ref), { madeAt, listVersion: ann.listVersion.number });
+    // A host behind this client's list is sent the rest at once, in an
+    // envelope of its own (docs/e2e.md, section 3, Freshness).
+    if (ann.listVersion.number < this.c.latest.body.number && this.ready) {
+      const r = ref;
+      this.out = this.out.then(() => this.request(r, new Uint8Array(0))).catch((e) => this.log(`versions to a host: ${(e as Error).message}`));
+    }
     return create(Entry1Schema, { session: ref, hostLabel: this.c.label(ref.hostKey) ?? "", payload: ann.announcement, announcedAt: timestampFromMs(madeAt) });
   }
 
@@ -306,7 +342,7 @@ export class Sessions {
       request,
       signer: this.c.publicKey,
     }));
-    const payload = await keys.sealEnvelope(b.body.requestKey, this.c.accountId, ref.hostKey, b.body.keyId, encode(env));
+    const payload = await keys.sealEnvelope(b.body.requestKey, this.c.accountId, ref.hostKey, b.body.keyId, encode(env), await this.opts.ephemeral?.());
     const keysOut: FrameKeys = { $typeName: "pirc.v1alpha2.FrameKeys", keyId: b.body.keyId, counter: 0n, listVersion: 0n };
     this.c.send2({ case: "routed", value: { session: ref, clientKey: new Uint8Array(0), keys: keysOut, payload } });
   }

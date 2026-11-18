@@ -2212,8 +2212,8 @@ Each step ends with something that can be seen working.
        `relay/internal/e2e` (Go), `app/lib/e2e` (Dart) and `E2E/` in
        `PircNotices` (Swift), each passing every vector it uses. Without
        the byte checks, Go's verifier takes 12 of the 33 Ed25519 vectors it
-       should refuse, and CryptoKit's 8. The exchanges come with stage 3's
-       client logic, which they record.
+       should refuse, and CryptoKit's 8. The exchanges came with stage 3's
+       client logic, which they record (`cases/exchanges/hosted`).
     2. **The relay's hosted mode**: chosen when the relay starts, refusing
        `v1alpha1` altogether, beside the self-hosted mode, whose registry
        stays as it is. Hosted accounts in a store of their own (SQLite),
@@ -2280,6 +2280,47 @@ Each step ends with something that can be seen working.
          `v1alpha1`;
        - the test that the last unencrypted release does not connect to a
          joined host.
+
+       Done 2026-11-18. `crypto/chain.ts` (the branch of the list a device
+       follows, shared by hosts and clients) and the join's two sides in
+       `crypto/join.ts`; `relay-client/hosted.ts`, the `v1alpha2`
+       connection, over `ws` in Node (which pings) or a page's WebSocket;
+       `extension/src/hosted` (the anchor, `/pirc join`, `/pirc leave`, and
+       a transport in the shape `Host` already uses, so that `Host` and
+       `Live` change little); `web/core/hosted` (the client, giving
+       `web/core`'s `Client` v1alpha1's frames opened, so that the page
+       of stage 9 reuses it); `cases/exchanges/hosted`, from
+       `cases/e2e/objects.json`'s phone, which the app's Dart will play;
+       and `extension/test/hosted-e2e.ts`, a real pi joined, prompted and
+       reloaded, release 0.3.11 refusing its `host.json`, and answers kept
+       across a `/reload` from 0.3.11 to this code and back. Decided while
+       building it:
+       - `/pirc join` takes the hosted relay's origin as its argument
+         until the relay's domain is chosen (stage 6), which then becomes
+         its default;
+       - the anchor is the folder `hosted/` beside `host.json`, and
+         `host.json`'s `relay` becomes `pirc-e2e:anchor`; `/pirc enrol` is
+         refused while a machine has an anchor, and `/pirc leave` removes
+         both;
+       - the extension's release bundle is built with `PIRC_HOSTED` false
+         and the hosted modules left empty (`sh/bundle.ts`), so that no
+         release carries them until stage 6; from source they are on;
+       - a renewed pre-key or an added device has the same keys wrapped
+         again in a newer bundle with the same key ID, which the relay
+         takes in place of the older;
+       - `JoinApproval` carries the approver's name, since a host holds no
+         label key, for "approved by 'Pixel 9'";
+       - an envelope with an empty request carries only versions, to a host
+         whose announcement shows it behind the client's list;
+       - answers kept for repeats are still keyed by the client's key, now
+         the envelope's signer, and only for requests that change
+         something, which is all a retry can run twice; what changed is
+         that `Host.succeeding` hands them over, from any version that
+         keeps them in `replies`.
+       Not yet: the reading of "not yet confirmed" (the clients' view of
+       each host's version, which `Sessions.hostVersion` gives) and the
+       join of a new client by a code it shows, both with the screens that
+       need them (stages 5 and 9).
     4. **The stores' checks, tried first**: App Attest on a real iPhone,
        Play Integrity on a build from Play's internal track (it gives a
        real verdict only there), and the App Store Server API and the Play

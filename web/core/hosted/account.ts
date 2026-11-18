@@ -116,7 +116,7 @@ export class HostedClient {
     private chain: Chain,
   ) {
     this.now = o.now ?? Date.now;
-    this.sessions = new Sessions(this, o.store, (f) => o.onFrame?.(f), (m) => this.log(m));
+    this.sessions = new Sessions(this, o.store, (f) => o.onFrame?.(f), (m) => this.log(m), { now: this.now });
     this.conn = new HostedConnection({
       origin: o.origin,
       accountId,

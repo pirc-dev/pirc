@@ -628,6 +628,19 @@ func TestSessions(t *testing.T) {
 	hc.send(&pb.Frame{Body: &pb.Frame_PublishBundle{PublishBundle: &pb.PublishBundle{RequestId: "b1", Bundle: b1}}})
 	hc.done("b1")
 	announce("b")
+	// An announcement has no answer: wait for the relay to have it.
+	for i := 0; i < 200; i++ {
+		h.srv.mu.Lock()
+		n := 0
+		if a := h.srv.accounts[string(ch.id)]; a != nil {
+			n = len(a.sessions)
+		}
+		h.srv.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	p.send(&pb.Frame{Body: &pb.Frame_SubscribeSessions{SubscribeSessions: &pb.SubscribeSessions{}}})
 	l := p.until("SessionList", func(f *pb.Frame) bool { return f.GetSessionList() != nil }).GetSessionList()

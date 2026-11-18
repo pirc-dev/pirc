@@ -62,6 +62,31 @@ check did not see.
 - Events, snapshots and chats are the view's JSON (`web/core/view.ts`),
   with absent fields left out.
 
+### Hosted exchanges
+
+`exchanges/hosted/` holds a hosted account's client (`web/core/hosted`,
+`docs/e2e.md`, section 4): the phone of `e2e/objects.json`, with its
+pre-key and its chain, reading what hosts send and sealing what it asks.
+A file is `{"about", "fixture", "steps"}`. The fixture names the device
+(`me`), the versions of its list (`list`, from `objects.json`'s objects),
+the devices' labels by key, and the ephemeral keys its envelopes are sealed
+with, in order. Each step is one of:
+
+```
+{"now": "<ms>"}               the clock, from objects.json's now_ms
+{"in": <v1alpha2 frame>}      a frame arrives from the relay
+{"send": <v1alpha1 frame>}    web/core's Client sends a frame
+{"out": [<v1alpha1 frame>...]}   the frames given to the Client since the last "out", opened
+{"sent": [<v1alpha2 frame>...]}  the frames sent to the relay since the last "sent", sealed
+```
+
+Frames are Protocol Buffers' JSON form, bytes in base64, as the relay
+sends them; sealed payloads are the exact bytes, which a client makes the
+same from the same keys (Ed25519 and AES-GCM are deterministic, and the
+envelopes' HPKE ephemeral keys are given). `web/test/hosted-exchange.ts`
+builds the files from `objects.json` and plays them; its test checks both,
+and `--record` writes them again.
+
 ## Functions
 
 A file is `{"about": "...", "cases": [{"fn", "about", "args", "is"}]}`:
