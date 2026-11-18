@@ -165,16 +165,20 @@ func (s *Server) publishBundle(c *conn, obj *pb.SignedObject) *frameError {
 		return e
 	}
 	id := string(body.GetKeyId())
+	b := &bundle{host: string(c.key), instance: body.GetInstanceId(), madeAt: body.GetMadeAt().AsTime().UnixMilli(), obj: obj, owner: c}
 	if have := a.bundles[id]; have != nil {
 		if bytes.Equal(e2e.Hash(have.obj), e2e.Hash(obj)) {
 			return nil
 		}
-		return invalid("another bundle has this key ID")
-	}
-	if c.bundles >= maxBundlesPerConn {
+		// The same keys wrapped again, for a pre-key renewed or a device
+		// added (docs/e2e.md, section 4): the newer replaces the older.
+		if have.host != b.host || have.instance != b.instance || b.madeAt <= have.madeAt {
+			return invalid("another bundle has this key ID")
+		}
+		have.owner.bundles--
+	} else if c.bundles >= maxBundlesPerConn {
 		return rateLimited("too many bundles on this connection")
 	}
-	b := &bundle{host: string(c.key), instance: body.GetInstanceId(), madeAt: body.GetMadeAt().AsTime().UnixMilli(), obj: obj, owner: c}
 	a.bundles[id] = b
 	c.bundles++
 	s.pruneBundlesLocked(a)

@@ -41,6 +41,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.16.0
         version: 2.16.0
+      '@pirc/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@pirc/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -106,6 +109,9 @@ importers:
       '@hono/node-server':
         specifier: 2.1.8
         version: 2.1.8(hono@4.13.18)
+      '@pirc/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@pirc/protocol':
         specifier: workspace:*
         version: link:../protocol

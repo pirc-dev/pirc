@@ -6,7 +6,7 @@ import type { ExtensionAPI, ExtensionContext, SessionEntry, SessionShutdownEvent
 import { appendFileSync } from "node:fs";
 
 import { errorReply, ErrorCode, FrameSchema, hex, messageRequestId, sameBytes, SessionMessageSchema, type Answer, type Frame, type Place, type Question, type SessionMessage, type SessionRef } from "@pirc/protocol";
-import { loadOrCreateKey, RelayConnection, type ConnectionState, type DeviceKey } from "@pirc/relay-client";
+import { loadOrCreateKey, RelayConnection, signWith, type ConnectionState, type DeviceKey } from "@pirc/relay-client";
 
 import { loadConfig, saveRemoved, type HostConfig } from "./config.ts";
 import { errorText, Live, REQUESTS, type NoticeMemo, type Sink } from "./live.ts";
@@ -14,6 +14,16 @@ import { LAUNCH_ENV, LauncherChoice, type Launcher } from "./launch.ts";
 import { piRangeNote } from "./pi.ts";
 import { PlaceTracker } from "./place.ts";
 import { Questions } from "./questions.ts";
+import type { Anchor, AnchorState } from "./hosted/anchor.ts";
+import { HOSTED } from "./hosted/enabled.ts";
+
+// What Host sends v1alpha1's frames through: a self-hosted relay's
+// connection, or a hosted account's transport, which seals them.
+interface Transport {
+  start(): void;
+  stop(): void;
+  send(f: Frame): boolean;
+}
 
 const isChange = (c: string | undefined) => c !== undefined && Object.hasOwn(REQUESTS, c) && REQUESTS[c as keyof typeof REQUESTS] === "change";
 // Replies to changes kept for repeats.
@@ -27,6 +37,8 @@ const RETRYABLE = new Set([ErrorCode.BUSY, ErrorCode.TIMEOUT, ErrorCode.PI_FAILE
 // since 0.1.0 has.
 interface Predecessor {
   instanceId?: string;
+  // Absent from versions before the hosted relay.
+  replies?: Map<string, unknown>;
   seqs?: Map<string, bigint>;
   // Absent from versions before notices.
   notices?: Map<string, NoticeMemo>;
@@ -45,7 +57,14 @@ const HANDOVER_AFTER_ANNOUNCE_MS = 2_000;
 export class Host implements Sink {
   private config: HostConfig | undefined;
   private key: DeviceKey | undefined;
-  private conn: RelayConnection | undefined;
+  private conn: Transport | undefined;
+  // In a hosted account: the anchor, and why it no longer lets this host
+  // serve, if so.
+  private anchor: Anchor | undefined;
+  private anchorProblem: AnchorState | undefined;
+  // Bumped by every connect, so that a hosted connect still reading the
+  // anchor gives way to a later one.
+  private connects = 0;
   private state: ConnectionState = { kind: "stopped" };
   private live: Live | undefined;
   // A session paused by a reload, until it starts again.
@@ -102,6 +121,10 @@ export class Host implements Sink {
     const host = new Host(p?.instanceId ?? instanceId, versions);
     if (!p) return host;
     for (const [id, seq] of p.seqs ?? []) host.seqs.set(id, seq);
+    // The answers kept for repeats, so that a client's retry across a
+    // /reload gets the answer and is not run again; those still pending
+    // are answered by the predecessor as it is let go.
+    for (const [k, v] of p.replies ?? []) if (v !== "pending" && typeof v === "object") host.replies.set(k, v as SessionMessage);
     for (const [id, n] of p.notices ?? []) host.notices.set(id, n);
     for (const live of [p.suspended, p.live]) {
       if (!live) continue;
@@ -215,6 +238,79 @@ export class Host implements Sink {
   connect(token?: string): void {
     this.conn?.stop();
     this.conn = undefined;
+    this.anchor = undefined;
+    this.anchorProblem = undefined;
+    const attempt = ++this.connects;
+    if (HOSTED) {
+      void this.connectHosted(attempt).then((hosted) => {
+        if (!hosted && attempt === this.connects) this.connectSelfHosted(token);
+      }, (e) => {
+        this.fail("hosted", e);
+        this.showStatus();
+      });
+      return;
+    }
+    this.connectSelfHosted(token);
+  }
+
+  // A machine whose anchor says it joined a hosted account: true when it
+  // has one, connected or not.
+  private async connectHosted(attempt: number): Promise<boolean> {
+    const { Anchor } = await import("./hosted/anchor.ts");
+    const anchor = await Anchor.read();
+    if (!anchor) return false;
+    if (attempt !== this.connects) return true;
+    this.anchor = anchor;
+    try {
+      this.config = loadConfig();
+    } catch (e) {
+      this.fail("config", e);
+    }
+    // PIRC_RELAY is read by every install on this machine, old code
+    // included, before host.json (docs/e2e.md, section 8).
+    if (process.env.PIRC_RELAY) {
+      this.fail("hosted", new Error("PIRC_RELAY is set: a computer in a hosted account does not connect while it is; unset it"));
+      this.showStatus();
+      return true;
+    }
+    const state = anchor.state((this.key ??= loadOrCreateKey(this.config?.keyFile ?? "")).publicKey, (await anchor.refresh()).forks);
+    if (state.kind !== "joined") {
+      this.onAnchor(state);
+      return true;
+    }
+    const key = this.key;
+    const { HostedTransport } = await import("./hosted/transport.ts");
+    if (attempt !== this.connects) return true;
+    this.conn = new HostedTransport(
+      { anchor, signer: { publicKey: key.publicKey, sign: async (m) => signWith(key, m) }, instanceId: this.instanceId },
+      {
+        onFrame: (f) => this.onFrame(f),
+        onState: (s) => this.onState(s),
+        onAnchor: (s) => this.onAnchor(s),
+        log: (m) => this.log(`hosted: ${m}`),
+        fail: (where, e) => this.fail(where, e),
+      },
+    );
+    this.conn.start();
+    return true;
+  }
+
+  // The anchor no longer lets this host serve. Removed: the anchor goes,
+  // as on a phone its keys (docs/e2e.md, section 3, Removal); a fork or a
+  // failed join: the anchor stays, and /pirc join is needed.
+  private onAnchor(s: AnchorState): void {
+    this.anchorProblem = s;
+    this.conn?.stop();
+    this.conn = undefined;
+    this.log(`hosted: ${s.kind}`);
+    if (s.kind === "removed") {
+      void import("./hosted/anchor.ts").then(({ Anchor }) => Anchor.remove(), (e) => this.fail("hosted", e));
+    }
+    this.state = { kind: "stopped" };
+    this.showStatus();
+  }
+
+  private connectSelfHosted(token?: string): void {
     let config: HostConfig;
     try {
       config = loadConfig();
@@ -274,8 +370,17 @@ export class Host implements Sink {
 
   statusText(): string {
     const s = this.state;
-    if (!this.config?.relay) return "pirc: not enrolled";
-    if (this.config.removed) return "pirc: removed from the relay";
+    switch (this.anchorProblem?.kind) {
+      case "removed":
+        return "pirc: removed from the account";
+      case "fork":
+        return "pirc: stopped: the account's list has forked";
+      case "join-failed":
+        return "pirc: the join did not take";
+    }
+    if (!this.anchor && !this.config?.relay) return "pirc: not enrolled";
+    if (!this.anchor && this.config?.relay?.startsWith("pirc-e2e:")) return "pirc: left the account";
+    if (!this.anchor && this.config?.removed) return "pirc: removed from the relay";
     switch (s.kind) {
       case "ready":
         return "pirc: online";
@@ -295,7 +400,13 @@ export class Host implements Sink {
   statusReport(): string {
     const lines = [this.statusText()];
     const c = this.config;
-    if (c) {
+    const a = this.anchor;
+    if (a) {
+      lines.push(`account ${a.account.accountId.slice(0, 16)} on ${a.account.origin}, end-to-end encrypted`);
+      lines.push(`joined ${a.account.joinedAt}, approved by ${a.account.approverName ? `'${a.account.approverName}'` : a.account.approver.slice(0, 16)}`);
+      lines.push(`list version ${a.latest.body.number}`);
+      if (this.key) lines.push(`key ${Buffer.from(this.key.publicKey).toString("base64url")}`);
+    } else if (c) {
       lines.push(`config ${c.path}`);
       if (c.relay) lines.push(`relay ${c.relay}`);
       lines.push(`key ${c.keyFile}${this.key ? ` (${Buffer.from(this.key.publicKey).toString("base64url")})` : ""}`);
@@ -309,9 +420,29 @@ export class Host implements Sink {
     if (range) lines.push(range);
     if (this.dialogs.problem) lines.push(this.dialogs.problem);
     if (this.lastError) lines.push(`last error: ${this.lastError}`);
-    if (c?.removed) lines.push(`removed from the relay ${c.removed}; to join again: /pirc enrol <relay-url> [token]`);
-    if (!c?.relay) lines.push("enrol with: /pirc enrol <relay-url> [token]; without a token, approve this key in the web app or with pirc-relay approve");
+    const p = this.anchorProblem;
+    if (p?.kind === "removed") lines.push("a client removed this computer from the account; to join again: /pirc join");
+    if (p?.kind === "fork") lines.push(`two versions ${p.number} of the account's list, neither withdrawn: this computer cannot tell which is its account's, so it serves nothing until /pirc join is run again here`);
+    if (p?.kind === "join-failed") lines.push("the version that added this computer was withdrawn; join again with /pirc join");
+    if (!a && c?.removed) lines.push(`removed from the relay ${c.removed}; to join again: /pirc enrol <relay-url> [token]`);
+    if (!a && !c?.relay) lines.push("enrol with: /pirc enrol <relay-url> [token]; without a token, approve this key in the web app or with pirc-relay approve");
     return lines.join("\n");
+  }
+
+  // This machine's key as a signer, and its name, for /pirc join.
+  joinIdentity(): { signer: { publicKey: Uint8Array; sign(m: Uint8Array): Promise<Uint8Array> }; name: string } {
+    const config = loadConfig();
+    const key = (this.key ??= loadOrCreateKey(config.keyFile));
+    return { signer: { publicKey: key.publicKey, sign: async (m) => signWith(key, m) }, name: config.label };
+  }
+
+  // Says something at pi's terminal, through the session's context.
+  notify(message: string, type: "info" | "warning" | "error"): void {
+    try {
+      this.live?.ctx.ui.notify(message, type);
+    } catch {
+      // The context went stale.
+    }
   }
 
   // The footer shows only what needs attention: online, the usual state,

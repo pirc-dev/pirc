@@ -253,7 +253,7 @@ export class ClientJoin {
   }
 
   /** The person's decision, sealed for the device. */
-  async result(r: JoinResult["result"]): Promise<Uint8Array> {
+  async result(r: MessageInitShape<typeof JoinResultSchema>["result"]): Promise<Uint8Array> {
     const plain = toBinary(JoinResultSchema, create(JoinResultSchema, { result: r }));
     return step({ case: "sealed", value: { ciphertext: await this.channel.seal(plain) } });
   }

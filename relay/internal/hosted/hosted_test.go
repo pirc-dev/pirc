@@ -678,6 +678,19 @@ func TestSessions(t *testing.T) {
 	}
 	sc.quiet("a frame of another account", func(f *pb.Frame) bool { return f.GetRouted() != nil || f.GetSessionUpdated() != nil })
 
+	// The same keys wrapped again, later: it replaces the bundle; an older
+	// one with that key ID does not.
+	b1b := bundleOf(ch.id, host, "i1", 1, t0.Add(time.Hour), ch.ref(2))
+	hc.send(&pb.Frame{Body: &pb.Frame_PublishBundle{PublishBundle: &pb.PublishBundle{RequestId: "b1b", Bundle: b1b}}})
+	hc.done("b1b")
+	if u := p.until("SessionUpdated", func(f *pb.Frame) bool { return f.GetSessionUpdated() != nil }).GetSessionUpdated(); len(u.Entry.Bundles) != 1 || !proto.Equal(u.Entry.Bundles[0], b1b) {
+		t.Errorf("after wrapping again: %v", u.Entry.Bundles)
+	}
+	hc.send(&pb.Frame{Body: &pb.Frame_PublishBundle{PublishBundle: &pb.PublishBundle{RequestId: "b1c", Bundle: bundleOf(ch.id, host, "i1", 1, t0.Add(-time.Hour), ch.ref(2))}}})
+	if e := hc.errorFor("b1c"); e.Code != pb1.ErrorCode_ERROR_CODE_INVALID {
+		t.Errorf("an older bundle with the key ID: %v", e)
+	}
+
 	// The next day's bundle: subscribers see both until the announcement
 	// moves to it, then the new one alone.
 	b2 := bundleOf(ch.id, host, "i1", 2, t0.Add(24*time.Hour), ch.ref(2))

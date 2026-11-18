@@ -172,8 +172,10 @@ message SessionEnd {
 // stored announcement uses it, and sent to clients with the session list.
 // Answered by Done; a bundle whose signer is not this connection's key,
 // or whose list version is not one the relay has, is refused with
-// INVALID. The relay keeps a process's bundles from the oldest a live
-// announcement uses on, and its newest while its connection lasts.
+// INVALID. A newer bundle of the same process with a key ID it has
+// replaces the older: the same keys wrapped again. The relay keeps a
+// process's bundles from the oldest a live announcement uses on, and its
+// newest while its connection lasts.
 message PublishBundle {
   string request_id = 1;
   SignedObject bundle = 2;

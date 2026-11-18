@@ -4,9 +4,10 @@ import { randomBytes } from "node:crypto";
 
 import { relayURL } from "@pirc/relay-client";
 
-import { saveRelay } from "./config.ts";
+import { clearRelay, HOSTED_MARKER, saveRelay } from "./config.ts";
 import { claimLoad, packageRoot } from "./copies.ts";
 import { Host } from "./host.ts";
+import { HOSTED } from "./hosted/enabled.ts";
 import { errorText, SESSION_COMMANDS } from "./live.ts";
 import { LAUNCHER_EVENT } from "./launch.ts";
 import { loadPhotos, onConverted, PHOTO_ENTRY, photoRenderer, type PiParts } from "./photos.ts";
@@ -35,6 +36,8 @@ interface ProcessState {
   photosProblem?: string;
   // That PiRC is installed twice, once said (copies.ts).
   twiceSaid?: boolean;
+  // A /pirc join under way, to end if another starts.
+  joining?: { cancel(): void };
 }
 // A release is known by its version; a build from source is new at every
 // load, so that /reload always runs the code as it now is.
@@ -42,7 +45,9 @@ const LOAD = typeof PIRC_VERSION === "string" ? PIRC_VERSION : `dev ${randomByte
 const KEY = Symbol.for("pirc.extension");
 const proc = ((globalThis as Record<symbol, unknown>)[KEY] ??= {}) as ProcessState;
 
-const USAGE = "usage: /pirc [status | enrol <relay-url> [token] | reconnect]";
+const USAGE = HOSTED
+  ? "usage: /pirc [status | enrol <relay-url> [token] | join <hosted-relay> | leave | reconnect]"
+  : "usage: /pirc [status | enrol <relay-url> [token] | reconnect]";
 
 export default async function (pi: ExtensionAPI): Promise<void> {
   // Another install of PiRC that pi loaded first runs instead (copies.ts),
@@ -196,7 +201,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   }
 
   pi.registerCommand("pirc", {
-    description: "PiRC: status, enrol <relay-url> [token], reconnect",
+    description: HOSTED ? "PiRC: status, enrol <relay-url> [token], join <hosted-relay>, leave, reconnect" : "PiRC: status, enrol <relay-url> [token], reconnect",
     handler: async (args, ctx) => {
       const [sub = "status", ...rest] = args.trim().split(/\s+/).filter(Boolean);
       switch (sub) {
@@ -209,6 +214,9 @@ export default async function (pi: ExtensionAPI): Promise<void> {
           // approve.
           const [url, token] = rest;
           if (!url || rest.length > 2) return ctx.ui.notify(USAGE, "error");
+          if (HOSTED && (await import("./hosted/anchor.ts").then(({ Anchor }) => Anchor.read()))) {
+            return ctx.ui.notify("pirc: this computer is in a hosted account: /pirc leave first", "error");
+          }
           try {
             relayURL(url);
             saveRelay(url);
@@ -223,9 +231,69 @@ export default async function (pi: ExtensionAPI): Promise<void> {
           proc.host.connect();
           ctx.ui.notify("pirc: reconnecting", "info");
           return;
+        case "join":
+          if (!HOSTED) return ctx.ui.notify(USAGE, "error");
+          return joinCommand(rest, (m, t) => ctx.ui.notify(m, t));
+        case "leave":
+          if (!HOSTED) return ctx.ui.notify(USAGE, "error");
+          return leaveCommand((m, t) => ctx.ui.notify(m, t));
         default:
           ctx.ui.notify(USAGE, "error");
       }
     },
   });
+}
+
+type Say = (message: string, type: "info" | "warning" | "error") => void;
+
+// /pirc join <hosted-relay>: shows a code to type into a client of the
+// account, which gives whoever types it this machine (docs/e2e.md,
+// section 5, "What a host says"). Replaces any account this machine has.
+async function joinCommand(args: string[], say: Say): Promise<void> {
+  const [origin] = args;
+  if (!origin || args.length > 1) return say(USAGE, "error");
+  if (process.env.PIRC_RELAY) return say("pirc: PIRC_RELAY is set: unset it first, since every install of PiRC on this machine reads it, older ones included", "error");
+  const { hostedOrigin } = await import("@pirc/relay-client/hosted");
+  try {
+    hostedOrigin(origin);
+  } catch (err) {
+    return say(`pirc: ${(err as Error).message}`, "error");
+  }
+  const { join } = await import("./hosted/join.ts");
+  proc.joining?.cancel();
+  const host = proc.host;
+  const me = host.joinIdentity();
+  const j = join({
+    origin,
+    signer: me.signer,
+    name: me.name,
+    log: (m) => host.log(m),
+    onCode: (shown, until) => {
+      const at = until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      say(`pirc: type ${shown} into a PiRC app of your account, under Add a device. Whoever types this code gets full control of this computer: never read it out to anyone. It works once, until ${at}.`, "warning");
+    },
+  });
+  proc.joining = j;
+  try {
+    const { approverName } = await j.done;
+    saveRelay(HOSTED_MARKER);
+    host.connect();
+    host.notify(`pirc: joined the account, approved by ${approverName ? `'${approverName}'` : "a client"}`, "info");
+  } catch (err) {
+    host.notify(`pirc: the join failed: ${(err as Error).message}. Run /pirc join again for a new code.`, "error");
+  } finally {
+    if (proc.joining === j) proc.joining = undefined;
+  }
+}
+
+// /pirc leave: this machine leaves its hosted account and stops serving at
+// once. A client of the account still lists it until one removes it.
+async function leaveCommand(say: Say): Promise<void> {
+  const { Anchor } = await import("./hosted/anchor.ts");
+  if (!(await Anchor.read())) return say("pirc: this computer is in no hosted account", "error");
+  proc.joining?.cancel();
+  Anchor.remove();
+  clearRelay();
+  proc.host.connect();
+  say("pirc: left the account; remove this computer from the account's list in a PiRC app", "info");
 }

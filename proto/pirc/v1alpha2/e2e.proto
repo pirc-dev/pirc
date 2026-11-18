@@ -304,6 +304,9 @@ message JoinApproval {
   LabelKeyRef label_key_ref = 4;
   bytes label_key = 5;
   uint64 label_counter = 6;
+  // The approving client's name, as its label says, so that a host, which
+  // never holds the label key, can say who approved it; at most 128 bytes.
+  string approver_name = 7;
 }
 
 message JoinRefused {}
