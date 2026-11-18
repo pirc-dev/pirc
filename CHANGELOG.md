@@ -6,7 +6,7 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
-## Unreleased
+## 0.3.12 (2026-11-18)
 
 - A phone can leave a relay: the relay now takes a client's own key off
   its list when that client asks to leave. The iOS and Android apps use
