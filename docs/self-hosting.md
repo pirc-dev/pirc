@@ -473,7 +473,7 @@ Then register it with the relay, start it, and add the first passkey:
 ```sh
 alias pirc-web='sudo -u pirc-web PIRC_WEB_DIR=/var/lib/pirc-web $(grep -s ^NODE_EXTRA_CA_CERTS= /etc/pirc-web/env) /usr/local/bin/node /usr/local/lib/pirc-web/pirc-web.mjs'
 pirc-relay add-client --url '' --label web   # on the relay's machine: the token alone, valid 15 minutes
-pirc-web enrol <relay-url> <token>
+pirc-web enrol <relay-url> <token>         # again with no token if the relay moves (below)
 systemctl daemon-reload
 systemctl enable --now pirc-web
 systemctl status pirc-web                    # journalctl -u pirc-web says why if it stopped
@@ -486,6 +486,36 @@ that syncs works on your other devices too. `pirc-web list` and
 PiRC's app, and hosts asking to join can be approved there. Its one
 durable directory is `/var/lib/pirc-web`; its relay key there,
 `client.key`, is the account's access (Backup, below).
+
+## Moving the relay to a new address
+
+When the relay moves to another port or name, every host and app still
+has the address it joined with. Their keys stay registered, so none of
+them needs a new token. Move each one:
+
+1. **The relay.** Change its listen address, or its proxy, and set
+   `PIRC_RELAY_URL` (or `--url`) to the new address, so the links and
+   `/pirc enrol` lines it prints from now on carry it.
+2. **Each host.** In its pi, run `/pirc enrol <new-relay-url>`. It saves
+   the address and reconnects. If `PIRC_RELAY` is set in pi's
+   environment, change that instead, because it wins over the saved
+   address.
+3. **The web app.** Run `pirc-web enrol <new-relay-url>` with no token
+   (0.3.12 or later), then restart it: `systemctl restart pirc-web`.
+   Browsers sign in again. With Docker Compose, the web app reaches the
+   relay by its own name inside Compose (`ws://relay:8443`), so a new
+   public name or port needs nothing here.
+4. **Each phone.** In the app, Settings → Relay address takes the new
+   address and keeps the phone's keys and chats (the apps' store builds
+   after 0.3.12; the changelog says which). In an older app, remove the
+   phone (from another app's devices, or `pirc-relay remove <key-prefix>`),
+   then join it again.
+
+To stop using a relay, Settings → Leave this relay takes the phone's key
+off the relay and clears it from the phone (from the same builds, with a
+0.3.12 relay or later). On a phone that was the
+relay's only app, only `pirc-relay add-client` on the relay's machine
+lets anyone back in.
 
 ## Upgrading
 

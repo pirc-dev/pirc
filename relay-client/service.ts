@@ -77,7 +77,7 @@ export class Cli {
   // registration token, once: the first answer is the result, the relay's
   // refusal or why it could not be reached (an untrusted certificate, say),
   // and none in 20 seconds is a failure too.
-  async enrol(o: { dir: string; url: string; token: string; label: string; software: string }): Promise<void> {
+  async enrol(o: { dir: string; url: string; token?: string; label: string; software: string }): Promise<void> {
     try {
       relayURL(o.url);
     } catch (e) {
@@ -105,7 +105,10 @@ export class Cli {
       const ca = /self[- ]signed|unable to (verify|get (local )?issuer)/i.test(state.reason) ? "; a certificate from a private CA needs NODE_EXTRA_CA_CERTS set to the CA's file" : "";
       this.die(`cannot reach the relay at ${o.url}: ${state.reason}${ca}`);
     }
-    if (state.kind !== "ready") this.die(`the relay refused: ${"reason" in state ? state.reason : state.kind}`);
+    if (state.kind !== "ready") {
+      const why = "reason" in state ? state.reason : state.kind;
+      this.die(o.token ? `the relay refused: ${why}` : `the relay refused: ${why}; without a token it must know this key already, so give one (pirc-relay add-client)`);
+    }
   }
 }
 

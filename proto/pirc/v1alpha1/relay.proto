@@ -74,6 +74,8 @@ message Frame {
     PushChanged push_changed = 62;
     // Client to relay: the read-only key a woken phone logs in with.
     RegisterReadKey register_read_key = 63;
+    // Client to relay: taking its own key off the registry.
+    LeaveRelay leave_relay = 64;
 
     // Either direction. Any Error during login closes the connection;
     // after login it stays open. A message that is not a binary, decodable
@@ -312,6 +314,19 @@ message RenameKey {
 message RemoveKey {
   string request_id = 1;
   bytes public_key = 2;
+}
+
+// Client to relay: remove the key that asks from the registry, with its
+// read-only key and its push registration, so that a phone can leave a
+// relay it no longer uses. RemoveKey cannot name the key that asks: the
+// web app's server holds one key for every browser, and it never sends
+// this. Answered by KeyChanged, after which the relay closes this
+// connection with WebSocket status 1000 and the reason "left", and any
+// other of the key's with 1008 and "key revoked". Error with the
+// request_id: PERMISSION_DENIED from a host (a read-only key may send
+// nothing but SubscribeSessions).
+message LeaveRelay {
+  string request_id = 1;
 }
 
 // Relay to client: the change is done. A client watching the keys has

@@ -1,7 +1,8 @@
 #!/usr/bin/env -S node --experimental-transform-types --no-warnings
 // pirc-web: PiRC's web app (docs/web.md).
 //
-//   pirc-web enrol <relay-url> <token>          register with a PiRC relay
+//   pirc-web enrol <relay-url> [token]          register with a PiRC relay, or
+//                                               follow it to a new address
 //   pirc-web serve --origin URL --listen host:port (--tls-cert F --tls-key F | --plaintext) [--trusted-proxies LIST]
 //   pirc-web pair [--label NAME]                print a link that adds a passkey
 //   pirc-web list                               passkeys
@@ -86,7 +87,9 @@ function relayView(s: ConnectionState): RelayView {
   }
 }
 
-async function enrol(dir: string, url: string, token: string): Promise<void> {
+// Without a token, the relay at url must know this server's key already:
+// the same relay at a new address.
+async function enrol(dir: string, url: string, token: string | undefined): Promise<void> {
   await cli.enrol({ dir, url, token, label: "web", software: `pirc-web/${VERSION}` });
   writeConfig(dir, { ...readConfig(dir), relay: url });
   console.log(`enrolled with ${url}`);
@@ -103,8 +106,10 @@ async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
   // enrol's URL and token, and revoke's passkey, come first, taken as they
   // are: a token or a passkey ID may begin with "-", which the option
-  // parser would take for an option. Options follow them.
-  const taken = cmd === "enrol" ? 2 : cmd === "revoke" ? 1 : 0;
+  // parser would take for an option. Options follow them; enrol's token
+  // may be left out, before one of them.
+  const tokenless = cmd === "enrol" && (args[1] === undefined || /^--data-dir(=|$)/.test(args[1]));
+  const taken = cmd === "enrol" ? (tokenless ? 1 : 2) : cmd === "revoke" ? 1 : 0;
   const fixed = args.slice(0, taken);
   const rest = args.slice(taken);
   const { values: v, positionals } = parseArgs({
@@ -130,7 +135,7 @@ async function main(): Promise<void> {
   switch (cmd) {
     case "enrol": {
       const [url, token] = fixed;
-      if (!url || !token || positionals.length > 0) die("usage: pirc-web enrol <relay-url> <token>");
+      if (!url || positionals.length > 0) die("usage: pirc-web enrol <relay-url> [token]");
       return enrol(dir, url, token);
     }
     case "pair": {

@@ -1447,6 +1447,71 @@ func TestRemovingAKeyDeletesItsPush(t *testing.T) {
 	}
 }
 
+// A client leaves: its key, read-only key and push go, it is answered,
+// then closed as having left; its other connections close as revoked, and
+// the others are sent the list without it. A host may not leave so.
+func TestLeave(t *testing.T) {
+	r := startRelay(t, 0)
+	pub, priv := newKey(t)
+	phone := r.dial(pub, priv)
+	phone.mustLogin(pb.Role_ROLE_CLIENT, r.token(registry.RoleClient, "phone", time.Minute), "")
+	phone.send(&pb.Frame{Body: &pb.Frame_RegisterPush{RegisterPush: &pb.RegisterPush{RequestId: "p1", Handle: "h"}}})
+	phone.next(func(f *pb.Frame) bool { return f.GetPushChanged() != nil })
+	readPub, readPriv := newKey(t)
+	registerReadKey(phone, "k1", readPub)
+	read := r.dial(readPub, readPriv)
+	read.mustLogin(pb.Role_ROLE_CLIENT, "", "")
+	second := r.dial(pub, priv)
+	second.mustLogin(pb.Role_ROLE_CLIENT, "", "")
+	laptop := r.registered(registry.RoleClient, "laptop")
+	laptop.send(&pb.Frame{Body: &pb.Frame_WatchKeys{WatchKeys: &pb.WatchKeys{}}})
+	laptop.keysWhere(func(m map[string]*pb.RegisteredKey) bool { return m["phone"] != nil })
+	host := r.registered(registry.RoleHost, "desk")
+
+	host.send(&pb.Frame{Body: &pb.Frame_LeaveRelay{LeaveRelay: &pb.LeaveRelay{RequestId: "h1"}}})
+	expectCode(t, host.recv().GetError(), pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
+	phone.send(&pb.Frame{Body: &pb.Frame_LeaveRelay{LeaveRelay: &pb.LeaveRelay{}}})
+	expectCode(t, phone.next(func(f *pb.Frame) bool { return f.GetError() != nil }).GetError(), pb.ErrorCode_ERROR_CODE_INVALID)
+
+	phone.send(&pb.Frame{Body: &pb.Frame_LeaveRelay{LeaveRelay: &pb.LeaveRelay{RequestId: "l1"}}})
+	if f := phone.next(func(f *pb.Frame) bool { return f.GetKeyChanged() != nil || f.GetError() != nil }); f.GetKeyChanged().GetRequestId() != "l1" {
+		t.Fatalf("answer %v", f)
+	}
+	for {
+		_, err := phone.recvErr(5 * time.Second)
+		if err == nil {
+			continue
+		}
+		if websocket.CloseStatus(err) != websocket.StatusNormalClosure {
+			t.Fatalf("closed with %v", err)
+		}
+		break
+	}
+	for _, p := range []*peer{second, read} {
+		for {
+			_, err := p.recvErr(5 * time.Second)
+			if err == nil {
+				continue
+			}
+			if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+				t.Fatalf("other connection closed with %v", err)
+			}
+			break
+		}
+	}
+	laptop.keysWhere(func(m map[string]*pb.RegisteredKey) bool { return m["phone"] == nil })
+	d, _ := r.reg.Load()
+	if _, ok := d.Lookup(pub); ok {
+		t.Fatal("still registered")
+	}
+	if _, ok := d.LookupRead(readPub); ok {
+		t.Fatal("read-only key kept")
+	}
+	if _, e := r.dial(pub, priv).login(pb.Role_ROLE_CLIENT, "", ""); e == nil {
+		t.Fatal("the key that left still logs in")
+	}
+}
+
 func TestPushKeptAcrossARestart(t *testing.T) {
 	r := startRelay(t, 0)
 	phone := r.registered(registry.RoleClient, "phone")
@@ -1516,6 +1581,7 @@ func TestReadOnlyKey(t *testing.T) {
 		{Body: &pb.Frame_RegisterReadKey{RegisterReadKey: &pb.RegisterReadKey{RequestId: "k", PublicKey: readPub}}},
 		{Body: &pb.Frame_IssueToken{IssueToken: &pb.IssueToken{RequestId: "t", Role: pb.Role_ROLE_HOST}}},
 		{Body: &pb.Frame_RemoveKey{RemoveKey: &pb.RemoveKey{RequestId: "r", PublicKey: laptop.pub}}},
+		{Body: &pb.Frame_LeaveRelay{LeaveRelay: &pb.LeaveRelay{RequestId: "l"}}},
 	} {
 		read.send(f)
 		expectCode(t, read.recv().GetError(), pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)

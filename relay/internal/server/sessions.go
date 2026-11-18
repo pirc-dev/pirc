@@ -156,6 +156,11 @@ func (s *Server) handle(c *conn, f *pb.Frame) *frameError {
 			return denied("only clients remove keys")
 		}
 		return s.remove(c, b.RemoveKey)
+	case *pb.Frame_LeaveRelay:
+		if host {
+			return denied("only clients leave the relay")
+		}
+		return s.leave(c, b.LeaveRelay)
 	case *pb.Frame_IssueToken:
 		if host {
 			return denied("only clients issue tokens")

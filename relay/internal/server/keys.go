@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -152,6 +153,32 @@ func (s *Server) remove(c *conn, r *pb.RemoveKey) *frameError {
 	// Its connections close and the list goes out first, then the answer.
 	_ = s.reloadRegistry(true)
 	c.queue(&pb.Frame{Body: &pb.Frame_KeyChanged{KeyChanged: &pb.KeyChanged{RequestId: requestID}}})
+	return nil
+}
+
+// leave takes the client's own key out of the registry, as it asked,
+// answers it, and closes the connection: a phone leaving a relay it no
+// longer uses. The answer is written before the close, so the phone knows
+// it is done and not merely cut off.
+func (s *Server) leave(c *conn, r *pb.LeaveRelay) *frameError {
+	requestID := r.GetRequestId()
+	if requestID == "" || len(requestID) > MaxIDBytes {
+		return invalid("a request ID is needed, of at most 128 bytes")
+	}
+	key := registry.EncodeKey(c.key)
+	k, err := s.cfg.Registry.Remove(key)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return &frameError{code: pb.ErrorCode_ERROR_CODE_INVALID, msg: err.Error(), requestID: requestID}
+	case err != nil:
+		s.log.Error("cannot remove a key", "key", key, "err", err)
+		return &frameError{code: pb.ErrorCode_ERROR_CODE_INTERNAL, msg: "registry unavailable", requestID: requestID}
+	}
+	s.log.Info("key left", "role", k.Role, "label", k.Label, "key", key)
+	c.sendNow(&pb.Frame{Body: &pb.Frame_KeyChanged{KeyChanged: &pb.KeyChanged{RequestId: requestID}}})
+	c.close(websocket.StatusNormalClosure, "left")
+	// Its other connections close as revoked, and the list goes out.
+	_ = s.reloadRegistry(true)
 	return nil
 }
 

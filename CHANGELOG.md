@@ -6,6 +6,18 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- A phone can leave a relay: the relay now takes a client's own key off
+  its list when that client asks to leave. The iOS and Android apps use
+  it from their next store build, in Settings → Leave this relay, along
+  with Settings → Relay address, so a phone follows a relay that moves
+  to another port or name without joining again. Before, the only way
+  out was reinstalling the app.
+- `pirc-web enrol <relay-url>` without a token points the web app at its
+  relay's new address; restart it after. The guide's "Moving the relay
+  to a new address" says what to do for each part.
+
 ## 0.3.11 (2026-11-17)
 
 - The web app keeps following a session whose computer reconnects to the

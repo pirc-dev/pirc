@@ -70,6 +70,8 @@ export interface Relay {
   log: () => string;
   start(): void;
   kill(): Promise<void>;
+  // Stops it and starts it again on another port, url changed with it.
+  move(): Promise<void>;
   // Runs a relay command against its data directory.
   cmd(name: string, ...args: string[]): string;
 }
@@ -83,9 +85,16 @@ export async function startRelay(h: Harness): Promise<Relay> {
   }
   const relayBin = bin;
   const data = join(h.dir, "relay");
-  const port = await freePort();
+  let port = await freePort();
   let proc: ChildProcess | undefined;
   let log = "";
+  const listening = async (from: number) => {
+    const deadline = Date.now() + 10_000;
+    while (!log.slice(from).includes("msg=listening")) {
+      if (proc!.exitCode !== null || Date.now() > deadline) throw new Error(`relay did not start:\n${log}`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
   const relay: Relay = {
     url: `ws://127.0.0.1:${port}`,
     log: () => log,
@@ -99,6 +108,14 @@ export async function startRelay(h: Harness): Promise<Relay> {
       p.kill();
       await new Promise((r) => p.once("exit", r));
     },
+    async move() {
+      await relay.kill();
+      port = await freePort();
+      relay.url = `ws://127.0.0.1:${port}`;
+      const from = log.length;
+      relay.start();
+      await listening(from);
+    },
     // The data directory before the rest, which may end in "--" and a key
     // that begins with "-".
     cmd: (name, ...args) => execFileSync(relayBin, [name, "--data-dir", data, ...args], { encoding: "utf8" }).trim(),
@@ -106,11 +123,7 @@ export async function startRelay(h: Harness): Promise<Relay> {
   relay.start();
   h.onCleanup(() => proc?.kill());
   // Its registry is made by then, which the commands need.
-  const deadline = Date.now() + 10_000;
-  while (!log.includes("msg=listening")) {
-    if (proc!.exitCode !== null || Date.now() > deadline) throw new Error(`relay did not start:\n${log}`);
-    await new Promise((r) => setTimeout(r, 20));
-  }
+  await listening(0);
   return relay;
 }
 

@@ -14,6 +14,9 @@ export interface Web {
   log(): string;
   // Whether the server is still running.
   running(): boolean;
+  // Stops the server and starts it again, as after enrolling anew; its
+  // sign-ins end with it.
+  restart(): Promise<void>;
   // With tls, the certificate it serves, for a client to trust.
   cert?: string;
   key?: string;
@@ -47,7 +50,7 @@ export async function startWeb(h: Harness, relay: Relay, o: { label: string; tls
   let out = "";
   // The certificate is trusted for what the server reaches too: a
   // stand-in push service serves it (push-service.ts).
-  const server = spawn("node", [...node, "serve", ...tlsArgs, "--listen", `127.0.0.1:${port}`, "--origin", origin, "--data-dir", data], {
+  const spawnServer = () => spawn("node", [...node, "serve", ...tlsArgs, "--listen", `127.0.0.1:${port}`, "--origin", origin, "--data-dir", data], {
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, ...(cert ? { NODE_EXTRA_CA_CERTS: cert } : {}) },
   });
@@ -55,10 +58,24 @@ export async function startWeb(h: Harness, relay: Relay, o: { label: string; tls
     out += b;
     if (o.echo) process.stdout.write(b);
   };
-  server.stdout!.on("data", take);
-  server.stderr!.on("data", take);
+  let server = spawnServer();
+  const started = async () => {
+    const from = out.length;
+    server.stdout!.on("data", take);
+    server.stderr!.on("data", take);
+    for (let i = 0; i < 100 && !out.slice(from).includes("listening"); i++) await sleep(100);
+    if (!out.slice(from).includes("listening")) throw new Error(`pirc-web did not start on ${origin}:\n${out}`);
+  };
   h.onCleanup(() => server.kill());
-  for (let i = 0; i < 100 && !out.includes("listening"); i++) await sleep(100);
-  if (!out.includes("listening")) throw new Error(`pirc-web did not start on ${origin}:\n${out}`);
-  return { origin, cli, log: () => out, running: () => server.exitCode === null && server.signalCode === null, ...(cert ? { cert, key } : {}) };
+  await started();
+  const restart = async () => {
+    const old = server;
+    if (old.exitCode === null && old.signalCode === null) {
+      old.kill();
+      await new Promise((r) => old.once("exit", r));
+    }
+    server = spawnServer();
+    await started();
+  };
+  return { origin, cli, log: () => out, running: () => server.exitCode === null && server.signalCode === null, restart, ...(cert ? { cert, key } : {}) };
 }

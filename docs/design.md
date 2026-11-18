@@ -568,6 +568,35 @@ The questions, as settled:
    its connections and drops it from routing.
    Phones on the Remote Pi app were revoked in the adapter (section 10),
    until it was retired on 2026-11-07.
+
+   **Leaving, and a relay that moves** (decided 2026-11-18, for 0.3.12).
+   A self-hoster moved his relay to another port after joining his phone,
+   and the phone had no way to follow it: the relay refused a client
+   removing its own key (2026-11-06), and the app refused a second join
+   link (2026-11-07). Each decision was sound alone, but together they
+   left reinstalling the app as the only way out. Now:
+   - A client may leave: `LeaveRelay`, a message of its own, takes the
+     key that sends it off the registry, with its read-only key and its
+     push registration. The relay answers it, then closes that connection
+     with 1000 "left", and the key's other connections as revoked. It is
+     not a field on `RemoveKey`, which still refuses the key that asks:
+     the web app's server holds one key for every browser, and it never
+     sends `LeaveRelay` (no route leads to it, tested in
+     `web/test/server.test.ts`). It has no recorded exchange in `cases/`:
+     those are played by `web/core`, which must not send it.
+   - A host follows the relay by `/pirc enrol <url>`, as before; the web
+     app's server by `pirc-web enrol <url>` with no token, which saves the
+     address once the relay lets its key in.
+   - The app gets Settings → Relay address, which saves a new address only
+     once the relay there lets the phone's key in, keeping its keys and
+     chats, and Settings → Leave this relay, which says so plainly when
+     the phone is the relay's only client. A join link to another relay
+     offers to leave the old one first.
+   - Tested end to end: the relay moves to another port, and pi and the
+     web app follow it (`web/test/e2e.ts`).
+   From now on, a decision that ties a device to some state (a relay, a
+   key, an address) also says how a person changes it, undoes it, or
+   leaves.
 6. **One person or several.** One account per relay; anyone registered sees
    everything. Several accounts, and any sharing or permissions, come with the
    hosted relay.

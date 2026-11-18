@@ -5,6 +5,7 @@
 //
 //   node --experimental-transform-types web/test/e2e.ts
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:http2";
 import { join } from "node:path";
@@ -34,10 +35,15 @@ try {
   // localhost is the server's 127.0.0.1, whatever the resolver prefers.
   const lookup = (_h: string, o: { all?: boolean }, cb: (e: null, a: unknown, f?: number) => void) =>
     o.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4);
-  const h2 = connect(origin, { ca: readFileSync(cert), lookup: lookup as never });
   // Cleanup stops the server under this connection: its reset then is
-  // expected. Before that, an error fails the step that met it.
-  h2.on("error", () => {});
+  // expected. Before that, an error fails the step that met it. A
+  // restarted server needs another.
+  const connectH2 = () => {
+    const c = connect(origin, { ca: readFileSync(cert), lookup: lookup as never });
+    c.on("error", () => {});
+    return c;
+  };
+  let h2 = connectH2();
   h.onCleanup(() => h2.destroy());
   const h2fetch = (path: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) =>
     new Promise<Response>((resolve, reject) => {
@@ -696,6 +702,39 @@ try {
   step("the prompts reached pi's terminal");
   // The last the app sent; earlier ones have scrolled away.
   assert.match(pi.screen(), /after the restart/);
+
+  step("the relay moved to a new address: pi and the web app follow it, enrolled again without tokens");
+  {
+    const old = relay.url;
+    await relay.move();
+    assert.notEqual(relay.url, old);
+    // A server whose key the relay does not know needs a token.
+    const stranger = join(h.dir, "web-stranger");
+    assert.throws(() => execFileSync("node", [...(process.env.PIRC_E2E_WEB ? [process.env.PIRC_E2E_WEB] : ["--experimental-transform-types", "--no-warnings", join(repo, "web/server/main.ts")]), "enrol", relay.url, "--data-dir", stranger], { stdio: "pipe" }),
+      (e: { stderr: Buffer }) => /without a token it must know this key already/.test(e.stderr.toString()));
+    assert.match(cli("enrol", relay.url), new RegExp(`enrolled with ${relay.url}`));
+    await web.restart();
+    h2.destroy();
+    h2 = connectH2();
+    const from = relay.log().length;
+    pi.keys("C-u");
+    pi.keys(`/pirc enrol ${relay.url}`, "Enter");
+    for (let i = 0; i < 150 && !/msg=connected role=host label=e2e-host/.test(relay.log().slice(from)); i++) await sleep(100);
+    assert.match(relay.log(), /msg=connected role=client label=e2e-web/);
+    // Its sign-ins ended with the server.
+    assert.equal((await http("/api/snapshot")).status, 401);
+    const login = await post<{ challenge: string; rpId: string }>("/api/login/options");
+    await post("/api/login/verify", { response: phone.authenticate(login, origin) });
+    let moved: SessionView | undefined;
+    for (let i = 0; i < 150 && !moved; i++) {
+      moved = ((await (await http("/api/snapshot")).json()) as { sessions: SessionView[] }).sessions.find((x) => x.sessionId === session!.sessionId);
+      if (!moved) await sleep(100);
+    }
+    assert.ok(moved, "pi's session did not come back at the new address");
+    assert.ok((await post<Outcome>(`/api/sessions/${encodeURIComponent(moved.id)}/prompt`, { text: "after the move" })).ok);
+    for (let i = 0; i < 150 && !/after the move/.test(pi.screen()); i++) await sleep(100);
+    assert.match(pi.screen(), /after the move/);
+  }
 
   step("revoking the passkey signs it out");
   cli("revoke", "e2e-phone");

@@ -2,7 +2,7 @@
 // pairing and signing in with a passkey (a software one), sign-ins ending,
 // the event stream and commands.
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -479,6 +479,23 @@ test("the registered devices are listed, this server's own marked, renamed and r
   // Not listed while the relay is out of reach.
   t.client.onState({ state: "offline", reason: "gone" });
   assert.deepEqual((await (await t.req("/api/snapshot")).json()).devices, []);
+});
+
+// The server's key is every browser's: a browser can take it off the relay
+// by no route, so the server never sends LeaveRelay (proto/.../relay.proto).
+test("no request of a browser's makes the server leave the relay", async () => {
+  const t = setup();
+  await t.pair(new SoftAuthenticator());
+  t.client.onState({ state: "ready" });
+  const own = "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI";
+  for (const path of ["/api/devices/leave", "/api/leave", "/api/devices/remove"]) {
+    const r = t.req(path, { method: "POST", body: { key: own } });
+    await new Promise((r) => setImmediate(r));
+    t.client.onFrame(frameIn({ error: { code: "ERROR_CODE_PERMISSION_DENIED", message: "a client cannot remove its own key", requestId: "id-1" } }));
+    await r;
+  }
+  assert.ok(!t.sent.some((f) => f.body.case === "leaveRelay"), JSON.stringify(t.sent.map(frameOut)));
+  assert.doesNotMatch(readFileSync(new URL("../core/client.ts", import.meta.url), "utf8"), /leaveRelay/);
 });
 
 test("a browser subscribes for the passkey signed in, and unsubscribes; a page's stream counts its chat as shown", async () => {

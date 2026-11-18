@@ -108,6 +108,19 @@ func (c *conn) queueBytes(b []byte) {
 	}
 }
 
+// sendNow writes f at once, ahead of the queue, for a frame that must
+// reach the peer before the connection closes. Only for the connection's
+// own goroutine: the write waits.
+func (c *conn) sendNow(f *pb.Frame) {
+	b, err := proto.Marshal(f)
+	if err != nil {
+		return
+	}
+	wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	c.ws.Write(wctx, websocket.MessageBinary, b)
+	cancel()
+}
+
 func errorFrame(code pb.ErrorCode, msg string) *pb.Frame {
 	return &pb.Frame{Body: &pb.Frame_Error{Error: &pb.Error{Code: code, Message: msg}}}
 }
