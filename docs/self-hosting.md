@@ -505,15 +505,15 @@ them needs a new token. Move each one:
    Browsers sign in again. With Docker Compose, the web app reaches the
    relay by its own name inside Compose (`ws://relay:8443`), so a new
    public name or port needs nothing here.
-4. **Each phone.** In the app, Settings → Relay address takes the new
-   address and keeps the phone's keys and chats (the apps' store builds
-   after 0.3.12; the changelog says which). In an older app, remove the
+4. **Each phone.** In the app, Settings → Relay → Change address takes
+   the new address and keeps the phone's keys and chats (app 1.0.2 or
+   later). In an older app, remove the
    phone (from another app's devices, or `pirc-relay remove <key-prefix>`),
    then join it again.
 
-To stop using a relay, Settings → Leave this relay takes the phone's key
-off the relay and clears it from the phone (from the same builds, with a
-0.3.12 relay or later). On a phone that was the
+To stop using a relay, Settings → Relay → Leave this relay takes the
+phone's key off the relay and clears it from the phone (app 1.0.2 or
+later, with a 0.3.12 relay or later). On a phone that was the
 relay's only app, only `pirc-relay add-client` on the relay's machine
 lets anyone back in.
 

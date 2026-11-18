@@ -10,9 +10,9 @@ release that needs its parts upgraded together says so here.
 
 - A phone can leave a relay: the relay now takes a client's own key off
   its list when that client asks to leave. The iOS and Android apps use
-  it from their next store build, in Settings → Leave this relay, along
-  with Settings → Relay address, so a phone follows a relay that moves
-  to another port or name without joining again. Before, the only way
+  it from 1.0.2, in Settings → Relay → Leave this relay, along with
+  Settings → Relay → Change address, so a phone follows a relay that
+  moves to another port or name without joining again. Before, the only way
   out was reinstalling the app.
 - `pirc-web enrol <relay-url>` without a token points the web app at its
   relay's new address; restart it after. The guide's "Moving the relay

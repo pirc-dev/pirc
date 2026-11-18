@@ -617,11 +617,8 @@ The questions, as settled:
    - A host follows the relay by `/pirc enrol <url>`, as before; the web
      app's server by `pirc-web enrol <url>` with no token, which saves the
      address once the relay lets its key in.
-   - The app gets Settings → Relay address, which saves a new address only
-     once the relay there lets the phone's key in, keeping its keys and
-     chats, and Settings → Leave this relay, which says so plainly when
-     the phone is the relay's only client. A join link to another relay
-     offers to leave the old one first.
+   - The app (1.0.2) gets Settings → Relay → Change address and Leave
+     this relay, as section 5.3 records.
    - Tested end to end: the relay moves to another port, and pi and the
      web app follow it (`web/test/e2e.ts`).
    From now on, a decision that ties a device to some state (a relay, a
