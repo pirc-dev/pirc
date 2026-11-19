@@ -2463,6 +2463,62 @@ Each step ends with something that can be seen working.
        Chosen at first run: a relay of one's own, as now, or the hosted
        one. The export compliance answer is looked at again before the
        first upload with this code in it.
+
+       Planned in seven steps; the plan was reviewed three times (Claude
+       Fable, GLM 5.3, Kimi K3.1 Pro). **Decided** by the owner on
+       2026-11-19, but for export compliance, which is answered before
+       the first upload (step 6):
+       - *What gates a hosted phone* (D1): the account, as the relay
+         says it, not each phone's subscription. A new account starts the
+         store's trial or purchase before it is made, and the transaction
+         goes in the sign-up; then `Welcome.locked` gates use and
+         notifications, and on a hosted account the local paywall, the
+         iOS extension's store gate and Android's wake gate do not apply.
+         One subscription, through either store, covers every phone and
+         browser. Every client is told the account's subscriptions at
+         login (`Welcome.subscriptions`: the store, the end, whether it
+         renews), shows who pays and until when, and offers a purchase
+         only when none is live, or the live ones end within a week and
+         will not renew, so that no one pays twice; Settings and the
+         locked screen offer it then, as `RenewSubscription`. The other
+         platform's store is named only when this account has or had a
+         subscription there ("Paid through Google Play until 12 Dec 2027;
+         manage it there" on an iPhone): a new user, or a store reviewer
+         who has not bought on the other platform, reads nothing of it,
+         and a widget test fails on any mention of it in the screens.
+       - *A second phone* (D2) joins by showing a code a client types
+         (`web/core/hosted/join.ts` is the reference), attests in
+         `JoinWait`, buys nothing, and is refused on a China mainland
+         storefront as sign-up is.
+       - *The iOS extension's hosted path* (D3) is compiled out of builds
+         that are not hosted: the call into it sits under `#if
+         PIRC_HOSTED`, set by an optional `Flutter/Hosted.xcconfig` that
+         the build wrapper writes only for hosted builds.
+       - *Nothing the relay says deletes anything* (D5), made precise: a
+         removal is recorded and said before anything is deleted, then
+         the secrets go first, the record of the removal last (on a
+         phone: push registration, the extension's snapshot, the
+         keychain's items, the account, chats, drafts), so that a phone
+         stopped half-way finishes when opened; a phone removed by the
+         very device it was removing says so (`e2e.md`, section 3); a
+         device whose adding version is withdrawn has had a failed join
+         and deletes nothing.
+       - *Face ID* (D6): the settings stay as they are, with the same
+         meaning. On a hosted account the main key signs every request,
+         so it is held while the app is in the foreground, and only time
+         away locks it ("Every time" asks on each return, never on each
+         message); the lock switched off asks nothing, as now. A new
+         choice under "Ask again after", on both kinds of relay: "Once",
+         asked when PiRC starts and not again until it is closed or the
+         phone restarts.
+       - *A join cut off after its version was taken* (D7): the device
+         keeps its key and shows a new code; the client sees it listed
+         already, with the same key and role, and sends the approval
+         again with the version that added it, and no new version.
+       - *The label key after a client leaves* (D8) is made by a client
+         that stays, not by the one that left (`e2e.md`, section 3).
+       - *Caps* (D9): 256 hosts and 32 clients, each client with at most
+         its read-only key (`e2e.md`, section 3).
     6. **Running it**: the abuse guards (caps, the sign-up switch and
        invite codes); the relay's own domain; the shared server (decision
        3), deployed from release tags, with the hourly off-site backup and

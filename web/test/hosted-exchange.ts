@@ -7,7 +7,8 @@
 //
 // build() makes the files from objects.json; run() plays a file's inputs
 // and returns what the checks must be, which hosted-exchanges.test.ts
-// compares with the file.
+// compares with the file. A "restart" step makes the client again from the
+// same storage, as an app opened again: what it keeps must be enough.
 import { create, fromJson, toBinary, toJson, type JsonValue } from "@bufbuild/protobuf";
 import { readFileSync } from "node:fs";
 
@@ -18,7 +19,7 @@ import { Chain } from "@pirc/crypto/chain";
 import * as ed25519 from "@pirc/crypto/ed25519";
 import * as hpke from "@pirc/crypto/hpke";
 import * as keys from "@pirc/crypto/keys";
-import { decode } from "@pirc/crypto/objects";
+import { decode, encode, open, sign } from "@pirc/crypto/objects";
 
 import { Sessions, type SessionsAccount } from "../core/hosted/sessions.ts";
 import { MemoryStore } from "../core/hosted/store.ts";
@@ -29,6 +30,7 @@ const objects = JSON.parse(readFileSync(OBJECTS, "utf8"));
 export type Fixture = { me: string; list: string[]; labels: Record<string, string>; ephemerals: string[] };
 export type Step =
   | { now: string }
+  | { restart: true }
   | { in: JsonValue }
   | { send: JsonValue }
   | { out: JsonValue[] }
@@ -65,14 +67,22 @@ export async function run(file: ExchangeFile): Promise<Step[]> {
       return true;
     },
   };
-  const s = new Sessions(account, new MemoryStore(), (x) => out.push(x), () => {}, {
-    now: () => now,
-    ephemeral: async () => hpke.x25519FromPrivate(unhex(ephemerals.shift() ?? "")),
-  });
-  s.onState({ kind: "ready", welcome: {} as never });
+  const store = new MemoryStore();
+  const make = () => {
+    const x = new Sessions(account, store, (f) => out.push(f), () => {}, {
+      now: () => now,
+      ephemeral: async () => hpke.x25519FromPrivate(unhex(ephemerals.shift() ?? "")),
+    });
+    x.onState({ kind: "ready", welcome: {} as never });
+    return x;
+  };
+  let s = make();
   const steps: Step[] = [];
   for (const step of file.steps) {
-    if ("now" in step) {
+    if ("restart" in step) {
+      s = make();
+      steps.push(step);
+    } else if ("now" in step) {
       now = Number(step.now);
       steps.push(step);
     } else if ("in" in step) {
@@ -106,6 +116,14 @@ export async function build(): Promise<Record<string, ExchangeFile>> {
   const late = await keys.sealFrame(unhex(sk.conversation), { accountId: unhex(objects.account_id), keyId: unhex(sk.key_id), session: ref, kind: FrameKind.BROADCAST, recipient: new Uint8Array(0), listVersion: 3n, counter: 3n }, unhex(fr[1].plaintext));
   const request = toBinary(SessionMessageSchema, create(SessionMessageSchema, { body: { case: "prompt", value: { requestId: "id-1", text: "hello" } } }));
   const labels = { [objects.devices.laptop.public_key]: "laptop" };
+  // Another announcement under the stored one's counter: signed by the
+  // host, sealed with the announcement key, the same time and target.
+  const account = unhex(objects.account_id);
+  const laptop = await ed25519.fromSeed(unhex(objects.devices.laptop.seed));
+  const first = decode(unhex(fr[0].plaintext));
+  const firstBody = await open("announcement", account, first);
+  const swapped = await sign("announcement", account, laptop, { ...firstBody!, announcement: new TextEncoder().encode("another SessionAnnouncement") });
+  const other = await keys.sealFrame(unhex(sk.announcement), { accountId: account, keyId: unhex(sk.key_id), session: ref, kind: FrameKind.ANNOUNCEMENT, recipient: new Uint8Array(0), listVersion: 3n, counter: 0n }, encode(swapped));
   const ephemerals = [hex((await hpke.sha256(new TextEncoder().encode("pirc-e2e cases: exchange ephemeral 1"))))];
   const files: Record<string, ExchangeFile> = {
     "sessions.json": {
@@ -131,6 +149,19 @@ export async function build(): Promise<Record<string, ExchangeFile>> {
         { in: { routed: { session, keys: keysOf("3"), payload: b64(late) } } },
         { out: [] },
       ],
+    },
+    "restart.json": {
+      about:
+        "The phone opened again from its storage between two frames, and given the session list again at login: the stored announcement is taken again (its counter is below the broadcast's, but it is the announcement taken, with the same bytes); " +
+        "the broadcast it took before is a replay after the restart too, since the highest counter taken is kept, written before the frame is handed on; the answer after it is taken.",
+      fixture: { me: "phone", list: ["v1", "v2", "v3"], labels, ephemerals: [] },
+      steps: [{ in: { sessionList: { sessions: [entry] } } }, { in: routed(1) }, { out: [] }, { restart: true }, { in: { sessionList: { sessions: [entry] } } }, { in: routed(1) }, { in: routed(2) }, { out: [] }],
+    },
+    "announcement-again.json": {
+      about:
+        "The stored announcement comes again with its counter and is taken, as the same bytes; another announcement, validly signed and sealed, under the same counter is dropped, so a relay holding the keys of a removed reader cannot swap it in.",
+      fixture: { me: "phone", list: ["v1", "v2", "v3"], labels, ephemerals: [] },
+      steps: [{ in: { sessionList: { sessions: [entry] } } }, { in: { sessionUpdated: { entry } } }, { in: { sessionUpdated: { entry: { ...entry, payload: b64(other) } } } }, { out: [] }],
     },
     "off-the-list.json": {
       about: "The same bundle once the phone's list is at version 4a, which removes the tablet the bundle wraps for: every recipient must be on the list, so the phone reads nothing under it.",

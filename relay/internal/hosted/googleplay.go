@@ -122,6 +122,9 @@ func (s *Stores) playSubscription(ctx context.Context, purchaseToken string) (Su
 			OfferDetails struct {
 				OfferID string `json:"offerId"`
 			} `json:"offerDetails"`
+			AutoRenewingPlan *struct {
+				AutoRenewEnabled bool `json:"autoRenewEnabled"`
+			} `json:"autoRenewingPlan"`
 		} `json:"lineItems"`
 	}
 	if err := getJSON(s.cfg.HTTP, req, &res); err != nil {
@@ -138,6 +141,7 @@ func (s *Stores) playSubscription(ctx context.Context, purchaseToken string) (Su
 			sub.Expires = t
 			// The base plan's own price has no offer; the free trial is one.
 			sub.Trial = li.OfferDetails.OfferID != ""
+			sub.Renews = li.AutoRenewingPlan != nil && li.AutoRenewingPlan.AutoRenewEnabled
 		}
 	}
 	if !found {

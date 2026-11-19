@@ -53,6 +53,9 @@ type Subscription struct {
 	// The store's free trial, or its grace period after a failed payment.
 	Trial, Grace bool
 	Sandbox      bool
+	// The store will renew it at its end: what a client shows, so that no
+	// one buys a second while this one carries the account on.
+	Renews bool
 }
 
 // TestVerifier takes the test attestation, any non-empty bytes, and no
@@ -68,7 +71,7 @@ func (TestVerifier) Attest(_ context.Context, a *pb.Attestation, _ []byte) (Atte
 }
 
 func (TestVerifier) Subscribed(context.Context, []byte, *pb.Attestation) (Subscription, error) {
-	return Subscription{Kind: "test", Ident: []byte("test")}, nil
+	return Subscription{Kind: "test", Ident: []byte("test"), Renews: true}, nil
 }
 
 // attestationKind names an attestation's kind, for the log.

@@ -20,7 +20,22 @@ export class Refused extends Error {
 }
 
 const ROLES = new Set([DeviceRole.HOST, DeviceRole.CLIENT, DeviceRole.READ_ONLY]);
-const MAX_DEVICES = 256;
+/**
+ * An account's caps (docs/e2e.md, section 3): 256 hosts, and 32 clients,
+ * each with at most its read-only key. A client costs every host a wrap in
+ * each bundle, and its pre-key's renewal a new bundle; a host costs one
+ * entry on the list.
+ */
+export const MAX_HOSTS = 256;
+export const MAX_CLIENTS = 32;
+
+/** Whether `devices` holds no more of `role` than the caps allow. */
+export function withinCaps(devices: readonly { role: DeviceRole }[]): string | undefined {
+  const n = (r: DeviceRole) => devices.filter((d) => d.role === r).length;
+  if (n(DeviceRole.HOST) > MAX_HOSTS) return "more than 256 hosts";
+  if (n(DeviceRole.CLIENT) > MAX_CLIENTS || n(DeviceRole.READ_ONLY) > MAX_CLIENTS) return "more than 32 clients";
+  return undefined;
+}
 
 const time = (t: { seconds: bigint; nanos: number } | undefined): bigint =>
   t ? t.seconds * 1000n + BigInt(Math.floor(t.nanos / 1e6)) : -1n;
@@ -33,7 +48,9 @@ export const isClient = (v: ListVersionBody, key: Uint8Array): boolean => device
 
 /** What every version must be on its own. */
 function checkShape(v: ListVersionBody): void {
-  if (v.devices.length === 0 || v.devices.length > MAX_DEVICES) throw new Refused("wrong number of devices");
+  if (v.devices.length === 0 || v.devices.length > MAX_HOSTS + 2 * MAX_CLIENTS) throw new Refused("wrong number of devices");
+  const over = withinCaps(v.devices);
+  if (over) throw new Refused(over);
   for (let i = 0; i < v.devices.length; i++) {
     const d = v.devices[i];
     if (d.publicKey.length !== 32) throw new Refused("a device key is not 32 bytes");

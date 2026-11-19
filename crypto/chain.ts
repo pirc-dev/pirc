@@ -82,6 +82,18 @@ export class Chain {
     return this.withdrawn.has(hex(h));
   }
 
+  /**
+   * A fork at the branch's tip: two versions or more chaining from it, none
+   * withdrawn, so that this device adopted neither (docs/e2e.md, section 3,
+   * Forks). A client then takes neither and is joined again; one that took
+   * a side has it on its branch, and the other is only a fork.
+   */
+  undecided(): Version | undefined {
+    const tip = hex(this.latest.hash);
+    const next = [...this.others.values()].filter((v) => hex(v.body.previous) === tip && !this.withdrawn.has(hex(v.hash)));
+    return next.length > 1 ? next[0] : undefined;
+  }
+
   /** Whether `ref` names a version on the branch. */
   onBranch(number: bigint, h: Uint8Array): boolean {
     const v = this.at(number);

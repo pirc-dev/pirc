@@ -460,6 +460,7 @@ func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole) {
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		Role:            role,
 		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
+		Subscriptions:   s.subscriptionsFor(a, role),
 	}}})
 	c.queue(&pb.Frame{Body: &pb.Frame_PreKeys{PreKeys: &pb.PreKeys{PreKeys: s.currentPreKeysLocked(a), All: true}}})
 	if role != pb.DeviceRole_DEVICE_ROLE_HOST {

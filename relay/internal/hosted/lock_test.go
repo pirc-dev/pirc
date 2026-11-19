@@ -44,6 +44,10 @@ func TestLock(t *testing.T) {
 	if !w.GetLocked() {
 		t.Fatal("Welcome does not say locked")
 	}
+	// Its subscriptions, lapsed, so that the client says which ended.
+	if subs := w.GetSubscriptions(); len(subs) != 1 || !subs[0].GetLapsed() || subs[0].GetRenews() || subs[0].GetStore() != pb.SubscriptionStore_SUBSCRIPTION_STORE_TEST {
+		t.Fatalf("a locked account's subscriptions: %v", subs)
+	}
 	p.quiet("pre-keys or labels", func(f *pb.Frame) bool { return f.GetPreKeys() != nil || f.GetLabelState() != nil })
 	p.send(&pb.Frame{Body: &pb.Frame_GetVersions{GetVersions: &pb.GetVersions{RequestId: "g", From: 1}}})
 	if code(p.errorFor("g")) != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
@@ -57,8 +61,11 @@ func TestLock(t *testing.T) {
 	if got := p.closedWith(); got != websocket.StatusNormalClosure {
 		t.Fatalf("closed with %v after a renewal, want 1000", got)
 	}
-	if _, w := h.login(host, ch.id); w.GetLocked() {
-		t.Fatal("still locked after a renewal")
+	if _, w := h.login(host, ch.id); w.GetLocked() || len(w.GetSubscriptions()) != 0 {
+		t.Fatalf("still locked after a renewal, or a host told the subscriptions: %v", w)
+	}
+	if _, w := h.login(phone, ch.id); len(w.GetSubscriptions()) != 1 || w.GetSubscriptions()[0].GetLapsed() || !w.GetSubscriptions()[0].GetRenews() {
+		t.Fatalf("a client's subscriptions after a renewal: %v", w.GetSubscriptions())
 	}
 
 	// Lapsed again, and left locked for 60 days: deleted.

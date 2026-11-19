@@ -195,6 +195,7 @@ func (s *Stores) appStoreStatus(ctx context.Context, original string, sandbox bo
 			}
 			var renewal struct {
 				GracePeriodExpiresDate int64 `json:"gracePeriodExpiresDate"`
+				AutoRenewStatus        int   `json:"autoRenewStatus"`
 			}
 			if l.SignedRenewalInfo != "" {
 				if err := verifyAppleJWS(l.SignedRenewalInfo, s.cfg.Now(), &renewal); err != nil {
@@ -209,6 +210,7 @@ func (s *Stores) appStoreStatus(ctx context.Context, original string, sandbox bo
 				// product is the free trial.
 				Trial:   t.OfferType == 1,
 				Sandbox: t.Environment != "Production",
+				Renews:  renewal.AutoRenewStatus == 1,
 			}
 			// 1 active, 2 expired, 3 billing retry, 4 grace, 5 revoked.
 			switch l.Status {

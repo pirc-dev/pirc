@@ -34,6 +34,7 @@ import {
 import type { HostedState } from "@pirc/relay-client/hosted";
 
 import { equal, hex } from "@pirc/crypto/bytes";
+import { sha256 } from "@pirc/crypto/hpke";
 import * as keys from "@pirc/crypto/keys";
 import { decode, encode, open, sign } from "@pirc/crypto/objects";
 
@@ -51,6 +52,8 @@ export interface SessionsAccount {
   readonly list: Chain;
   readonly publicKey: Uint8Array;
   readonly signer: Signer;
+  /** Why the client may send nothing now (an undecided fork), if it may not. */
+  readonly blocked?: string;
   myPreKeys(): X25519Pair[];
   label(key: Uint8Array): string | undefined;
   send2(body: Parameters<HostedSend>[0]): boolean;
@@ -66,6 +69,17 @@ export interface SessionsOptions {
 /** How long a bundle is read at all, and an older bundle after a newer one is made. */
 export const BUNDLE_LIFE_MS = 26 * 3600_000;
 export const OLD_BUNDLE_MS = 60_000;
+
+/**
+ * The highest counter taken per key ID and session, kept in the store
+ * (key "seen") so that a restart forgets none; and the announcement last
+ * taken, by counter and hash, the one frame that may come again (the
+ * relay's stored copy, after newer frames too), and only as the same
+ * bytes. Kept while its key ID can be read, and an hour more.
+ */
+type Seen = Record<string, { counter: bigint; announcement?: { counter: bigint; hash: Uint8Array }; at: number }>;
+const SEEN = "seen";
+const SEEN_MS = BUNDLE_LIFE_MS + 3600_000;
 
 type Bundle = {
   body: BundleBody;
@@ -85,8 +99,8 @@ export class Sessions {
   private entries = new Map<string, SessionEntry>();
   /** Each session's newest announcement time, and the version its host had. */
   private announced = new Map<string, { madeAt: number; listVersion: bigint }>();
-  /** Per key ID and session, the highest counter taken. */
-  private counters = new Map<string, bigint>();
+  /** Per key ID and session, the highest counter taken, as the store has it. */
+  private seen: Promise<Seen> | undefined;
   private out: Promise<void> = Promise.resolve();
   private ready = false;
 
@@ -163,11 +177,23 @@ export class Sessions {
     return b;
   }
 
-  private counterOk(keyId: Uint8Array, ref: SessionRef, counter: bigint, equalOk: boolean): boolean {
+  /**
+   * Whether a frame's counter is past the last taken under its key ID in
+   * its session; for an announcement (`payload` given), also the one last
+   * taken again, with its counter and the same bytes. Written to the store
+   * before the frame is handed on.
+   */
+  private async counterOk(keyId: Uint8Array, ref: SessionRef, counter: bigint, payload?: Uint8Array): Promise<boolean> {
+    const seen = await (this.seen ??= this.store.get<Seen>(SEEN).then((s) => s ?? {}));
     const k = `${hex(keyId)}/${sessionKey(ref)}`;
-    const last = this.counters.get(k);
-    if (last !== undefined && (counter < last || (counter === last && !equalOk))) return false;
-    this.counters.set(k, counter);
+    const last = seen[k];
+    const h = payload && (await sha256(payload));
+    if (h && last?.announcement && counter === last.announcement.counter) return equal(h, last.announcement.hash);
+    if (last && counter <= last.counter) return false;
+    const now = this.now();
+    for (const [x, v] of Object.entries(seen)) if (now - v.at > SEEN_MS) delete seen[x];
+    seen[k] = { counter, announcement: h ? { counter, hash: h } : last?.announcement, at: now };
+    await this.store.set(SEEN, seen);
     return true;
   }
 
@@ -195,7 +221,7 @@ export class Sessions {
     // Not an older announcement than one seen; the stored one may come
     // again, with its counter.
     if (seen && madeAt < seen.madeAt) return void this.log("an announcement older than one seen");
-    if (!this.counterOk(k.keyId, ref, k.counter, true)) return void this.log("an announcement replayed out of order");
+    if (!(await this.counterOk(k.keyId, ref, k.counter, e.payload))) return void this.log("an announcement replayed out of order, or again with other bytes");
     this.announced.set(sessionKey(ref), { madeAt, listVersion: ann.listVersion.number });
     // A host behind this client's list is sent the rest at once, in an
     // envelope of its own (docs/e2e.md, section 3, Freshness).
@@ -249,7 +275,7 @@ export class Sessions {
         const at: keys.FrameAt = { accountId: this.c.accountId, keyId: k.keyId, session: ref, kind: r.clientKey.length ? FrameKind.ANSWER : FrameKind.BROADCAST, recipient: r.clientKey, listVersion: k.listVersion, counter: k.counter };
         const plain = await keys.openFrame(bundle.keys.conversation, at, r.payload);
         if (!plain) return this.log("a frame that does not open");
-        if (!this.counterOk(k.keyId, ref, k.counter, false)) return this.log("a frame replayed or out of order");
+        if (!(await this.counterOk(k.keyId, ref, k.counter))) return this.log("a frame replayed or out of order");
         this.emit(create(Frame1Schema, { body: { case: "routed", value: { session: ref, clientKey: r.clientKey, payload: plain } } }));
         return;
       }
@@ -320,6 +346,7 @@ export class Sessions {
 
   /** A request, in its envelope, to the process's request key. */
   private async request(ref: SessionRef, request: Uint8Array): Promise<void> {
+    if (this.c.blocked) return this.log(`request not sent: ${this.c.blocked}`);
     const b = this.newestBundle(ref);
     if (!b) return this.log("no keys from that process: its session is stale");
     // The counter is written before the envelope goes, so that a crash

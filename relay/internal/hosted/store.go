@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   reason TEXT NOT NULL DEFAULT '',
   -- When it was first seen lapsed, while it stays so; else 0.
   lapsed_ms INTEGER NOT NULL DEFAULT 0,
+  -- The store will renew it at its end.
+  renews INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (account, kind, ident)
 );
 `
@@ -116,7 +118,27 @@ func OpenStore(dir string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	// Columns added since a table was first made: CREATE TABLE IF NOT
+	// EXISTS leaves an older file's table as it was.
+	for _, c := range []struct{ table, column, def string }{
+		{"subscriptions", "renews", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := addColumn(db, c.table, c.column, c.def); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+	}
 	return &Store{db: db}, nil
+}
+
+// addColumn adds a column to a table that lacks it.
+func addColumn(db *sql.DB, table, column, def string) error {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil || n > 0 {
+		return err
+	}
+	_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -409,13 +431,38 @@ func (s *Store) setSubscription(account []byte, sub Subscription, checkedMs int6
 	if !sub.Expires.IsZero() {
 		expires = sub.Expires.UnixMilli()
 	}
-	_, err := s.db.Exec(`INSERT INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason, lapsed_ms)
-		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CASE WHEN ?9 THEN ?8 ELSE 0 END)
+	_, err := s.db.Exec(`INSERT INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason, lapsed_ms, renews)
+		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CASE WHEN ?9 THEN ?8 ELSE 0 END, ?11)
 		ON CONFLICT (account, kind, ident) DO UPDATE SET expires_ms = excluded.expires_ms, trial = excluded.trial, grace = excluded.grace,
 		  sandbox = excluded.sandbox, checked_ms = excluded.checked_ms, lapsed = excluded.lapsed, reason = excluded.reason,
-		  lapsed_ms = CASE WHEN NOT excluded.lapsed THEN 0 WHEN subscriptions.lapsed THEN subscriptions.lapsed_ms ELSE excluded.checked_ms END`,
-		account, sub.Kind, sub.Ident, expires, sub.Trial, sub.Grace, sub.Sandbox, checkedMs, reason != "", reason)
+		  lapsed_ms = CASE WHEN NOT excluded.lapsed THEN 0 WHEN subscriptions.lapsed THEN subscriptions.lapsed_ms ELSE excluded.checked_ms END,
+		  renews = excluded.renews`,
+		account, sub.Kind, sub.Ident, expires, sub.Trial, sub.Grace, sub.Sandbox, checkedMs, reason != "", reason, sub.Renews)
 	return err
+}
+
+// Subscriptions are the account's, as the stores last said: what a
+// client is shown at login. Ordered by their end, the latest last.
+func (s *Store) Subscriptions(account []byte) ([]KeptSubscription, error) {
+	rows, err := s.db.Query(`SELECT kind, expires_ms, trial, grace, sandbox, renews, checked_ms, lapsed, reason FROM subscriptions
+		WHERE account = ? ORDER BY expires_ms, kind, ident`, account)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KeptSubscription
+	for rows.Next() {
+		k := KeptSubscription{Account: account}
+		var expires int64
+		if err := rows.Scan(&k.Sub.Kind, &expires, &k.Sub.Trial, &k.Sub.Grace, &k.Sub.Sandbox, &k.Sub.Renews, &k.CheckedMs, &k.Lapsed, &k.Reason); err != nil {
+			return nil, err
+		}
+		if expires != 0 {
+			k.Sub.Expires = time.UnixMilli(expires)
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
 }
 
 // Locked says whether every subscription the account has had has lapsed,
@@ -465,7 +512,7 @@ type KeptSubscription struct {
 // included, which a late payment can bring back) not asked about for
 // an hour.
 func (s *Store) SubscriptionsDue(nowMs int64) ([]KeptSubscription, error) {
-	rows, err := s.db.Query(`SELECT account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason FROM subscriptions
+	rows, err := s.db.Query(`SELECT account, kind, ident, expires_ms, trial, grace, sandbox, renews, checked_ms, lapsed, reason FROM subscriptions
 		WHERE checked_ms <= ? OR (expires_ms <= ? AND checked_ms <= ?) ORDER BY checked_ms`, nowMs-24*3600_000, nowMs, nowMs-3600_000)
 	if err != nil {
 		return nil, err
@@ -475,7 +522,7 @@ func (s *Store) SubscriptionsDue(nowMs int64) ([]KeptSubscription, error) {
 	for rows.Next() {
 		var k KeptSubscription
 		var expires int64
-		if err := rows.Scan(&k.Account, &k.Sub.Kind, &k.Sub.Ident, &expires, &k.Sub.Trial, &k.Sub.Grace, &k.Sub.Sandbox, &k.CheckedMs, &k.Lapsed, &k.Reason); err != nil {
+		if err := rows.Scan(&k.Account, &k.Sub.Kind, &k.Sub.Ident, &expires, &k.Sub.Trial, &k.Sub.Grace, &k.Sub.Sandbox, &k.Sub.Renews, &k.CheckedMs, &k.Lapsed, &k.Reason); err != nil {
 			return nil, err
 		}
 		if expires != 0 {

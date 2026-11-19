@@ -1,10 +1,14 @@
 // A client of a hosted account (docs/e2e.md): the reference the app's Dart
 // is held to, and the test client of the hosts. It keeps the account's
 // list and signs its changes, adopting a version only once the relay has
-// taken it and withdrawing one that lost; renews its pre-key weekly; keeps
-// the label key and the label records; joins a device by the code it
-// shows; and, in sessions.ts, opens what hosts send and seals what it
-// asks. Nothing in it is Node's.
+// taken it and withdrawing one that lost; renews its pre-key weekly,
+// keeping the old private key two days past the new one's publication;
+// keeps the label key, made new after a client or read-only key leaves,
+// and the label records; joins a device by the code it shows, or approves
+// again one listed already; leaves; deletes what it keeps only after a
+// version it checked removes it, recording that first; and, in
+// sessions.ts, opens what hosts send and seals what it asks. Nothing in it
+// is Node's.
 import { create, fromBinary, type MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { ErrorCode, type Frame as Frame1 } from "@pirc/protocol";
@@ -18,6 +22,7 @@ import {
   ListVersionBodySchema,
   PreKeyBodySchema,
   VersionRefSchema,
+  type AccountSubscription,
   type Attestation,
   type Device,
   type Frame,
@@ -35,7 +40,7 @@ import type { Signer } from "@pirc/crypto/ed25519";
 import * as hpke from "@pirc/crypto/hpke";
 import { ClientJoin, JoinFailed, readCode, type JoiningDevice } from "@pirc/crypto/join";
 import * as keys from "@pirc/crypto/keys";
-import { checkPreKey, PRE_KEY_MAX_MS, Refused, type Version } from "@pirc/crypto/list";
+import { checkPreKey, isClient, PRE_KEY_MAX_MS, Refused, withinCaps, type Version } from "@pirc/crypto/list";
 import { decode, encode, hash, open, sign } from "@pirc/crypto/objects";
 
 import { Sessions } from "./sessions.ts";
@@ -46,6 +51,30 @@ const DAY = 24 * 3600_000;
 export const PRE_KEY_RENEW_MS = 7 * DAY;
 export const PRE_KEY_KEEP_MS = 2 * DAY;
 const PRE_KEY_LIFE_MS = Number(PRE_KEY_MAX_MS);
+/** How often a client looks at its pre-key and its label key while connected. */
+export const MAINTAIN_MS = 3600_000;
+/**
+ * How long a client waits for the remover of a client or read-only key to
+ * make the new label key before it makes one itself (docs/e2e.md, section
+ * 3, Labels): the repair of a remover that stopped half-way.
+ */
+export const LABEL_REPAIR_MS = 10 * 60_000;
+/** A purchase is offered when no live subscription renews and the last ends within this. */
+export const OFFER_BEFORE_MS = 7 * DAY;
+
+/**
+ * Whether a client offers a purchase (docs/design.md, step 14, stage 5,
+ * decision D1): only when no subscription is live, or none of the live
+ * ones renews and the last ends within a week; otherwise a second one is
+ * a mistake.
+ */
+export function offerPurchase(subs: readonly AccountSubscription[], nowMs: number): boolean {
+  const live = subs.filter((s) => !s.lapsed);
+  if (!live.length) return true;
+  if (live.some((s) => s.renews)) return false;
+  const ends = Math.max(...live.map((s) => (s.ends ? Number(s.ends.seconds) * 1000 : Infinity)));
+  return ends - nowMs <= OFFER_BEFORE_MS;
+}
 
 export type AccountEvent =
   | { type: "state"; state: HostedState }
@@ -55,8 +84,18 @@ export type AccountEvent =
   | { type: "removed"; device: Device }
   // A version no withdrawal explains: this client keeps its branch.
   | { type: "fork"; number: bigint; signer: Uint8Array }
+  // A fork no withdrawal explains, at a version this client adopted
+  // neither side of (docs/e2e.md, section 3, Forks): it changes nothing and
+  // sends nothing until it is joined again.
+  | { type: "undecided"; number: bigint }
   // This client was removed by a version it checked: it keeps nothing.
-  | { type: "removed-me"; by: Uint8Array }
+  // `mutual` when the remover is a device this client was removing at the
+  // same time: the account may be in that device's hands. `by` is this
+  // client's own key when it left.
+  | { type: "removed-me"; by: Uint8Array; mutual: boolean }
+  // The version that added this client was withdrawn: its join failed. It
+  // stops, deletes nothing, and can be joined again.
+  | { type: "join-failed" }
   | { type: "labels" };
 
 export interface ClientOptions {
@@ -73,7 +112,9 @@ export interface ClientOptions {
   log?(m: string): void;
 }
 
-type PreKey = { pair: hpke.X25519Pair; obj: Uint8Array; madeAt: number; expiresAt: number };
+/** `pending` until the relay has taken it; then `publishedAt` (missing on keys kept before it was recorded: their madeAt). */
+type PreKey = { pair: hpke.X25519Pair; obj: Uint8Array; madeAt: number; expiresAt: number; pending?: true; publishedAt?: number };
+const publishedAt = (p: PreKey) => (p.pending ? undefined : (p.publishedAt ?? p.madeAt));
 type LabelKey = { number: bigint; hash: Uint8Array; key: Uint8Array };
 
 const S = {
@@ -82,7 +123,14 @@ const S = {
   preKeys: "pre-keys",
   labelKeys: "label-keys",
   pending: "pending-version",
+  // Version 1, signed and kept before SignUp is sent, until it is answered.
+  signUp: "sign-up",
+  // A removal taken, kept before anything is deleted.
+  removed: "removed",
 } as const;
+
+/** What a removal recorded, for a client opened again before its deletion finished. */
+export type Removal = { by: Uint8Array; number: bigint; mutual: boolean };
 
 type SavedBytes = { branch: Uint8Array[]; others: Uint8Array[]; withdrawals: Uint8Array[] };
 const toBytes = (s: Saved): SavedBytes => ({ branch: s.branch.map(encode), others: s.others.map(encode), withdrawals: s.withdrawals.map(encode) });
@@ -91,8 +139,8 @@ const fromBytes = (s: SavedBytes): Saved => ({ branch: s.branch.map(decode), oth
 const refOf = (v: Version): VersionRef => create(VersionRefSchema, { number: v.body.number, hash: v.hash });
 const sortDevices = (ds: Device[]) => [...ds].sort((a, b) => compare(a.publicKey, b.publicKey));
 
-/** What a typed code led to. */
-export type JoinOutcome = { joined: JoiningDevice } | { refused: JoiningDevice };
+/** What a typed code led to; `again` when the device was listed already and only its approval is sent again. */
+export type JoinOutcome = { joined: JoiningDevice; again: boolean } | { refused: JoiningDevice };
 
 export class HostedClient {
   readonly conn: HostedConnection;
@@ -109,6 +157,11 @@ export class HostedClient {
   private nextId = 0;
   /** Serialises everything that changes the account. */
   private work: Promise<unknown> = Promise.resolve();
+  private maintainTimer: ReturnType<typeof setInterval> | undefined;
+  /** When this client first saw each removal still lacking its new label key, by version number. */
+  private awaitingLabelKey = new Map<bigint, number>();
+  /** Set once the list forks at a version this client adopted neither side of. */
+  private undecidedAt: bigint | undefined;
 
   private constructor(
     private readonly o: ClientOptions,
@@ -132,16 +185,30 @@ export class HostedClient {
 
   /**
    * Signs up on the hosted relay (docs/e2e.md, section 6): this device
-   * makes version 1 with itself in it, and the first label key.
+   * makes version 1 with itself in it, and the first label key. Version 1
+   * is kept before SignUp goes; a sign-up whose answer never came (the app
+   * killed, the connection lost) is finished by calling this again, with a
+   * fresh attestation: the same bytes go again, and the relay answers the
+   * same, so that one phone makes one account.
    */
   static async signUp(o: ClientOptions, attestation: Attestation, inviteCode = ""): Promise<HostedClient> {
     const now = o.now?.() ?? Date.now();
-    const body = create(ListVersionBodySchema, {
-      number: 1n,
-      devices: [create(DeviceSchema, { role: DeviceRole.CLIENT, publicKey: o.signer.publicKey, addedAt: timestampFromMs(now) })],
-      signer: o.signer.publicKey,
-    });
-    const v1 = await sign("list", new Uint8Array(0), o.signer, body);
+    let v1: SignedObject | undefined;
+    const kept = await o.store.get<{ origin: string; v1: Uint8Array }>(S.signUp);
+    if (kept?.origin === o.origin) {
+      const obj = decode(kept.v1);
+      const body = await open("list", new Uint8Array(0), obj);
+      if (body && equal(body.signer, o.signer.publicKey)) v1 = obj;
+    }
+    if (!v1) {
+      const body = create(ListVersionBodySchema, {
+        number: 1n,
+        devices: [create(DeviceSchema, { role: DeviceRole.CLIENT, publicKey: o.signer.publicKey, addedAt: timestampFromMs(now) })],
+        signer: o.signer.publicKey,
+      });
+      v1 = await sign("list", new Uint8Array(0), o.signer, body);
+      await o.store.set(S.signUp, { origin: o.origin, v1: encode(v1) });
+    }
     const chain = await Chain.start(v1);
     const accountId = chain.accountId;
     await new Promise<void>((resolve, reject) => {
@@ -151,7 +218,7 @@ export class HostedClient {
         signer: o.signer,
         open: o.open,
         onState: (s) => {
-          if (s.kind === "ready") conn.send(create(FrameSchema, { body: { case: "signUp", value: { requestId: "sign-up", version: v1, attestation, inviteCode } } }));
+          if (s.kind === "ready") conn.send(create(FrameSchema, { body: { case: "signUp", value: { requestId: "sign-up", version: v1!, attestation, inviteCode } } }));
           if (s.kind === "unsupported") {
             conn.stop();
             reject(new Error(s.reason));
@@ -169,22 +236,53 @@ export class HostedClient {
       });
       conn.start();
     });
-    await o.store.set(S.account, { origin: o.origin, accountId });
     await o.store.set(S.chain, toBytes(chain.saved()));
     // The first label key is named by version 1.
     await o.store.set(S.labelKeys, [{ number: 1n, hash: chain.latest.hash, key: random(32) }] satisfies LabelKey[]);
+    // The account last: what open() looks for.
+    await o.store.set(S.account, { origin: o.origin, accountId });
+    await o.store.delete(S.signUp);
     return HostedClient.open(o) as Promise<HostedClient>;
   }
 
-  /** The account this store holds, or undefined. */
+  /** Whether this store holds a sign-up sent and never answered, to finish with signUp. */
+  static async signUpPending(store: Store): Promise<boolean> {
+    return (await store.get(S.signUp)) !== undefined && (await store.get(S.account)) === undefined;
+  }
+
+  /** A removal this store recorded and had not finished deleting; read before open(), which finishes it. */
+  static removal(store: Store): Promise<Removal | undefined> {
+    return store.get<Removal>(S.removed);
+  }
+
+  /** The account this store holds, or undefined; a removal recorded and not finished is finished first. */
   static async open(o: ClientOptions): Promise<HostedClient | undefined> {
+    if (await o.store.get(S.removed)) {
+      await HostedClient.forget(o.store);
+      return undefined;
+    }
     const a = await o.store.get<{ origin: string; accountId: Uint8Array }>(S.account);
     const saved = await o.store.get<SavedBytes>(S.chain);
     if (!a || !saved) return undefined;
     const c = new HostedClient(o, a.accountId, await Chain.load(fromBytes(saved), a.accountId));
     c.preKeys = (await o.store.get<PreKey[]>(S.preKeys)) ?? [];
     c.labelKeys = (await o.store.get<LabelKey[]>(S.labelKeys)) ?? [];
+    c.undecidedAt = c.chain.undecided()?.body.number;
     return c;
+  }
+
+  /**
+   * The second phase of a removal (docs/e2e.md, section 3, Removal): the
+   * secrets first, then the account, then everything else. The record of
+   * the removal goes last, so that a client stopped half-way finishes on
+   * its next open. The app deletes in its own order: push registration,
+   * the extension's snapshot, the keychain's items, the account, chats,
+   * drafts.
+   */
+  private static async forget(store: Store): Promise<void> {
+    for (const k of [S.preKeys, S.labelKeys, S.pending, S.chain, S.account]) await store.delete(k);
+    // Everything else, the record of the removal with it.
+    await store.clear();
   }
 
   /**
@@ -193,10 +291,10 @@ export class HostedClient {
    * from the relay checks.
    */
   static async joined(o: ClientOptions, accountId: Uint8Array, chain: Chain, labelKey: { ref: LabelKeyRef; key: Uint8Array } | undefined): Promise<HostedClient> {
-    await o.store.set(S.account, { origin: o.origin, accountId });
     await o.store.set(S.chain, toBytes(chain.saved()));
     const v = labelKey?.ref.version;
     await o.store.set(S.labelKeys, v && labelKey ? [{ number: v.number, hash: v.hash, key: labelKey.key }] : []);
+    await o.store.set(S.account, { origin: o.origin, accountId });
     return HostedClient.open(o) as Promise<HostedClient>;
   }
 
@@ -205,7 +303,29 @@ export class HostedClient {
   }
 
   stop(): void {
+    this.stopMaintaining();
     this.conn.stop();
+  }
+
+  /** The account's subscriptions as the relay said at login (docs/design.md, step 14, stage 5, decision D1). */
+  get subscriptions(): AccountSubscription[] {
+    const s = this.conn.current;
+    return s.kind === "ready" ? s.welcome.subscriptions : [];
+  }
+
+  /**
+   * Set while the list forks at a version this client adopted neither
+   * side of: it signs nothing and sends no request until it is joined
+   * again (docs/e2e.md, section 3, Forks).
+   */
+  get blocked(): string | undefined {
+    return this.undecidedAt === undefined ? undefined : `the list forks at version ${this.undecidedAt}, and this client took neither side: join it again from another client`;
+  }
+
+  /** Whether the account has room for one more device of `role` (D9): asked before a code is typed. */
+  room(role: DeviceRole): boolean {
+    const extra = create(DeviceSchema, { role });
+    return withinCaps([...this.chain.latest.body.devices, extra]) === undefined;
   }
 
   get publicKey(): Uint8Array {
@@ -271,15 +391,21 @@ export class HostedClient {
 
   private onState(s: HostedState): void {
     if (s.kind === "ready") {
+      this.startMaintaining();
       void this.serial(async () => {
+        // The relay's latest by number and hash: a version this client has
+        // not seen, or another of a number it has, is fetched and checked.
         const relayHas = s.welcome.listVersion;
-        if (relayHas && relayHas.number > this.chain.latest.body.number) await this.fetchVersions(this.chain.latest.body.number + 1n);
+        const mine = this.chain.latest.body.number;
+        if (relayHas && relayHas.number > mine) await this.fetchVersions(mine + 1n);
+        else if (relayHas && !this.chain.onBranch(relayHas.number, relayHas.hash)) await this.fetchVersions(relayHas.number);
         // A version signed before a restart, whose fate is unknown: sent
         // again as it was (docs/e2e.md, section 3, Adopting a version).
         const pending = await this.o.store.get<Uint8Array>(S.pending);
         if (pending) await this.publish(decode(pending)).catch((e) => this.log(`pending version: ${(e as Error).message}`));
       }).catch((e) => this.log(`after login: ${(e as Error).message}`));
     } else {
+      this.stopMaintaining();
       for (const [, resolve] of this.requests) resolve(create(FrameSchema, { body: { case: "error", value: { code: ErrorCode.SESSION_GONE, message: "lost the connection to the relay" } } }));
       this.requests.clear();
     }
@@ -341,8 +467,14 @@ export class HostedClient {
     const before = this.chain.latest;
     const change = await this.chain.add(versions, withdrawals);
     for (const r of change.refused) this.log(`refused: ${r.reason}`);
-    if (change.taken.length || change.dropped.length || withdrawals.length) await this.save();
-    for (const v of change.forks) this.emit({ type: "fork", number: v.body.number, signer: v.body.signer });
+    const undecided = this.chain.undecided();
+    // Forks too: what it was shown must outlive a restart.
+    if (change.taken.length || change.dropped.length || change.forks.length || withdrawals.length) await this.save();
+    for (const v of change.forks) if (!undecided) this.emit({ type: "fork", number: v.body.number, signer: v.body.signer });
+    if (undecided && this.undecidedAt === undefined) {
+      this.undecidedAt = undecided.body.number;
+      this.emit({ type: "undecided", number: undecided.body.number });
+    }
     if (before !== this.chain.latest) await this.listChanged(before);
     return change;
   }
@@ -352,10 +484,19 @@ export class HostedClient {
     const had = new Map(before.body.devices.map((d) => [hex(d.publicKey), d]));
     const has = new Map(now.body.devices.map((d) => [hex(d.publicKey), d]));
     if (!has.has(hex(this.publicKey))) {
-      // Removed by a version this client checked: it keeps nothing.
-      this.conn.stop();
-      await this.o.store.clear();
-      this.emit({ type: "removed-me", by: now.body.signer });
+      this.stop();
+      // Never on the branch it follows now: the version that added it was
+      // withdrawn, and its join failed. Nothing is deleted.
+      if (!this.chain.from(1n).some((v) => v.body.devices.some((d) => equal(d.publicKey, this.publicKey)))) {
+        this.emit({ type: "join-failed" });
+        return;
+      }
+      // Removed by a version this client checked: recorded, said, then
+      // everything deleted.
+      const removal: Removal = { by: now.body.signer, number: now.body.number, mutual: await this.wasRemoving(now.body.signer) };
+      await this.o.store.set(S.removed, removal);
+      this.emit({ type: "removed-me", ...removal });
+      await HostedClient.forget(this.o.store);
       return;
     }
     for (const [k, d] of has) if (!had.has(k)) this.emit({ type: "added", device: d, by: d.addedBy });
@@ -366,6 +507,24 @@ export class HostedClient {
     }
     this.emit({ type: "list", latest: now.body.number });
     this.sessions.onList();
+    await this.checkLabelKey();
+  }
+
+  /** The version on the branch that last added `key`. */
+  private addingVersion(key: Uint8Array): Version | undefined {
+    const branch = this.chain.from(1n);
+    const on = (v: Version) => v.body.devices.some((d) => equal(d.publicKey, key));
+    for (let i = branch.length - 1; i > 0; i--) if (on(branch[i]) && !on(branch[i - 1])) return branch[i];
+    return undefined;
+  }
+
+  /** Whether `signer` is a device this client's unanswered version removes. */
+  private async wasRemoving(signer: Uint8Array): Promise<boolean> {
+    if (equal(signer, this.publicKey)) return false;
+    const pending = await this.o.store.get<Uint8Array>(S.pending);
+    if (!pending) return false;
+    const body = await open("list", this.accountId, decode(pending));
+    return body !== null && !body.devices.some((d) => equal(d.publicKey, signer));
   }
 
   // --- changing the list ---
@@ -379,9 +538,12 @@ export class HostedClient {
   private change(change: (devices: Device[]) => Device[] | null): Promise<Version | null> {
     return this.serial(async () => {
       for (;;) {
+        if (this.blocked) throw new Error(this.blocked);
         const prev = this.chain.latest;
         const devices = change(prev.body.devices.map((d) => create(DeviceSchema, d)));
         if (!devices) return null;
+        const over = withinCaps(devices);
+        if (over) throw new Error(`the account would hold ${over}`);
         const withdrawn = [...prev.body.withdrawn];
         for (const w of this.chain.withdrawals()) {
           const body = await open("withdrawal", this.accountId, w);
@@ -434,15 +596,32 @@ export class HostedClient {
     throw new Error(`the relay refused the version: ${f.body.case === "error" ? f.body.value.message : f.body.case}`);
   }
 
-  /** Removes a device, and its read-only key with a client; then a new label key, which the removed one never had. */
+  /**
+   * Removes a device, and its read-only key with a client. Removing a
+   * client or a read-only key makes a new label key, which the removed one
+   * never had (checkLabelKey); removing a host does not, since a host never
+   * had the label key.
+   */
   async remove(key: Uint8Array): Promise<Version | null> {
-    if (equal(key, this.publicKey)) throw new Error("a client cannot remove the key it signs with");
-    const v = await this.change((ds) => {
+    if (equal(key, this.publicKey)) throw new Error("a client cannot remove the key it signs with: leave instead");
+    return this.change((ds) => {
       if (!ds.some((d) => equal(d.publicKey, key))) return null;
       return ds.filter((d) => !equal(d.publicKey, key) && !equal(d.owner, key));
     });
-    if (v) await this.serial(() => this.newLabelKey(v));
-    return v;
+  }
+
+  /**
+   * Leaves the account: a version without this client and its read-only
+   * key, after which it deletes what it keeps, as on any removal. The
+   * clients that stay make the new label key, not this one, which would
+   * know it (docs/e2e.md, section 3, Labels). The last client cannot leave:
+   * it deletes the account instead.
+   */
+  async leave(): Promise<Version | null> {
+    return this.change((ds) => {
+      if (!ds.some((d) => d.role === DeviceRole.CLIENT && !equal(d.publicKey, this.publicKey))) throw new Error("the last client cannot leave the account: delete it instead");
+      return ds.filter((d) => !equal(d.publicKey, this.publicKey) && !equal(d.owner, this.publicKey));
+    });
   }
 
   /** Registers this phone's read-only key (docs/e2e.md, section 5): a version of its own, no code needed. */
@@ -476,11 +655,17 @@ export class HostedClient {
     if (fresh.length) await this.wrapLabelKey(fresh);
   }
 
-  /** A pre-key while the newest is less than a week old; older private keys kept two days after the next is made. */
+  /**
+   * A pre-key the relay has taken, made new once the newest published one
+   * is a week old (docs/e2e.md, section 2). One not yet taken is sent
+   * again, the same key, until it is. An older private key is deleted two
+   * days after the next one's publication, whatever the hosts have done.
+   */
   private async ensurePreKey(): Promise<void> {
     const now = this.now();
-    const newest = this.preKeys.reduce<PreKey | undefined>((a, p) => (!a || p.madeAt > a.madeAt ? p : a), undefined);
-    if (!newest || now - newest.madeAt >= PRE_KEY_RENEW_MS) {
+    let newest = this.newestPreKey();
+    const at = newest && publishedAt(newest);
+    if (!newest || (at !== undefined && now - newest.madeAt >= PRE_KEY_RENEW_MS)) {
       const pair = await hpke.x25519Generate();
       const obj = await sign("pre-key", this.accountId, this.o.signer, {
         $typeName: "pirc.v1alpha2.PreKeyBody",
@@ -489,17 +674,58 @@ export class HostedClient {
         madeAt: timestampFromMs(now),
         expiresAt: timestampFromMs(now + PRE_KEY_LIFE_MS),
       });
-      this.preKeys.push({ pair, obj: encode(obj), madeAt: now, expiresAt: now + PRE_KEY_LIFE_MS });
-      this.preKeys = this.preKeys.filter((p) => p === this.preKeys[this.preKeys.length - 1] || now - p.madeAt < PRE_KEY_RENEW_MS + PRE_KEY_KEEP_MS);
+      newest = { pair, obj: encode(obj), madeAt: now, expiresAt: now + PRE_KEY_LIFE_MS, pending: true };
+      this.preKeys.push(newest);
       await this.o.store.set(S.preKeys, this.preKeys);
+    }
+    if (newest.pending) {
+      const obj = decode(newest.obj);
       const f = await this.request((requestId) => ({ case: "publishPreKey", value: { requestId, preKey: obj } }));
       if (f.body.case !== "done") throw new Error(`pre-key: ${f.body.case === "error" ? f.body.value.message : f.body.case}`);
+      delete newest.pending;
+      newest.publishedAt = this.now();
+      await this.o.store.set(S.preKeys, this.preKeys);
       // Its own wrap, so that the label key reaches this device's other
       // installs and survives here the store it was made in.
       await this.wrapLabelKey([fromBinary(PreKeyBodySchema, obj.body)]);
-    } else {
-      await this.o.store.set(S.preKeys, this.preKeys);
     }
+    await this.prunePreKeys();
+  }
+
+  private newestPreKey(): PreKey | undefined {
+    return this.preKeys.reduce<PreKey | undefined>((a, p) => (!a || p.madeAt > a.madeAt ? p : a), undefined);
+  }
+
+  /** Deletes each private key whose next one was published more than two days ago. */
+  private async prunePreKeys(): Promise<void> {
+    const now = this.now();
+    const byAge = [...this.preKeys].sort((a, b) => a.madeAt - b.madeAt);
+    const keep = byAge.filter((_, i) => {
+      const next = byAge[i + 1];
+      const nextAt = next && publishedAt(next);
+      return nextAt === undefined || now - nextAt < PRE_KEY_KEEP_MS;
+    });
+    if (keep.length === this.preKeys.length) return;
+    this.preKeys = keep;
+    await this.o.store.set(S.preKeys, this.preKeys);
+  }
+
+  /** What the client does on its own while connected: its pre-key, and a label key a removal still lacks. */
+  maintain(): Promise<void> {
+    return this.serial(async () => {
+      await this.ensurePreKey();
+      await this.checkLabelKey();
+    });
+  }
+
+  private startMaintaining(): void {
+    this.stopMaintaining();
+    this.maintainTimer = setInterval(() => void this.maintain().catch((e) => this.log(`maintenance: ${(e as Error).message}`)), MAINTAIN_MS);
+  }
+
+  private stopMaintaining(): void {
+    clearInterval(this.maintainTimer);
+    this.maintainTimer = undefined;
   }
 
   // --- labels ---
@@ -533,6 +759,44 @@ export class HostedClient {
     }
     if (taken.length) this.labelRecords = taken;
     await this.readLabels();
+    await this.checkLabelKey();
+  }
+
+  /**
+   * After a version that removes a client or a read-only key, the label key
+   * is made new and named by it (docs/e2e.md, section 3, Labels). The
+   * client that removed it makes it; when that client left by that very
+   * version, or has not made it within LABEL_REPAIR_MS, the first client
+   * that notices makes it. Two made at once are settled by hash.
+   */
+  private async checkLabelKey(): Promise<void> {
+    if (this.blocked) return;
+    const r = this.lastClientRemoval();
+    if (!r) return;
+    const n = r.body.number;
+    const has = this.labelKeys.some((k) => k.number >= n) || this.labelRecords.some((x) => (x.body.labelKey?.version?.number ?? 0n) >= n);
+    if (has) {
+      this.awaitingLabelKey.delete(n);
+      return;
+    }
+    const now = this.now();
+    const since = this.awaitingLabelKey.get(n) ?? now;
+    this.awaitingLabelKey.set(n, since);
+    const remover = r.body.signer;
+    if (equal(remover, this.publicKey) || !isClient(this.chain.latest.body, remover) || now - since >= LABEL_REPAIR_MS) {
+      await this.newLabelKey(r);
+      this.awaitingLabelKey.delete(n);
+    }
+  }
+
+  /** The latest version on the branch that removed a client or a read-only key. */
+  private lastClientRemoval(): Version | undefined {
+    const branch = this.chain.from(1n);
+    for (let i = branch.length - 1; i > 0; i--) {
+      const has = new Set(branch[i].body.devices.map((d) => hex(d.publicKey)));
+      if (branch[i - 1].body.devices.some((d) => d.role !== DeviceRole.HOST && !has.has(hex(d.publicKey)))) return branch[i];
+    }
+    return undefined;
   }
 
   /** The latest record: by its label key's version, then counter, then hash (docs/e2e.md, section 3). */
@@ -616,10 +880,12 @@ export class HostedClient {
 
   /** After a removal: a new label key, named by that version, its record at once, and a wrap for every current pre-key. */
   private async newLabelKey(v: Version): Promise<void> {
+    this.log(`a new label key, for version ${v.body.number}`);
     this.labelKeys.push({ number: v.body.number, hash: v.hash, key: random(32) });
     await this.o.store.set(S.labelKeys, this.labelKeys);
     await this.writeLabels(() => {});
-    const mine = this.preKeys.length ? [fromBinary(PreKeyBodySchema, decode(this.preKeys[this.preKeys.length - 1].obj).body)] : [];
+    const newest = this.newestPreKey();
+    const mine = newest && !newest.pending ? [fromBinary(PreKeyBodySchema, decode(newest.obj).body)] : [];
     await this.wrapLabelKey([...mine, ...this.others.values()]);
   }
 
@@ -651,8 +917,15 @@ export class HostedClient {
    * with it through the relay, then `decide` asks the person, by role, in
    * words, before the name; on yes, a version with it, and the approval.
    * Every failure is reported: it may be the relay guessing the code.
+   *
+   * A device on the list already, with the same key and role, is one whose
+   * join was cut off after its version was taken (docs/design.md, step 14,
+   * stage 5, decision D7): it is approved again, with the version that
+   * added it and that version's signer as the approver, and no new
+   * version. `decide` is told so.
    */
-  async join(typed: string, decide: (d: JoiningDevice) => Promise<boolean>): Promise<JoinOutcome> {
+  async join(typed: string, decide: (d: JoiningDevice, again: boolean) => Promise<boolean>): Promise<JoinOutcome> {
+    if (this.blocked) throw new JoinFailed(this.blocked);
     const code = readCode(typed);
     if (!code) throw new JoinFailed("a code is nine characters, such as K7QM-2XRP9");
     const paired = await this.request((requestId) => ({ case: "joinLookup", value: { requestId, lookup: code.lookup } }));
@@ -664,32 +937,46 @@ export class HostedClient {
       const { join, answer } = await ClientJoin.answer(this.conn.origin, code, await this.nextStep(joinId, 60_000));
       send(answer);
       const device = await join.onConfirm(await this.nextStep(joinId, 60_000));
-      if (!(await decide(device))) {
+      const refuse = async (why: string) => {
+        send(await join.result({ case: "refused", value: {} }));
+        throw new JoinFailed(why);
+      };
+      const listed = this.chain.latest.body.devices.find((d) => equal(d.publicKey, device.publicKey));
+      if (listed && listed.role !== device.role) await refuse("that key is on the list as another kind of device");
+      if (!listed && !this.room(device.role)) await refuse(device.role === DeviceRole.HOST ? "this account has 256 computers, the most it can have" : "this account has 32 phones and browsers, the most it can have");
+      if (!(await decide(device, listed !== undefined))) {
         send(await join.result({ case: "refused", value: {} }));
         return { refused: device };
       }
-      const v = await this.change((ds) => {
-        if (ds.some((d) => equal(d.publicKey, device.publicKey))) return null;
-        return [...ds, create(DeviceSchema, { role: device.role, publicKey: device.publicKey, addedBy: this.publicKey, addedAt: timestampFromMs(this.now()) })];
-      });
-      if (!v) throw new JoinFailed("that device is on the list already");
-      await this.serial(() => this.writeLabels((n) => n.set(hex(device.publicKey), device.name)));
+      let v: Version | null;
+      if (listed) {
+        v = this.addingVersion(device.publicKey) ?? null;
+        if (!v) throw new JoinFailed("the version that added that device is not on this client's list");
+      } else {
+        v = await this.change((ds) => {
+          if (ds.some((d) => equal(d.publicKey, device.publicKey))) return null;
+          return [...ds, create(DeviceSchema, { role: device.role, publicKey: device.publicKey, addedBy: this.publicKey, addedAt: timestampFromMs(this.now()) })];
+        });
+        if (!v) throw new JoinFailed("that device is on the list already");
+      }
+      if (this.names.get(hex(device.publicKey)) !== device.name) await this.serial(() => this.writeLabels((n) => n.set(hex(device.publicKey), device.name)));
       const k = this.currentLabelKey();
       const latest = await this.latestRecord();
+      const approver = v.body.signer;
       send(await join.result({
         case: "approval",
         value: {
           $typeName: "pirc.v1alpha2.JoinApproval",
           accountId: this.accountId,
           version: v.object,
-          approver: this.publicKey,
-          approverName: this.names.get(hex(this.publicKey)) ?? this.o.name,
+          approver,
+          approverName: this.names.get(hex(approver)) ?? (equal(approver, this.publicKey) ? this.o.name : ""),
           ...(device.role === DeviceRole.CLIENT && k
             ? { labelKeyRef: create(LabelKeyRefSchema, { version: create(VersionRefSchema, { number: k.number, hash: k.hash }) }), labelKey: k.key, labelCounter: latest?.body.counter ?? 0n }
             : { labelKey: new Uint8Array(0), labelCounter: 0n }),
         },
       }));
-      return { joined: device };
+      return { joined: device, again: listed !== undefined };
     } finally {
       this.joins.delete(joinId);
       this.send2({ case: "joinEnded", value: { joinId } });

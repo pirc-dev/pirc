@@ -234,6 +234,17 @@ list now carries. So is a version with no client in it: the last client
 cannot remove itself, as today a client cannot remove the key it asks
 with (`design.md`, section 5.3). The relay and every device refuse both.
 
+**Caps.** **Decided** (2026-11-19): a version holds at most 256 hosts and
+32 clients, and at most 32 read-only keys; the relay and
+every device refuse one with more. The caps follow the costs: each
+client and read-only key gets a wrap in every host's bundle, and its
+weekly pre-key a new bundle from every process, so what clients cost
+grows with the square of their number; a host costs one entry on the
+list. At 32 phones a bundle is about 13 KB, and a process uploads under
+1 MB of them a week. A client says so before a code is typed, by role
+("This account has 32 phones and browsers, the most it can have. Remove
+one first."), and refuses at approval a device it has no room for.
+
 **Every client is a shell on every host.** **Decided**, by design: there
 are no read-only hosts and no permissions per client. A client on the
 list can do what the person can do at the terminal of every host in the
@@ -295,9 +306,14 @@ the names. Names are in a label record, outside the list: each device's
 label, encrypted under a label key, with the label key's ID, a counter and
 the list version it belongs to, signed by a client. The label key is one
 symmetric key shared by the clients and read-only keys, made new only when
-a client or read-only key is removed, by the client that removes it, and
+a client or read-only key is removed (never a host, which never has it),
+by the client that removes it, and
 wrapped by that client for each current pre-key, each wrap signed by it,
-so that the relay cannot hand a device a label key of its own. A label key
+so that the relay cannot hand a device a label key of its own. A client
+that leaves by itself does not make it, since it would know it: the first
+client that stays and takes that version makes it (**Decided**,
+2026-11-19). The same client makes it after a removal whose remover has
+not within ten minutes, which repairs one that stopped half-way. A label key
 is named by the list version that made it; the client that makes one
 writes at once a label record under it, with the current names. Records
 and wraps are taken only from a signer that is a client on the list as
@@ -371,8 +387,13 @@ device keeps working on a host, unknown to it, has no bound the relay
 cannot stretch; the clients show that it is not yet confirmed.
 
 **Removal.** A device acts on its own removal only when a version it has
-checked no longer has it. Then it deletes what it keeps: on a phone, its
-keys, the chats it kept and its drafts; on a host, its anchor. Nothing the
+checked no longer has it. Then it records the removal, says so, and only
+then deletes what it keeps, the secrets first and the record last, so
+that a device stopped half-way finishes when it starts again: on a phone,
+its push registration, the extension's snapshot, its keys, the account,
+the chats it kept and its drafts; on a host, its anchor. A client leaves
+the same way, by a version without itself and its read-only key, unless
+it is the last client. Nothing the
 relay sends without such a version removes anything: the WebSocket close
 with "key revoked" (1008), which today deletes a phone's keys and stops a
 host for good, means only that the relay refuses the key. The device shows
@@ -525,7 +546,9 @@ even with the relay's help.
   sessions, so a client sees gaps (the sessions it is not attached to,
   others' answers), but within a session, in order. The one exception is
   the stored announcement, which may come again with the same counter and
-  the same bytes. On the first look at a session the client has no
+  the same bytes: the one last taken, even after frames with higher
+  counters, as the relay replays it at login; any other under that
+  counter is refused. On the first look at a session the client has no
   counter for, it takes the stored announcement it is given: that is the
   rollback of section 7, at most as old as the bundle's 26 hours, and the
   client shows when the announcement was made.
@@ -732,6 +755,14 @@ as a new version of the list; no code is needed.
 **A host already in an account.** `/pirc join` replaces its anchor (section
 3), only when typed at its terminal.
 
+**A join cut off after its version was taken** (**Decided**, 2026-11-19):
+a device killed between the client's version and its approval is on the
+list without knowing the account. It keeps its key and shows a new code.
+The client that types it finds the key listed already, with the same
+role, says so, and sends the approval again: the version that added the
+device, with that version's signer as the approver, and no new version.
+It grants nothing new; the key is on the list, signed, already.
+
 **Without a camera, and with one.** Typing is the way that always works.
 A QR code that the new device draws, carrying the same exchange with a
 128-bit secret in place of the five characters, needs no PAKE and no
@@ -766,9 +797,9 @@ let in one the list does not have, and cannot read what it routes.
   trial, and the browsers on it are included. Accounts with no phone pay
   later, by Stripe or a merchant of record.
 - Against abuse: the hosted relay has a domain of its own, not
-  `pirc.dev`; there are caps per account and per address, join lookups
-  among them; sign-ups can be
-  closed, to invite codes only; an account can be deleted; and abuse
+  `pirc.dev`; there are caps per account (the list's, section 3) and
+  per address, join lookups among them; sign-ups can be closed, to
+  invite codes only; an account can be deleted; and abuse
   reports go to an `abuse@` address.
 
 **Attestation only stops abuse.** It tells the relay that a real app on a

@@ -29,7 +29,18 @@ class Refused implements Exception {
 }
 
 const _roles = {DeviceRole.DEVICE_ROLE_HOST, DeviceRole.DEVICE_ROLE_CLIENT, DeviceRole.DEVICE_ROLE_READ_ONLY};
-const _maxDevices = 256;
+// An account's caps (docs/e2e.md, section 3): 256 hosts, and 32 clients,
+// each with at most its read-only key.
+const maxHosts = 256;
+const maxClients = 32;
+
+// Why devices hold more of a role than the caps allow; null when they do not.
+String? overCaps(Iterable<Device> devices) {
+  int n(DeviceRole r) => devices.where((d) => d.role == r).length;
+  if (n(DeviceRole.DEVICE_ROLE_HOST) > maxHosts) return 'more than 256 hosts';
+  if (n(DeviceRole.DEVICE_ROLE_CLIENT) > maxClients || n(DeviceRole.DEVICE_ROLE_READ_ONLY) > maxClients) return 'more than 32 clients';
+  return null;
+}
 
 // Milliseconds since 1970, or -1 when the time is not there.
 BigInt _time(bool present, Timestamp t) =>
@@ -49,7 +60,9 @@ bool isClient(ListVersionBody v, List<int> key) => device(v, key)?.role == Devic
 
 // What every version must be on its own.
 void _checkShape(ListVersionBody v) {
-  if (v.devices.isEmpty || v.devices.length > _maxDevices) throw Refused('wrong number of devices');
+  if (v.devices.isEmpty || v.devices.length > maxHosts + 2 * maxClients) throw Refused('wrong number of devices');
+  final over = overCaps(v.devices);
+  if (over != null) throw Refused(over);
   for (var i = 0; i < v.devices.length; i++) {
     final d = v.devices[i];
     if (d.publicKey.length != 32) throw Refused('a device key is not 32 bytes');

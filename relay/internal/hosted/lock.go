@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
@@ -31,8 +32,45 @@ func (s *Server) admitLockedAccountLocked(c *conn, a *account) {
 		Role:            pb.DeviceRole_DEVICE_ROLE_CLIENT,
 		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
 		Locked:          true,
+		Subscriptions:   s.subscriptionsFor(a, pb.DeviceRole_DEVICE_ROLE_CLIENT),
 	}}})
 	s.log.Info("logged in to a locked account", "account", shortKey(a.id), "key", shortKey(c.key))
+}
+
+// subscriptionsFor are the account's subscriptions for Welcome: to a
+// client only (docs/design.md, step 14, stage 5, decision D1). One the
+// store cannot be read for is left out, and said in the log.
+func (s *Server) subscriptionsFor(a *account, role pb.DeviceRole) []*pb.AccountSubscription {
+	if role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
+		return nil
+	}
+	kept, err := s.store.Subscriptions(a.id)
+	if err != nil {
+		s.log.Error("cannot read an account's subscriptions", "account", shortKey(a.id), "err", err)
+		return nil
+	}
+	out := make([]*pb.AccountSubscription, 0, len(kept))
+	for _, k := range kept {
+		o := &pb.AccountSubscription{Store: subscriptionStore(k.Sub.Kind), Renews: k.Sub.Renews && !k.Lapsed, Trial: k.Sub.Trial, Lapsed: k.Lapsed}
+		if !k.Sub.Expires.IsZero() {
+			o.Ends = timestamppb.New(k.Sub.Expires)
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+// subscriptionStore names the store of a subscription's kind.
+func subscriptionStore(kind string) pb.SubscriptionStore {
+	switch kind {
+	case "app-store":
+		return pb.SubscriptionStore_SUBSCRIPTION_STORE_APP_STORE
+	case "google-play":
+		return pb.SubscriptionStore_SUBSCRIPTION_STORE_GOOGLE_PLAY
+	case "test":
+		return pb.SubscriptionStore_SUBSCRIPTION_STORE_TEST
+	}
+	return pb.SubscriptionStore_SUBSCRIPTION_STORE_UNSPECIFIED
 }
 
 // renew asks the store of the subscription r proves and keeps it; on a

@@ -22,7 +22,14 @@ type Version struct {
 	Object *pb.SignedObject
 }
 
-const maxDevices = 256
+// An account's caps (docs/e2e.md, section 3): 256 hosts, and 32 clients,
+// each with at most its read-only key. A client costs every host a wrap in
+// each bundle, and its pre-key's renewal a new bundle, so clients are
+// capped far below hosts, which cost one entry on the list.
+const (
+	MaxHosts   = 256
+	MaxClients = 32
+)
 
 // PreKeyMaxMillis is the longest a pre-key may live: 14 days.
 const PreKeyMaxMillis = 14 * 24 * 3600 * 1000
@@ -63,8 +70,25 @@ func IsClient(v *pb.ListVersionBody, key []byte) bool {
 // checkShape is what every version must be on its own.
 func checkShape(v *pb.ListVersionBody) error {
 	devices := v.GetDevices()
-	if len(devices) == 0 || len(devices) > maxDevices {
+	if len(devices) == 0 || len(devices) > MaxHosts+2*MaxClients {
 		return refuse("wrong number of devices")
+	}
+	hosts, clients, readOnly := 0, 0, 0
+	for _, d := range devices {
+		switch d.GetRole() {
+		case pb.DeviceRole_DEVICE_ROLE_HOST:
+			hosts++
+		case pb.DeviceRole_DEVICE_ROLE_CLIENT:
+			clients++
+		case pb.DeviceRole_DEVICE_ROLE_READ_ONLY:
+			readOnly++
+		}
+	}
+	if hosts > MaxHosts {
+		return refuse("more than 256 hosts")
+	}
+	if clients > MaxClients || readOnly > MaxClients {
+		return refuse("more than 32 clients")
 	}
 	hasClient := false
 	for i, d := range devices {

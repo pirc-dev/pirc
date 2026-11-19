@@ -135,6 +135,35 @@ message Welcome {
   // days after it locked. A lock coming while devices are connected
   // closes them with 1008, which says only that, as ever.
   bool locked = 5;
+  // To a client: the account's subscriptions, as the stores last said, so
+  // that every client shows who pays and until when, and offers a
+  // purchase only when none will carry the account on (docs/design.md,
+  // step 14, stage 5, decision D1). Empty to hosts and read-only keys.
+  repeated AccountSubscription subscriptions = 6;
+}
+
+// Which store a subscription is through.
+enum SubscriptionStore {
+  SUBSCRIPTION_STORE_UNSPECIFIED = 0;
+  SUBSCRIPTION_STORE_APP_STORE = 1;
+  SUBSCRIPTION_STORE_GOOGLE_PLAY = 2;
+  // A test relay's, which takes any subscription.
+  SUBSCRIPTION_STORE_TEST = 3;
+}
+
+// One of an account's subscriptions, as its store last said. It names no
+// device: which phone bought it is the store's to know, not the relay's.
+message AccountSubscription {
+  SubscriptionStore store = 1;
+  // Paid for until then, the store's grace included; unset when the
+  // store names no end.
+  google.protobuf.Timestamp ends = 2;
+  // The store will renew it at its end.
+  bool renews = 3;
+  // The store's free trial.
+  bool trial = 4;
+  // The store no longer has it live.
+  bool lapsed = 5;
 }
 
 // A frame's clear part: which keys, and where in their stream. Announced

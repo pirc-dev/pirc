@@ -1,0 +1,134 @@
+{
+  "about": "The stored announcement comes again with its counter and is taken, as the same bytes; another announcement, validly signed and sealed, under the same counter is dropped, so a relay holding the keys of a removed reader cannot swap it in.",
+  "fixture": {
+    "me": "phone",
+    "list": [
+      "v1",
+      "v2",
+      "v3"
+    ],
+    "labels": {
+      "fbf052085143184c6e169353fcc6b4b16369148b0b17a9f389bcd0e7459c4c61": "laptop"
+    },
+    "ephemerals": []
+  },
+  "steps": [
+    {
+      "in": {
+        "sessionList": {
+          "sessions": [
+            {
+              "session": {
+                "hostKey": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE=",
+                "sessionId": "019a8f2e-7c41-7d2b-9b6e-3f5c2a1d0e4f",
+                "instanceId": "4f7a9c2e"
+              },
+              "keys": {
+                "keyId": "zDM2NtBVr643tmvZ0rGWSg==",
+                "counter": "0",
+                "listVersion": "3"
+              },
+              "payload": "5U1YHXb98sH81i5dPDlyQfDmTmrLjsi6NCnjeaCCnYl+pt4FgPRVHoE76WJir1kWMKlPRvjZc18r9MxC9bUY8Ba5qDiFYT4ECZ2M6NhOSoBYfvcV8cDpGKnDjFFS+duBSP4e1zVYMQ6cyej175uUodu4ZxA1bUu+U2PA03RT1hYimBUjAsF0SNAoF6uXJ07PqAImHnx4oYgIGnP40EkAwJhPj+F71L5IevTYVNT7geB7EztrBBqdz9Ii45j2Itj0DOdRDi19LXHC2doqorJ66pSYBXQctbx8MjZM7lqZD+8zanWYe4oMaRtZ6ncypoDhQNV+pWnho/+EL/8PWYfP1o7/h1H6A40B9W3cgzaMPGPl760J95dB13SxmwLLN2CCek9KcFAYTmSsDN8=",
+              "announcedAt": "2026-11-24T12:00:00.000Z",
+              "bundles": [
+                {
+                  "body": "CiD78FIIUUMYTG4Wk1P8xrSxY2kUiwsXqfOJvNDnRZxMYRIINGY3YTljMmUaEMwzNjbQVa+uN7Zr2dKxlkoiBgiw3JXYBiokCAMSIDzpEsd14/ZIapR+gzrp1HDrIb5Xd8dqGkzAKROb2QFhMiAr7QmvA5AQvvCg9Zxl6nZBW7wrflSRdFHwJUIKYBrhLTroAQogG5b8beP1LqQjp+py132195YdPBziSlg/SLQhwuJNKPYSID9teBAENVuAgutrbF66MuAVRTN/czo1fxuBUhpw5JQKGlD8gq87BF0PQYq5zQZSnF6O6uz6Nbja31qdhN/1MnXKMQ7fvr00yyYeJQvZI1IeAXVuMUtRld9N7SCGBv+RdvVqJVqZ0EMG4tAWJey+Is13ZiJQ4m1pU9sZggM3/YAr2ehqPyy920MpZn77qkswU2wiNzkLX4x3AfqD9z1Jkw+YtM+eIkrzmFWo6PteZg3wi51On+fRZK1VF5Sly9PcxbMNc/M6lgEKIGkVvH7MyaUuJtrStEsAG2g50CNikJwAqc0sB++knpU3EiCIk/1HZlzmUi76JpN+dBWm2vhcWtaQBsAxgaOY1ayHbxpQMZy78ZagGCLfOFKrDU+K3G5AImrb9InLZ4TJO9uuDgXQdd/Q6pT6fMM0obUqQ0Rbgos9jZXPQk3E000F3ukuOkHjAFp3M9LXONaSBt3nE2c66AEKIIMAv3p6pM21IpzIlJ0npvlMg+TGiZszhOMvLWtuWQ7vEiC8Ik+CkkUeL+cjwog/BWzwo/vhqB/NZm8R+KCEgwu4LRpQ9ZWWVuB+no0p8EPftZwsNXt/5hguXn479YzDxltw2VZTynft6390YmsQgbrD1IxGu6sDpvabFVk930ntPgJSGoR4DanF/+FkOGAGLRNGX0UiUP894QPfaAEO/DGzSZCI55dSu8gz9tpAyFHTouq6a+E7RABvoR4l7GMKc7TDtdoIBkPPCV6glzoZ9tfzS5V8aD6iVh/25f8jwcjMrFzG6/vk",
+                  "signature": "o1/i9gpWmIvC+RnhgcfjmtDlBf7CclrNuZzW8/clmWQTVCsyvWe13UIdOFMH/6Q51XUozDIBFkgjwfwp3yqUBg==",
+                  "signer": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE="
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "in": {
+        "sessionUpdated": {
+          "entry": {
+            "session": {
+              "hostKey": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE=",
+              "sessionId": "019a8f2e-7c41-7d2b-9b6e-3f5c2a1d0e4f",
+              "instanceId": "4f7a9c2e"
+            },
+            "keys": {
+              "keyId": "zDM2NtBVr643tmvZ0rGWSg==",
+              "counter": "0",
+              "listVersion": "3"
+            },
+            "payload": "5U1YHXb98sH81i5dPDlyQfDmTmrLjsi6NCnjeaCCnYl+pt4FgPRVHoE76WJir1kWMKlPRvjZc18r9MxC9bUY8Ba5qDiFYT4ECZ2M6NhOSoBYfvcV8cDpGKnDjFFS+duBSP4e1zVYMQ6cyej175uUodu4ZxA1bUu+U2PA03RT1hYimBUjAsF0SNAoF6uXJ07PqAImHnx4oYgIGnP40EkAwJhPj+F71L5IevTYVNT7geB7EztrBBqdz9Ii45j2Itj0DOdRDi19LXHC2doqorJ66pSYBXQctbx8MjZM7lqZD+8zanWYe4oMaRtZ6ncypoDhQNV+pWnho/+EL/8PWYfP1o7/h1H6A40B9W3cgzaMPGPl760J95dB13SxmwLLN2CCek9KcFAYTmSsDN8=",
+            "announcedAt": "2026-11-24T12:00:00.000Z",
+            "bundles": [
+              {
+                "body": "CiD78FIIUUMYTG4Wk1P8xrSxY2kUiwsXqfOJvNDnRZxMYRIINGY3YTljMmUaEMwzNjbQVa+uN7Zr2dKxlkoiBgiw3JXYBiokCAMSIDzpEsd14/ZIapR+gzrp1HDrIb5Xd8dqGkzAKROb2QFhMiAr7QmvA5AQvvCg9Zxl6nZBW7wrflSRdFHwJUIKYBrhLTroAQogG5b8beP1LqQjp+py132195YdPBziSlg/SLQhwuJNKPYSID9teBAENVuAgutrbF66MuAVRTN/czo1fxuBUhpw5JQKGlD8gq87BF0PQYq5zQZSnF6O6uz6Nbja31qdhN/1MnXKMQ7fvr00yyYeJQvZI1IeAXVuMUtRld9N7SCGBv+RdvVqJVqZ0EMG4tAWJey+Is13ZiJQ4m1pU9sZggM3/YAr2ehqPyy920MpZn77qkswU2wiNzkLX4x3AfqD9z1Jkw+YtM+eIkrzmFWo6PteZg3wi51On+fRZK1VF5Sly9PcxbMNc/M6lgEKIGkVvH7MyaUuJtrStEsAG2g50CNikJwAqc0sB++knpU3EiCIk/1HZlzmUi76JpN+dBWm2vhcWtaQBsAxgaOY1ayHbxpQMZy78ZagGCLfOFKrDU+K3G5AImrb9InLZ4TJO9uuDgXQdd/Q6pT6fMM0obUqQ0Rbgos9jZXPQk3E000F3ukuOkHjAFp3M9LXONaSBt3nE2c66AEKIIMAv3p6pM21IpzIlJ0npvlMg+TGiZszhOMvLWtuWQ7vEiC8Ik+CkkUeL+cjwog/BWzwo/vhqB/NZm8R+KCEgwu4LRpQ9ZWWVuB+no0p8EPftZwsNXt/5hguXn479YzDxltw2VZTynft6390YmsQgbrD1IxGu6sDpvabFVk930ntPgJSGoR4DanF/+FkOGAGLRNGX0UiUP894QPfaAEO/DGzSZCI55dSu8gz9tpAyFHTouq6a+E7RABvoR4l7GMKc7TDtdoIBkPPCV6glzoZ9tfzS5V8aD6iVh/25f8jwcjMrFzG6/vk",
+                "signature": "o1/i9gpWmIvC+RnhgcfjmtDlBf7CclrNuZzW8/clmWQTVCsyvWe13UIdOFMH/6Q51XUozDIBFkgjwfwp3yqUBg==",
+                "signer": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE="
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "in": {
+        "sessionUpdated": {
+          "entry": {
+            "session": {
+              "hostKey": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE=",
+              "sessionId": "019a8f2e-7c41-7d2b-9b6e-3f5c2a1d0e4f",
+              "instanceId": "4f7a9c2e"
+            },
+            "keys": {
+              "keyId": "zDM2NtBVr643tmvZ0rGWSg==",
+              "counter": "0",
+              "listVersion": "3"
+            },
+            "payload": "5UhYHXb98sH81i5dPDlyQfDmTmrLjsi6NCnjeaCCnYl+pt4FgPRVHoE76WJir1kWMKlPRvjZc18r9MxC9bUY8Ba5qDiFYT4ECZ2M6NhOSoBYfvcV8cDpGKnDjFFS+duBSP4e1zVYMQ6cyej175uUodu4ZxA1bUu+U2PA03RT1hYimBUjAsF0SNAoF6uXJ07PqAImHnx4oYgNGnO3wU8G3dx5jrJb2KJVUvXYes/7jfB4FTByczQ5LUOMZu5SqoTpPZTkl+x3odO87fkeN2SGCYAxMaSA6wy8os7zzCPdeS4YinGHg+Mv3nYToZ+TBuzSNAVt9MKGfVlwxY38+Jbfy6PxWGwQVmpMULB5a1SPHpt7+o5nDtvq8zACDC61f81PzJcLoXvG6ME=",
+            "announcedAt": "2026-11-24T12:00:00.000Z",
+            "bundles": [
+              {
+                "body": "CiD78FIIUUMYTG4Wk1P8xrSxY2kUiwsXqfOJvNDnRZxMYRIINGY3YTljMmUaEMwzNjbQVa+uN7Zr2dKxlkoiBgiw3JXYBiokCAMSIDzpEsd14/ZIapR+gzrp1HDrIb5Xd8dqGkzAKROb2QFhMiAr7QmvA5AQvvCg9Zxl6nZBW7wrflSRdFHwJUIKYBrhLTroAQogG5b8beP1LqQjp+py132195YdPBziSlg/SLQhwuJNKPYSID9teBAENVuAgutrbF66MuAVRTN/czo1fxuBUhpw5JQKGlD8gq87BF0PQYq5zQZSnF6O6uz6Nbja31qdhN/1MnXKMQ7fvr00yyYeJQvZI1IeAXVuMUtRld9N7SCGBv+RdvVqJVqZ0EMG4tAWJey+Is13ZiJQ4m1pU9sZggM3/YAr2ehqPyy920MpZn77qkswU2wiNzkLX4x3AfqD9z1Jkw+YtM+eIkrzmFWo6PteZg3wi51On+fRZK1VF5Sly9PcxbMNc/M6lgEKIGkVvH7MyaUuJtrStEsAG2g50CNikJwAqc0sB++knpU3EiCIk/1HZlzmUi76JpN+dBWm2vhcWtaQBsAxgaOY1ayHbxpQMZy78ZagGCLfOFKrDU+K3G5AImrb9InLZ4TJO9uuDgXQdd/Q6pT6fMM0obUqQ0Rbgos9jZXPQk3E000F3ukuOkHjAFp3M9LXONaSBt3nE2c66AEKIIMAv3p6pM21IpzIlJ0npvlMg+TGiZszhOMvLWtuWQ7vEiC8Ik+CkkUeL+cjwog/BWzwo/vhqB/NZm8R+KCEgwu4LRpQ9ZWWVuB+no0p8EPftZwsNXt/5hguXn479YzDxltw2VZTynft6390YmsQgbrD1IxGu6sDpvabFVk930ntPgJSGoR4DanF/+FkOGAGLRNGX0UiUP894QPfaAEO/DGzSZCI55dSu8gz9tpAyFHTouq6a+E7RABvoR4l7GMKc7TDtdoIBkPPCV6glzoZ9tfzS5V8aD6iVh/25f8jwcjMrFzG6/vk",
+                "signature": "o1/i9gpWmIvC+RnhgcfjmtDlBf7CclrNuZzW8/clmWQTVCsyvWe13UIdOFMH/6Q51XUozDIBFkgjwfwp3yqUBg==",
+                "signer": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE="
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "out": [
+        {
+          "sessionList": {
+            "sessions": [
+              {
+                "session": {
+                  "hostKey": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE=",
+                  "sessionId": "019a8f2e-7c41-7d2b-9b6e-3f5c2a1d0e4f",
+                  "instanceId": "4f7a9c2e"
+                },
+                "hostLabel": "laptop",
+                "payload": "YW4gZW5jb2RlZCBTZXNzaW9uQW5ub3VuY2VtZW50",
+                "announcedAt": "2026-11-24T11:59:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "sessionUpdated": {
+            "entry": {
+              "session": {
+                "hostKey": "+/BSCFFDGExuFpNT/Ma0sWNpFIsLF6nzibzQ50WcTGE=",
+                "sessionId": "019a8f2e-7c41-7d2b-9b6e-3f5c2a1d0e4f",
+                "instanceId": "4f7a9c2e"
+              },
+              "hostLabel": "laptop",
+              "payload": "YW4gZW5jb2RlZCBTZXNzaW9uQW5ub3VuY2VtZW50",
+              "announcedAt": "2026-11-24T11:59:00Z"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
