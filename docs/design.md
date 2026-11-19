@@ -2068,7 +2068,11 @@ Each step ends with something that can be seen working.
       owner's words: "PiRC uses the camera to read a join code, and to take
       a photo you choose to send in a message." Drafts (2026-11-04), as
       the web app's: a file per chat in the private folder, for a week, the
-      newest hundred.
+      newest hundred. Capitals (2026-11-19, the owner's choice): the
+      composer and a question's note start each sentence with a capital,
+      as a phone's own message boxes and the web app's do; Flutter's
+      fields default to none. A question's typed answer does not: it is
+      often a name or a path.
 
     **Still to do before the app starts** (not decisions):
     - **Reaching the relay.** A self-hosted relay on a private network

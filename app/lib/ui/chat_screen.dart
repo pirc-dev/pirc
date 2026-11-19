@@ -1365,6 +1365,9 @@ class _ComposerState extends State<_Composer> {
                       style: look.text(size: 16, height: 1.35, spacing: 0),
                       minLines: 1,
                       maxLines: 6,
+                      // As a phone's own message boxes: each sentence starts
+                      // with a capital.
+                      textCapitalization: TextCapitalization.sentences,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(19), border: Border.all(color: look.rule)),
                     ),

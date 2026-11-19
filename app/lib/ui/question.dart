@@ -94,11 +94,13 @@ class _QuestionDockState extends State<QuestionDock> {
           ),
         );
 
-    Widget field(TextEditingController c, String placeholder, {ValueChanged<String>? submit}) => CupertinoTextField(
+    Widget field(TextEditingController c, String placeholder, {ValueChanged<String>? submit, bool prose = false}) => CupertinoTextField(
           controller: c,
           placeholder: placeholder,
           minLines: 1,
           maxLines: 4,
+          // A note is a sentence; an answer is often a name or a path.
+          textCapitalization: prose ? TextCapitalization.sentences : TextCapitalization.none,
           textInputAction: submit != null ? TextInputAction.send : TextInputAction.newline,
           onSubmitted: submit,
           style: look.text(size: 15),
@@ -191,7 +193,7 @@ class _QuestionDockState extends State<QuestionDock> {
               button(o, () => _answer(option: i), lead: SizedBox(width: 22, child: Text('${i + 1}', style: look.text(size: 15.5, color: look.ink3, spacing: 0).copyWith(fontFeatures: const [FontFeature.tabularFigures()])))),
           ]),
         if (answerable && q.kind != 'input') ...[
-          field(_note, 'Add a note for pi'),
+          field(_note, 'Add a note for pi', prose: true),
           if (_note.text.isNotEmpty) Text('pi gets the note with your answer.', style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
         ],
         if (answerable && q.kind == 'confirm')

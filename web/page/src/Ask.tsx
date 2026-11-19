@@ -107,6 +107,8 @@ export function Ask(p: { q: QuestionView; more: number; session: SessionView; ru
             onChange={(e) => setText(e.target.value)}
             aria-label={first || "Answer"}
             placeholder={q.placeholder}
+            // Often a name or a path, as the app's: no capital to undo.
+            autoCapitalize="off"
             enterKeyHint="send"
             className={field}
           />
