@@ -434,21 +434,27 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 		s.unloadLocked(a)
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
 	}
+	if locked && d.GetRole() != pb.DeviceRole_DEVICE_ROLE_CLIENT {
+		s.unloadLocked(a)
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errLocked)
+	}
+	// What a client is told it pays with: unread, it is not told none.
+	subs, err := s.subscriptionsFor(a, d.GetRole())
+	if err != nil {
+		s.unloadLocked(a)
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+	}
 	if locked {
-		if d.GetRole() != pb.DeviceRole_DEVICE_ROLE_CLIENT {
-			s.unloadLocked(a)
-			return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errLocked)
-		}
-		s.admitLockedAccountLocked(c, a)
+		s.admitLockedAccountLocked(c, a, subs)
 		return nil
 	}
-	s.admitLocked(c, a, d.GetRole())
+	s.admitLocked(c, a, d.GetRole(), subs)
 	return nil
 }
 
 // admitLocked logs c in to account a: Welcome, then every current pre-key,
 // and to a client or read-only key the label state. Under s.mu.
-func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole) {
+func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole, subs []*pb.AccountSubscription) {
 	c.acct, c.role = a, role
 	s.conns[c] = struct{}{}
 	a.conns[c] = struct{}{}
@@ -460,7 +466,7 @@ func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole) {
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		Role:            role,
 		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
-		Subscriptions:   s.subscriptionsFor(a, role),
+		Subscriptions:   subs,
 	}}})
 	c.queue(&pb.Frame{Body: &pb.Frame_PreKeys{PreKeys: &pb.PreKeys{PreKeys: s.currentPreKeysLocked(a), All: true}}})
 	if role != pb.DeviceRole_DEVICE_ROLE_HOST {
@@ -590,6 +596,10 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 			return e.withID(id)
 		}
 		s.done(c, id)
+		if c.revokeAfterAnswer {
+			c.revokeAfterAnswer = false
+			c.closeAfterFlush(websocket.StatusPolicyViolation, "key revoked")
+		}
 		return nil
 	}
 	only := func(ok bool, refusal string, run func() *frameError) *frameError {

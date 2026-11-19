@@ -4,7 +4,7 @@
 // host, signed by the client that approved it, before the anchor is
 // written. The code is good for one try and ten minutes.
 import { create } from "@bufbuild/protobuf";
-import { DeviceRole, FrameSchema, type Frame } from "@pirc/protocol/v1alpha2";
+import { DeviceRole, FrameSchema, type Frame, type VersionRef } from "@pirc/protocol/v1alpha2";
 import { HostedConnection } from "@pirc/relay-client/hosted";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
 
@@ -43,7 +43,7 @@ export function join(o: JoinOptions): { done: Promise<Joined>; cancel(): void } 
     let finished = false;
     let shown = false;
     let phase: "waiting" | "joining" | "fetching" = "waiting";
-    let approval: { accountId: Uint8Array; versionHash: Uint8Array; number: bigint; approver: Uint8Array; approverName: string } | undefined;
+    let approval: { accountId: Uint8Array; versionHash: Uint8Array; number: bigint; latest: VersionRef; approver: Uint8Array; approverName: string } | undefined;
     const timer = setTimeout(() => fail("the code expired"), o.timeoutMs ?? JOIN_MS);
     const end = () => {
       finished = true;
@@ -73,7 +73,7 @@ export function join(o: JoinOptions): { done: Promise<Joined>; cancel(): void } 
           if (phase === "fetching") return fail(`the relay: ${b.value.message}`);
           return fail(b.value.message || "the relay refused the join");
         case "joinPaired": {
-          if (joinId) return;
+          if (joinId || phase !== "waiting") return;
           joinId = b.value.joinId;
           phase = "joining";
           const s = await DeviceJoin.start(conn.origin, code, { role: DeviceRole.HOST, signer: o.signer, name: o.name });
@@ -95,7 +95,8 @@ export function join(o: JoinOptions): { done: Promise<Joined>; cancel(): void } 
           if (a.accountId.length !== 32 || !a.version || !v) throw new JoinFailed("the approval's version does not check");
           if (!equal(v.signer, a.approver)) throw new JoinFailed("the approval's version is not signed by the client that approved it");
           if (!v.devices.some((d) => d.role === DeviceRole.HOST && equal(d.publicKey, o.signer.publicKey))) throw new JoinFailed("the approval's version does not add this computer");
-          approval = { accountId: a.accountId, versionHash: await hash(a.version), number: v.number, approver: a.approver, approverName: a.approverName };
+          if (!a.latest || a.latest.number < v.number) throw new JoinFailed("the approval names no latest version of the client's");
+          approval = { accountId: a.accountId, versionHash: await hash(a.version), number: v.number, latest: a.latest, approver: a.approver, approverName: a.approverName };
           conn.send(create(FrameSchema, { body: { case: "joinEnded", value: { joinId } } }));
           joinId = "";
           // The chain, from the account: this host is on its list now.
@@ -115,6 +116,9 @@ export function join(o: JoinOptions): { done: Promise<Joined>; cancel(): void } 
           // It hashes to the account, chains, and has the approval's
           // version on its branch, signed by that client.
           if (!chain.onBranch(approval.number, approval.versionHash)) throw new JoinFailed("the relay's chain does not reach the approved version");
+          // As far as the approver's latest: a relay cannot hand a host
+          // approved again a list from before a later removal.
+          if (!chain.onBranch(approval.latest.number, approval.latest.hash)) throw new JoinFailed("the relay's chain does not reach the approving client's latest version");
           const before = chain.at(approval.number - 1n);
           if (!before?.body.devices.some((d) => d.role === DeviceRole.CLIENT && equal(d.publicKey, approval!.approver))) throw new JoinFailed("the approver was not a client of the account");
           if (!chain.latest.body.devices.some((d) => equal(d.publicKey, o.signer.publicKey))) throw new JoinFailed("this computer is not on the account's latest version");

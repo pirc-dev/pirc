@@ -13,15 +13,17 @@ import { tmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
 import { after, test } from "node:test";
 
-import { AccountSubscriptionSchema, FrameSchema, SubscriptionStore, type Attestation, type Frame } from "@pirc/protocol/v1alpha2";
+import { timestampFromMs } from "@bufbuild/protobuf/wkt";
+import { AccountSubscriptionSchema, FrameSchema, ListVersionBodySchema, SubscriptionStore, type Attestation, type Frame } from "@pirc/protocol/v1alpha2";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
 import type { OpenSocket } from "@pirc/relay-client/hosted";
 import { equal, random } from "@pirc/crypto/bytes";
 import * as ed25519 from "@pirc/crypto/ed25519";
-import { decode, hash } from "@pirc/crypto/objects";
+import * as hpke from "@pirc/crypto/hpke";
+import { decode, encode, hash, sign } from "@pirc/crypto/objects";
 
 import { join as hostJoin } from "../../extension/src/hosted/join.ts";
-import { HostedClient, PRE_KEY_KEEP_MS, PRE_KEY_RENEW_MS, offerPurchase, type AccountEvent, type ClientOptions } from "../core/hosted/account.ts";
+import { HostedClient, Lost, PRE_KEY_KEEP_MS, PRE_KEY_RENEW_MS, offerPurchase, type AccountEvent, type ClientOptions } from "../core/hosted/account.ts";
 import { joinAccount } from "../core/hosted/join.ts";
 import { MemoryStore, type Store } from "../core/hosted/store.ts";
 import { Harness, startHostedRelay } from "../../test/harness.ts";
@@ -251,7 +253,7 @@ test("the pre-key is renewed by the clock, sent again until the relay takes it, 
 
 test("a client is told the account's subscriptions at login, and offered a purchase only when none carries it on", async () => {
   const phone = await signUp("Pixel 9");
-  const subs = phone.client.subscriptions;
+  const subs = phone.client.subscriptions!;
   assert.equal(subs.length, 1);
   assert.equal(subs[0].store, SubscriptionStore.TEST);
   assert.ok(subs[0].renews && !subs[0].lapsed);
@@ -262,6 +264,7 @@ test("a client is told the account's subscriptions at login, and offered a purch
   const sub = (o: { ends: number; renews?: boolean; lapsed?: boolean }) =>
     create(AccountSubscriptionSchema, { store: SubscriptionStore.APP_STORE, ends: at(o.ends), renews: o.renews ?? false, lapsed: o.lapsed ?? false });
   const now = Date.now();
+  assert.equal(offerPurchase(undefined, now), false, "not known yet");
   assert.equal(offerPurchase([], now), true, "none at all");
   assert.equal(offerPurchase([sub({ ends: now - DAY, lapsed: true })], now), true, "only lapsed ones");
   assert.equal(offerPurchase([sub({ ends: now + 30 * DAY, renews: true })], now), false, "one that renews");
@@ -270,3 +273,127 @@ test("a client is told the account's subscriptions at login, and offered a purch
   assert.equal(offerPurchase([sub({ ends: now + 3 * DAY }), sub({ ends: now + 40 * DAY })], now), false, "another carries it on");
 });
 
+
+// --- what the review of step 0 found ---
+
+// A relay that hides from this device every version after `upTo`.
+const hiding = (upTo: bigint): OpenSocket => (url, on) =>
+  wsSocket(url, {
+    ...on,
+    message: (data) => {
+      const f = fromBinary(FrameSchema, data);
+      if (f.body.case === "versions") {
+        f.body.value.versions = f.body.value.versions.filter((v) => fromBinary(ListVersionBodySchema, v.body).number <= upTo);
+        return on.message(toBinary(FrameSchema, f));
+      }
+      on.message(data);
+    },
+  });
+
+test("a client leaves while two stay: both end with the one label key the relay took first, and read each other's names", async () => {
+  const phone = await signUp("Pixel 9");
+  const tablet = await joinClient(phone.client, "iPad");
+  const laptop = await joinClient(phone.client, "laptop");
+  await until("the names at the tablet", () => tablet.client.label(laptop.client.publicKey) === "laptop");
+  const left = await laptop.client.leave();
+  assert.ok(left);
+  await until("the same new label key at both", () => {
+    const a = currentLabelKey(phone.client), b = currentLabelKey(tablet.client);
+    return a?.number === left.body.number && b?.number === left.body.number && equal(a.key, b.key);
+  });
+  await phone.client.rename(tablet.client.publicKey, "renamed by phone");
+  await until("the phone's rename at the tablet", () => tablet.client.label(tablet.client.publicKey) === "renamed by phone");
+  await tablet.client.rename(phone.client.publicKey, "renamed by tablet");
+  await until("the tablet's rename at the phone", () => phone.client.label(phone.client.publicKey) === "renamed by tablet");
+  phone.client.stop();
+  tablet.client.stop();
+});
+
+test("two clients removing each other at once: the one removed is told it was mutual", async () => {
+  for (let i = 0; i < 3; i++) {
+    const phone = await signUp("Pixel 9");
+    const tablet = await joinClient(phone.client, "iPad");
+    await Promise.allSettled([phone.client.remove(tablet.client.publicKey), tablet.client.remove(phone.client.publicKey)]);
+    const told = await until("a removal", () => [...phone.events, ...tablet.events].find((e) => e.type === "removed-me"));
+    assert.ok(told.type === "removed-me" && told.mutual, `run ${i}`);
+    phone.client.stop();
+    tablet.client.stop();
+  }
+});
+
+test("a pre-key never taken and near its end is dropped for a new one", async () => {
+  const phone = await signUp("Pixel 9");
+  phone.client.stop();
+  // A key made 20 days ago whose publication never succeeded, behind a
+  // published one older still.
+  const made = Date.now() - 20 * DAY;
+  const pair = await hpke.x25519Generate();
+  const obj = await sign("pre-key", phone.client.accountId, phone.opts.signer, { $typeName: "pirc.v1alpha2.PreKeyBody", signer: phone.opts.signer.publicKey, preKey: pair.publicKey, madeAt: timestampFromMs(made), expiresAt: timestampFromMs(made + 14 * DAY) });
+  const kept = (await phone.store.get<{ madeAt: number; publishedAt?: number }[]>("pre-keys"))!;
+  kept[0].madeAt = kept[0].publishedAt = Date.now() - 27 * DAY;
+  await phone.store.set("pre-keys", [...kept, { pair, obj: encode(obj), madeAt: made, expiresAt: made + 14 * DAY, pending: true }]);
+  const again = (await HostedClient.open(phone.opts))!;
+  again.start();
+  stops.push(() => again.stop());
+  await until("logged in", () => again.conn.current.kind === "ready");
+  await again.maintain();
+  const newest = again.myPreKeys()[0];
+  assert.ok(!equal(newest.publicKey, pair.publicKey), "the dead key was dropped");
+  again.stop();
+});
+
+test("a version whose answer is lost with the connection is kept, sent again, and no other of its number signed", async () => {
+  const sent: Uint8Array[] = [];
+  let drop = true;
+  // The connection lost just as the version goes.
+  const open: OpenSocket = (url, on) => {
+    const s = wsSocket(url, on);
+    return {
+      send: (d) => {
+        const f = fromBinary(FrameSchema, d);
+        if (f.body.case === "publishVersion") {
+          sent.push(f.body.value.version!.body);
+          if (drop) {
+            drop = false;
+            on.close(1006, "dropped");
+            s.close();
+            return;
+          }
+        }
+        s.send(d);
+      },
+      close: () => s.close(),
+      get bufferedAmount() {
+        return s.bufferedAmount;
+      },
+      ping: s.ping && (() => s.ping!()),
+    };
+  };
+  const phone = await signUp("Pixel 9", { open });
+  const ro = await ed25519.generate();
+  await assert.rejects(phone.client.addReadOnly(ro.publicKey), (e) => e instanceof Lost);
+  assert.ok(await phone.store.get("pending-version"), "kept while its fate is unknown");
+  await until("the kept version taken at the next login", () => phone.client.latest.body.number === 2n);
+  assert.equal(await phone.store.get("pending-version"), undefined);
+  assert.equal(new Set(sent.map((b) => Buffer.from(b).toString("hex"))).size, 1, "one version 2, sent twice");
+  phone.client.stop();
+});
+
+test("a device approved again is not handed a list from before a later removal", async () => {
+  const phone = await signUp("Pixel 9");
+  const tablet = await joinClient(phone.client, "iPad");
+  const laptop = await joinClient(phone.client, "laptop");
+  await phone.client.remove(laptop.client.publicKey);
+  tablet.client.stop();
+  // The tablet lost its account and shows a new code with its key, through
+  // a relay that hides the laptop's removal.
+  const o = options("iPad", tablet.opts.signer, new MemoryStore(), { open: hiding(3n) });
+  let shown = "";
+  const j = joinAccount({ ...o, attestation, onCode: (s) => (shown = s) });
+  j.done.catch(() => {});
+  await until("the code", () => shown);
+  const outcome = await phone.client.join(shown, async () => true);
+  assert.ok("joined" in outcome && outcome.again);
+  await assert.rejects(j.done, /approving client's latest version/);
+  phone.client.stop();
+});

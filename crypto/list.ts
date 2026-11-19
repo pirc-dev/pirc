@@ -29,8 +29,8 @@ const ROLES = new Set([DeviceRole.HOST, DeviceRole.CLIENT, DeviceRole.READ_ONLY]
 export const MAX_HOSTS = 256;
 export const MAX_CLIENTS = 32;
 
-/** Whether `devices` holds no more of `role` than the caps allow. */
-export function withinCaps(devices: readonly { role: DeviceRole }[]): string | undefined {
+/** Why `devices` hold more of a role than the caps allow; undefined when they do not. */
+export function overCaps(devices: readonly { role: DeviceRole }[]): string | undefined {
   const n = (r: DeviceRole) => devices.filter((d) => d.role === r).length;
   if (n(DeviceRole.HOST) > MAX_HOSTS) return "more than 256 hosts";
   if (n(DeviceRole.CLIENT) > MAX_CLIENTS || n(DeviceRole.READ_ONLY) > MAX_CLIENTS) return "more than 32 clients";
@@ -49,7 +49,7 @@ export const isClient = (v: ListVersionBody, key: Uint8Array): boolean => device
 /** What every version must be on its own. */
 function checkShape(v: ListVersionBody): void {
   if (v.devices.length === 0 || v.devices.length > MAX_HOSTS + 2 * MAX_CLIENTS) throw new Refused("wrong number of devices");
-  const over = withinCaps(v.devices);
+  const over = overCaps(v.devices);
   if (over) throw new Refused(over);
   for (let i = 0; i < v.devices.length; i++) {
     const d = v.devices[i];

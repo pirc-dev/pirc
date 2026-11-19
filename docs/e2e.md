@@ -321,9 +321,16 @@ the device now has it. A device orders records by their label key's list
 version first, then by counter, which starts again at 1 under each new
 label key, so that a client removed after writing a huge counter leaves
 nothing stuck; two records alike in both (two clients renaming at once)
-are ordered by their hashes, the higher winning, and two label keys made
-for the same version (two removals at once) the same way, so every device
-ends with the same one. A device keeps it once it has
+are ordered by their hashes, the higher winning. Two clients making a
+label key for the same version at once (after a leave, or both
+repairing) would hold two keys of one name, which nothing tells apart: so
+a client keeps the key it made, with its first record, until the relay
+has taken that record, and sends the same bytes again until it has an
+answer; the relay takes one first record per label key's name and
+refuses another, and the client refused drops its key and takes the
+other's wrap (**Decided**, 2026-11-19). A relay that took both could
+split the clients' names; it can stop them reading names anyway, by
+holding the records back. A device keeps the label key once it has
 it; a new device gets it, with the current record's counter, in the join
 (section 5); a device whose pre-key expired while it was away gets it
 wrapped again by any client once it publishes a new one. Renaming is a new
@@ -701,11 +708,13 @@ per address (section 6).
    itself, and asks the person to confirm that they are holding, or
    sitting at, the device that shows this code. Then it signs version N+1
    with the new device in it, adopts it as in section 3, and sends: the
-   account ID, version N+1 and its own key, and to a new client the label
-   key and the current label record's counter. It writes the new device's
+   account ID, version N+1, its own key and its latest version (number
+   and hash), and to a new client the label key and the current label
+   record's counter. It writes the new device's
    name into a new label record.
 5. The new device fetches the chain from the relay, checks that it hashes
-   to that account ID, chains, and ends at N+1, signed by that client.
+   to that account ID, chains, and has N+1, signed by that client, and
+   the client's latest version on its branch.
    Only then does it keep its anchor and start serving (a host) or working
    (a client).
 
@@ -760,8 +769,12 @@ a device killed between the client's version and its approval is on the
 list without knowing the account. It keeps its key and shows a new code.
 The client that types it finds the key listed already, with the same
 role, says so, and sends the approval again: the version that added the
-device, with that version's signer as the approver, and no new version.
-It grants nothing new; the key is on the list, signed, already.
+device, with that version's signer as the approver, and its own latest
+version, and no new version. It grants nothing new; the key is on the
+list, signed, already. The latest version is what keeps the relay from
+handing the device a list from before a later removal: the version that
+added it is old, and only the approver's latest says how far the chain
+must reach.
 
 **Without a camera, and with one.** Typing is the way that always works.
 A QR code that the new device draws, carrying the same exchange with a

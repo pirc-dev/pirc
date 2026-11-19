@@ -38,7 +38,11 @@ type conn struct {
 	// A join this connection waits for, or takes part in; under Server.mu.
 	wait   *joinWait
 	joinID string
-	send   chan []byte
+	// The key was removed by the version this connection is publishing (a
+	// client leaving): closed once the answer is queued, so that the
+	// client learns its version was taken. Under Server.mu.
+	revokeAfterAnswer bool
+	send              chan []byte
 	// Bytes in send, and the most allowed.
 	queued    atomic.Int64
 	maxQueued int64

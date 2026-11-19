@@ -7,7 +7,7 @@
 // and ten minutes; a device whose join was cut off after its version was
 // taken keeps its key and shows a new code, and is approved again (D7).
 import { create } from "@bufbuild/protobuf";
-import { DeviceRole, FrameSchema, type Attestation, type Frame, type LabelKeyRef } from "@pirc/protocol/v1alpha2";
+import { DeviceRole, FrameSchema, type Attestation, type Frame, type LabelKeyRef, type VersionRef } from "@pirc/protocol/v1alpha2";
 import { HostedConnection } from "@pirc/relay-client/hosted";
 
 import { equal } from "@pirc/crypto/bytes";
@@ -41,7 +41,7 @@ export function joinAccount(o: JoinAccountOptions): { done: Promise<JoinedAccoun
     let finished = false;
     let shown = false;
     let phase: "waiting" | "joining" | "fetching" = "waiting";
-    let approval: { accountId: Uint8Array; versionHash: Uint8Array; number: bigint; approver: Uint8Array; approverName: string; labelKey?: { ref: LabelKeyRef; key: Uint8Array } } | undefined;
+    let approval: { accountId: Uint8Array; versionHash: Uint8Array; number: bigint; latest: VersionRef; approver: Uint8Array; approverName: string; labelKey?: { ref: LabelKeyRef; key: Uint8Array } } | undefined;
     const timer = setTimeout(() => fail("the code expired"), o.timeoutMs ?? JOIN_MS);
     const end = () => {
       finished = true;
@@ -70,7 +70,7 @@ export function joinAccount(o: JoinAccountOptions): { done: Promise<JoinedAccoun
           if (phase === "fetching") return fail(`the relay: ${b.value.message}`);
           return fail(b.value.message || "the relay refused the join");
         case "joinPaired": {
-          if (joinId) return;
+          if (joinId || phase !== "waiting") return;
           joinId = b.value.joinId;
           phase = "joining";
           const s = await DeviceJoin.start(conn.origin, code, { role: DeviceRole.CLIENT, signer: o.signer, name: o.name });
@@ -92,10 +92,12 @@ export function joinAccount(o: JoinAccountOptions): { done: Promise<JoinedAccoun
           if (a.accountId.length !== 32 || !a.version || !v) throw new JoinFailed("the approval's version does not check");
           if (!equal(v.signer, a.approver)) throw new JoinFailed("the approval's version is not signed by the client named as approving it");
           if (!v.devices.some((d) => d.role === DeviceRole.CLIENT && equal(d.publicKey, o.signer.publicKey))) throw new JoinFailed("the approval's version does not add this device");
+          if (!a.latest || a.latest.number < v.number) throw new JoinFailed("the approval names no latest version of the client's");
           approval = {
             accountId: a.accountId,
             versionHash: await hash(a.version),
             number: v.number,
+            latest: a.latest,
             approver: a.approver,
             approverName: a.approverName,
             labelKey: a.labelKeyRef && a.labelKey.length === 32 ? { ref: a.labelKeyRef, key: a.labelKey } : undefined,
@@ -116,11 +118,14 @@ export function joinAccount(o: JoinAccountOptions): { done: Promise<JoinedAccoun
           const chain = await Chain.start(v1, approval.accountId);
           await chain.add(rest, b.value.withdrawals);
           if (!chain.onBranch(approval.number, approval.versionHash)) throw new JoinFailed("the relay's chain does not reach the approved version");
+          // As far as the approver's latest: a relay cannot hand a device
+          // approved again a list from before a later removal.
+          if (!chain.onBranch(approval.latest.number, approval.latest.hash)) throw new JoinFailed("the relay's chain does not reach the approving client's latest version");
           const before = chain.at(approval.number - 1n);
           if (!before?.body.devices.some((d) => d.role === DeviceRole.CLIENT && equal(d.publicKey, approval!.approver))) throw new JoinFailed("the approver was not a client of the account");
           if (!chain.latest.body.devices.some((d) => equal(d.publicKey, o.signer.publicKey))) throw new JoinFailed("this device is not on the account's latest version");
-          end();
           const client = await HostedClient.joined(o, approval.accountId, chain, approval.labelKey);
+          end();
           resolve({ client, approverName: approval.approverName });
           return;
         }

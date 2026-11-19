@@ -120,10 +120,12 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	// Columns added since a table was first made: CREATE TABLE IF NOT
 	// EXISTS leaves an older file's table as it was.
-	for _, c := range []struct{ table, column, def string }{
-		{"subscriptions", "renews", "INTEGER NOT NULL DEFAULT 0"},
+	for _, c := range []struct{ table, column, def, then string }{
+		// Not known until the store is asked: every one is asked at the
+		// next check, so that renews is not reported false meanwhile.
+		{"subscriptions", "renews", "INTEGER NOT NULL DEFAULT 0", "UPDATE subscriptions SET checked_ms = 0"},
 	} {
-		if err := addColumn(db, c.table, c.column, c.def); err != nil {
+		if err := addColumn(db, c.table, c.column, c.def, c.then); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
@@ -131,13 +133,16 @@ func OpenStore(dir string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// addColumn adds a column to a table that lacks it.
-func addColumn(db *sql.DB, table, column, def string) error {
+// addColumn adds a column to a table that lacks it, then runs then.
+func addColumn(db *sql.DB, table, column, def, then string) error {
 	var n int
 	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil || n > 0 {
 		return err
 	}
-	_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def); err != nil {
+		return err
+	}
+	_, err := db.Exec(then)
 	return err
 }
 
@@ -316,6 +321,18 @@ func (s *Store) AddLabels(account []byte, keyNumber uint64, keyHash []byte, coun
 		if int64(keyNumber) < maxNumber || int64(counter) < maxCounter {
 			return errStale
 		}
+		// A label key's first record is taken once: a second client making
+		// a key of the same name at once has its own refused, and drops it
+		// (docs/e2e.md, section 3, Labels).
+		if counter == 1 {
+			var other int
+			if err := t.QueryRow(`SELECT count(*) FROM labels WHERE account = ? AND key_number = ? AND key_hash = ? AND hash != ?`, account, int64(keyNumber), keyHash, hash).Scan(&other); err != nil {
+				return err
+			}
+			if other > 0 {
+				return errStale
+			}
+		}
 		if _, err := t.Exec(`INSERT OR IGNORE INTO labels (account, key_number, key_hash, counter, hash, object) VALUES (?, ?, ?, ?, ?, ?)`, account, int64(keyNumber), keyHash, int64(counter), hash, marshal(obj)); err != nil {
 			return err
 		}
@@ -445,7 +462,7 @@ func (s *Store) setSubscription(account []byte, sub Subscription, checkedMs int6
 // client is shown at login. Ordered by their end, the latest last.
 func (s *Store) Subscriptions(account []byte) ([]KeptSubscription, error) {
 	rows, err := s.db.Query(`SELECT kind, expires_ms, trial, grace, sandbox, renews, checked_ms, lapsed, reason FROM subscriptions
-		WHERE account = ? ORDER BY expires_ms, kind, ident`, account)
+		WHERE account = ? ORDER BY expires_ms = 0 DESC, expires_ms, kind, ident`, account)
 	if err != nil {
 		return nil, err
 	}

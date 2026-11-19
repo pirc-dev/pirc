@@ -131,6 +131,10 @@ func (s *Server) publishVersion(c *conn, obj *pb.SignedObject) *frameError {
 	// version is written: closing at once can drop it from the queue.
 	for o := range a.conns {
 		if e2e.Device(v.Body, o.key) == nil {
+			if o == c {
+				o.revokeAfterAnswer = true
+				continue
+			}
 			o.closeAfterFlush(websocket.StatusPolicyViolation, "key revoked")
 		}
 	}

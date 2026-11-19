@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/coder/websocket"
+
 	pb1 "pirc.dev/relay/internal/pb/pirc/v1alpha1"
 	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
@@ -27,7 +29,9 @@ func TestCaps(t *testing.T) {
 		return out
 	}
 	full := append(devs(pb.DeviceRole_DEVICE_ROLE_HOST, 256, 10), devs(pb.DeviceRole_DEVICE_ROLE_CLIENT, 31, 20)...)
-	full = append(full, device(pb.DeviceRole_DEVICE_ROLE_READ_ONLY, devFrom([]byte{30}), phone.pub, phone.pub))
+	for i := 0; i < 32; i++ {
+		full = append(full, device(pb.DeviceRole_DEVICE_ROLE_READ_ONLY, devFrom([]byte{30, byte(i)}), phone.pub, phone.pub))
+	}
 	p.publish(ch, ch.next(phone, full), "full")
 
 	for _, c := range []struct {
@@ -36,6 +40,7 @@ func TestCaps(t *testing.T) {
 	}{
 		{"a 257th host", device(pb.DeviceRole_DEVICE_ROLE_HOST, devFrom([]byte{40}), phone.pub, nil)},
 		{"a 33rd client", device(pb.DeviceRole_DEVICE_ROLE_CLIENT, devFrom([]byte{41}), phone.pub, nil)},
+		{"a 33rd read-only key", device(pb.DeviceRole_DEVICE_ROLE_READ_ONLY, devFrom([]byte{42}), phone.pub, phone.pub)},
 	} {
 		p.send(&pb.Frame{Body: &pb.Frame_PublishVersion{PublishVersion: &pb.PublishVersion{RequestId: c.what, Version: ch.next(phone, []*pb.Device{c.add})}}})
 		if e := p.errorFor(c.what); code(e) != pb1.ErrorCode_ERROR_CODE_INVALID {
@@ -79,5 +84,26 @@ func TestStoreAddsColumns(t *testing.T) {
 	}
 	if subs, _ := s.Subscriptions([]byte{1}); !subs[0].Sub.Renews {
 		t.Fatal("renews not kept")
+	}
+}
+
+// A client that leaves is answered before the relay closes it for the
+// key it no longer has: else it cannot tell its version was taken.
+func TestLeaveAnswered(t *testing.T) {
+	h := newHarness(t, nil)
+	phone, tablet := newDev(1), newDev(2)
+	ch := h.signUp(phone)
+	p, _ := h.login(phone, ch.id)
+	p.publish(ch, ch.next(phone, []*pb.Device{device(pb.DeviceRole_DEVICE_ROLE_CLIENT, tablet, phone.pub, nil)}), "add")
+	for i := 0; i < 20; i++ {
+		tc, _ := h.login(tablet, ch.id)
+		leave := ch.next(tablet, nil, tablet)
+		tc.send(&pb.Frame{Body: &pb.Frame_PublishVersion{PublishVersion: &pb.PublishVersion{RequestId: "leave", Version: leave}}})
+		tc.done("leave")
+		if got := tc.closedWith(); got != websocket.StatusPolicyViolation {
+			t.Fatalf("closed with %v, want 1008", got)
+		}
+		ch.take(leave)
+		p.publish(ch, ch.next(phone, []*pb.Device{device(pb.DeviceRole_DEVICE_ROLE_CLIENT, tablet, phone.pub, nil)}), "back")
 	}
 }

@@ -797,6 +797,15 @@ func TestLabels(t *testing.T) {
 	if e := p.errorFor("l2again"); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
 		t.Errorf("an older label key: %v", e)
 	}
+	// A label key's first record is taken once: another first record under
+	// the same name is refused, the same bytes again are taken.
+	other := sign("labels", ch.id, phone, &pb.LabelsBody{LabelKey: &pb.LabelKeyRef{Version: ch.ref(3)}, Counter: 1, ListVersion: ch.ref(3), Sealed: bytes.Repeat([]byte{9}, 40), Signer: phone.pub})
+	pub(p, "other first", other)
+	if e := p.errorFor("other first"); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
+		t.Errorf("a second first record under one label key: %v", e)
+	}
+	pub(p, "l3 again", l3)
+	p.done("l3 again")
 }
 
 func TestJoin(t *testing.T) {

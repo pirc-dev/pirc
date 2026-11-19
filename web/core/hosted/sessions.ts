@@ -77,9 +77,8 @@ export const OLD_BUNDLE_MS = 60_000;
  * relay's stored copy, after newer frames too), and only as the same
  * bytes. Kept while its key ID can be read, and an hour more.
  */
-type Seen = Record<string, { counter: bigint; announcement?: { counter: bigint; hash: Uint8Array }; at: number }>;
+type Seen = Record<string, { counter: bigint; announcement?: { counter: bigint; hash: Uint8Array }; until: number }>;
 const SEEN = "seen";
-const SEEN_MS = BUNDLE_LIFE_MS + 3600_000;
 
 type Bundle = {
   body: BundleBody;
@@ -130,7 +129,8 @@ export class Sessions {
   onList(): void {
     this.bundles.clear();
     this.newest.clear();
-    void this.reopen().catch((e) => this.log(`reopening: ${(e as Error).message}`));
+    // In the frames' order: a frame taken after this is opened after.
+    this.out = this.out.then(() => this.reopen()).catch((e) => this.log(`reopening: ${(e as Error).message}`));
   }
 
   private async reopen(): Promise<void> {
@@ -181,18 +181,20 @@ export class Sessions {
    * Whether a frame's counter is past the last taken under its key ID in
    * its session; for an announcement (`payload` given), also the one last
    * taken again, with its counter and the same bytes. Written to the store
-   * before the frame is handed on.
+   * before the frame is handed on, and kept an hour past the last time its
+   * bundle can be read.
    */
-  private async counterOk(keyId: Uint8Array, ref: SessionRef, counter: bigint, payload?: Uint8Array): Promise<boolean> {
-    const seen = await (this.seen ??= this.store.get<Seen>(SEEN).then((s) => s ?? {}));
-    const k = `${hex(keyId)}/${sessionKey(ref)}`;
-    const last = seen[k];
+  private async counterOk(b: Bundle, ref: SessionRef, counter: bigint, payload?: Uint8Array): Promise<boolean> {
     const h = payload && (await sha256(payload));
+    const seen = await (this.seen ??= this.store.get<Seen>(SEEN).then((s) => s ?? {}));
+    // From here to the write, no await: two frames cannot both pass.
+    const k = `${hex(b.body.keyId)}/${sessionKey(ref)}`;
+    const last = seen[k];
     if (h && last?.announcement && counter === last.announcement.counter) return equal(h, last.announcement.hash);
     if (last && counter <= last.counter) return false;
     const now = this.now();
-    for (const [x, v] of Object.entries(seen)) if (now - v.at > SEEN_MS) delete seen[x];
-    seen[k] = { counter, announcement: h ? { counter, hash: h } : last?.announcement, at: now };
+    for (const [x, v] of Object.entries(seen)) if (now > v.until) delete seen[x];
+    seen[k] = { counter, announcement: h ? { counter, hash: h } : last?.announcement, until: Math.max(now, b.madeAt) + BUNDLE_LIFE_MS + 3600_000 };
     await this.store.set(SEEN, seen);
     return true;
   }
@@ -221,7 +223,7 @@ export class Sessions {
     // Not an older announcement than one seen; the stored one may come
     // again, with its counter.
     if (seen && madeAt < seen.madeAt) return void this.log("an announcement older than one seen");
-    if (!(await this.counterOk(k.keyId, ref, k.counter, e.payload))) return void this.log("an announcement replayed out of order, or again with other bytes");
+    if (!(await this.counterOk(b, ref, k.counter, e.payload))) return void this.log("an announcement replayed out of order, or again with other bytes");
     this.announced.set(sessionKey(ref), { madeAt, listVersion: ann.listVersion.number });
     // A host behind this client's list is sent the rest at once, in an
     // envelope of its own (docs/e2e.md, section 3, Freshness).
@@ -275,7 +277,7 @@ export class Sessions {
         const at: keys.FrameAt = { accountId: this.c.accountId, keyId: k.keyId, session: ref, kind: r.clientKey.length ? FrameKind.ANSWER : FrameKind.BROADCAST, recipient: r.clientKey, listVersion: k.listVersion, counter: k.counter };
         const plain = await keys.openFrame(bundle.keys.conversation, at, r.payload);
         if (!plain) return this.log("a frame that does not open");
-        if (!(await this.counterOk(k.keyId, ref, k.counter))) return this.log("a frame replayed or out of order");
+        if (!(await this.counterOk(bundle, ref, k.counter))) return this.log("a frame replayed or out of order");
         this.emit(create(Frame1Schema, { body: { case: "routed", value: { session: ref, clientKey: r.clientKey, payload: plain } } }));
         return;
       }
@@ -311,7 +313,7 @@ export class Sessions {
 
   /** v1alpha1's frames from web/core's Client: false when not connected. */
   send(f: Frame1): boolean {
-    if (!this.ready) return false;
+    if (!this.ready || this.c.blocked) return false;
     const b = f.body;
     switch (b.case) {
       case "subscribeSessions":

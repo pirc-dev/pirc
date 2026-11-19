@@ -308,6 +308,11 @@ message JoinApproval {
   // The approving client's name, as its label says, so that a host, which
   // never holds the label key, can say who approved it; at most 128 bytes.
   string approver_name = 7;
+  // The approving client's latest version, which the device requires on
+  // the branch it fetches: so that a device approved again with the
+  // version that added it (docs/e2e.md, section 5) cannot be handed a list
+  // from before a later removal.
+  VersionRef latest = 8;
 }
 
 message JoinRefused {}

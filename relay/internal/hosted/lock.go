@@ -22,7 +22,7 @@ const errLocked = "the account is locked: its subscription has ended"
 
 // admitLockedAccountLocked logs a client in to a locked account: Welcome,
 // saying so, and nothing else. Under s.mu.
-func (s *Server) admitLockedAccountLocked(c *conn, a *account) {
+func (s *Server) admitLockedAccountLocked(c *conn, a *account, subs []*pb.AccountSubscription) {
 	c.acct, c.role, c.locked = a, pb.DeviceRole_DEVICE_ROLE_CLIENT, true
 	s.conns[c] = struct{}{}
 	a.conns[c] = struct{}{}
@@ -32,22 +32,21 @@ func (s *Server) admitLockedAccountLocked(c *conn, a *account) {
 		Role:            pb.DeviceRole_DEVICE_ROLE_CLIENT,
 		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
 		Locked:          true,
-		Subscriptions:   s.subscriptionsFor(a, pb.DeviceRole_DEVICE_ROLE_CLIENT),
+		Subscriptions:   subs,
 	}}})
 	s.log.Info("logged in to a locked account", "account", shortKey(a.id), "key", shortKey(c.key))
 }
 
 // subscriptionsFor are the account's subscriptions for Welcome: to a
-// client only (docs/design.md, step 14, stage 5, decision D1). One the
-// store cannot be read for is left out, and said in the log.
-func (s *Server) subscriptionsFor(a *account, role pb.DeviceRole) []*pb.AccountSubscription {
+// client only (docs/design.md, step 14, stage 5, decision D1).
+func (s *Server) subscriptionsFor(a *account, role pb.DeviceRole) ([]*pb.AccountSubscription, error) {
 	if role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
-		return nil
+		return nil, nil
 	}
 	kept, err := s.store.Subscriptions(a.id)
 	if err != nil {
 		s.log.Error("cannot read an account's subscriptions", "account", shortKey(a.id), "err", err)
-		return nil
+		return nil, err
 	}
 	out := make([]*pb.AccountSubscription, 0, len(kept))
 	for _, k := range kept {
@@ -57,7 +56,7 @@ func (s *Server) subscriptionsFor(a *account, role pb.DeviceRole) []*pb.AccountS
 		}
 		out = append(out, o)
 	}
-	return out
+	return out, nil
 }
 
 // subscriptionStore names the store of a subscription's kind.

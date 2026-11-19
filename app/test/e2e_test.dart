@@ -30,6 +30,15 @@ const cases = '../cases/e2e';
 Json readCase(String name) => jsonDecode(File('$cases/$name').readAsStringSync()) as Json;
 
 void main() {
+  test('the caps: 256 hosts, 32 clients, 32 read-only keys', () {
+    Device d(DeviceRole r) => Device(role: r);
+    List<Device> n(DeviceRole r, int k) => List.generate(k, (_) => d(r));
+    expect(list.overCaps([...n(DeviceRole.DEVICE_ROLE_HOST, list.maxHosts), ...n(DeviceRole.DEVICE_ROLE_CLIENT, list.maxClients), ...n(DeviceRole.DEVICE_ROLE_READ_ONLY, list.maxClients)]), isNull);
+    expect(list.overCaps(n(DeviceRole.DEVICE_ROLE_HOST, list.maxHosts + 1)), 'more than 256 hosts');
+    expect(list.overCaps(n(DeviceRole.DEVICE_ROLE_CLIENT, list.maxClients + 1)), 'more than 32 clients');
+    expect(list.overCaps(n(DeviceRole.DEVICE_ROLE_READ_ONLY, list.maxClients + 1)), 'more than 32 clients');
+  });
+
   group('primitives', () {
     test('Ed25519: every vector decided as the rule says', () async {
       for (final v in readCase('ed25519.json')['vectors'] as List) {
