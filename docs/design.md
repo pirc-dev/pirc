@@ -2073,6 +2073,9 @@ Each step ends with something that can be seen working.
       as a phone's own message boxes and the web app's do; Flutter's
       fields default to none. A question's typed answer does not: it is
       often a name or a path.
+      The web app's default look (2026-11-19, the owner's choice) is
+      Native, the apps' own, and it comes first in Settings' Look; a
+      browser that chose another keeps it (`web.md`, section 5).
 
     **Still to do before the app starts** (not decisions):
     - **Reaching the relay.** A self-hosted relay on a private network
