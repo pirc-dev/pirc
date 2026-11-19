@@ -683,19 +683,56 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-// pi is working, and nothing in the chat shows it.
-class _Dots extends StatelessWidget {
+// pi is working, and nothing in the chat shows it. The dots pulse one
+// after another, as the web app's do (its animate-pulse: two seconds, half
+// way down to half opacity, the dots 200 ms apart); still if the phone
+// asks for less motion.
+class _Dots extends StatefulWidget {
   const _Dots(this.label);
   final String? label;
 
   @override
+  State<_Dots> createState() => _DotsState();
+}
+
+class _DotsState extends State<_Dots> with SingleTickerProviderStateMixin {
+  static const _period = 2000;
+  static const _curve = Cubic(0.4, 0, 0.6, 1);
+  late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: _period));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.reset();
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  // Down to half by mid-way, back to whole by the end.
+  static double _opacity(double t) => t < 0.5 ? 1 - 0.5 * _curve.transform(t * 2) : 0.5 + 0.5 * _curve.transform(t * 2 - 1);
+
+  @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
+    final label = widget.label;
     return Semantics(
       label: label ?? 'Working',
       child: Row(children: [
-        for (var i = 0; i < 3; i++) Container(margin: const EdgeInsets.only(right: 6), width: 6, height: 6, decoration: BoxDecoration(color: look.ink2, shape: BoxShape.circle)),
-        if (label != null) Text(label!, style: look.text(size: 14, color: look.ink2)),
+        for (var i = 0; i < 3; i++)
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, dot) => Opacity(opacity: _pulse.isAnimating ? _opacity((_pulse.value - i * 200 / _period) % 1) : 1, child: dot),
+            child: Container(margin: const EdgeInsets.only(right: 6), width: 6, height: 6, decoration: BoxDecoration(color: look.ink2, shape: BoxShape.circle)),
+          ),
+        if (label != null) Text(label, style: look.text(size: 14, color: look.ink2)),
       ]),
     );
   }

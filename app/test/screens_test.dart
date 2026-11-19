@@ -202,11 +202,11 @@ Future<PircModel> fixture(WidgetTester tester) async {
 }
 
 // [keyboard]: the height of one open over the screen.
-Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0}) {
+Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0, bool still = false}) {
   final look = (brightness == Brightness.dark ? Look.dark : Look.light).withFont(font, mono: mono);
   return MediaQuery(
     data: MediaQueryData(
-        size: const Size(390, 844), platformBrightness: brightness, padding: const EdgeInsets.only(top: 47, bottom: 34), viewInsets: EdgeInsets.only(bottom: keyboard)),
+        size: const Size(390, 844), platformBrightness: brightness, padding: const EdgeInsets.only(top: 47, bottom: 34), viewInsets: EdgeInsets.only(bottom: keyboard), disableAnimations: still),
     child: LookScope(
       look: look,
       child: CupertinoApp(
@@ -703,6 +703,41 @@ void main() {
   double fromEnd(WidgetTester tester, Finder last) => tester.getRect(find.byType(CustomScrollView)).bottom - tester.getRect(last).bottom;
   final steps = [for (var i = 1; i <= 12; i++) 'Step $i of the release checks, which takes a line or two to describe.'].join('\n\n');
 
+  testWidgets('pi working, its dots pulse one after another, as the web app\'s do; still if the phone asks for less motion', (tester) async {
+    List<double> dots() => [
+          for (final o in tester.widgetList<Opacity>(find.descendant(of: find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Working'), matching: find.byType(Opacity)))) o.opacity,
+        ];
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    await tester.pump();
+    // Gone back in pi's tree to its first message, pi still on it.
+    seq = 2;
+    sent.clear();
+    await event(tester, model, SessionEvent(branchChanged: BranchChanged(leafId: 'e0')));
+    final f = sent.lastWhere((f) => f.hasRouted() && SessionMessage.fromBuffer(f.routed.payload).hasHistoryRequest());
+    model.client.onFrame(Frame(routed: Routed(session: f.routed.session, payload: SessionMessage(history: History(
+      requestId: SessionMessage.fromBuffer(f.routed.payload).historyRequest.requestId,
+      items: [user('Release 0.2: bump the version, run the checks, tag it.', now, entry: 'e1')],
+      seq: Int64(seq),
+    )).writeToBuffer())));
+    await tester.pump();
+    await tester.pump();
+    expect(dots(), hasLength(3));
+    // A second in, the first at its faintest, the others a step behind.
+    await tester.pump(const Duration(seconds: 1));
+    final [a, b, c] = dots();
+    expect(a, moreOrLessEquals(0.5));
+    expect(b, greaterThan(a));
+    expect(c, greaterThan(b));
+    await tester.pump(const Duration(seconds: 1));
+    expect(dots().first, moreOrLessEquals(1));
+
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1'), still: true));
+    await tester.pump(const Duration(seconds: 1));
+    expect(dots(), [1, 1, 1]);
+  });
+
   testWidgets('scrolled up, the chat gone back to a point where it fits the screen is at its end, its button gone', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
@@ -725,7 +760,11 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump();
-    await tester.pumpAndSettle();
+    // Not pumpAndSettle: pi still works, and its dots pulse for as long.
+    // A second, frame by frame, as the scroll takes it.
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     expect(find.textContaining('Step 12'), findsNothing);
     expect(find.bySemanticsLabel(RegExp('go to the end', caseSensitive: false)), findsNothing);
     final p = chatScroll(tester);
