@@ -1,6 +1,7 @@
-// The page's look: Quiet (type and hairlines), Triage (cards on grey, one
-// blue accent), Native (the phone's own system: grouped cards, round
-// status badges, the system font) or Cockpit (a terminal's pane: Catppuccin,
+// The page's look: Native (the phone's own system: grouped cards, round
+// status badges, the system font; the default, as the phone apps' look),
+// Quiet (type and hairlines), Triage (cards on grey, one blue accent) or
+// Cockpit (a terminal's pane: Catppuccin,
 // monospace for names). All are the same screens with the same behaviour;
 // the look is the palette, the fonts and the shape of things, chosen by
 // data-look on the root element, with data-shape naming the shape it
@@ -11,8 +12,8 @@
 // like which hosts are open.
 import { useSyncExternalStore } from "react";
 
-export type Look = "quiet" | "triage" | "native" | "cockpit";
-export const LOOKS: Look[] = ["quiet", "triage", "native", "cockpit"];
+export type Look = "native" | "quiet" | "triage" | "cockpit";
+export const LOOKS: Look[] = ["native", "quiet", "triage", "cockpit"];
 
 const SHAPE: Record<Look, "page" | "cards"> = { quiet: "page", triage: "cards", native: "cards", cockpit: "page" };
 
@@ -34,9 +35,9 @@ export function isLook(v: unknown): v is Look {
 function load(): Look {
   try {
     const v = localStorage.getItem(KEY);
-    return isLook(v) ? v : "quiet";
+    return isLook(v) ? v : "native";
   } catch {
-    return "quiet";
+    return "native";
   }
 }
 

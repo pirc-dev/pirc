@@ -214,8 +214,8 @@ not in `web/`, since they belong to neither client.
 - **Page**: React, TypeScript, Vite and Tailwind, with our own components,
   using Radix's unstyled parts only where accessibility is hard to get right
   (menus, dialogs).
-- **Four looks, chosen in the app: "Quiet" (the default), "Triage",
-  "Native" and "Cockpit"** (Quiet and Triage 2026-10-26, Native and
+- **Four looks, chosen in the app: "Native" (the default), "Quiet",
+  "Triage" and "Cockpit"** (Quiet and Triage 2026-10-26, Native and
   Cockpit 2026-10-27). All four came from four directions drawn on
   2026-10-26. Quiet is
   type and hairlines, colour kept for status: the agent's replies in
@@ -283,7 +283,9 @@ not in `web/`, since they belong to neither client.
   the roadmap, Cockpit's keys and Native's folding title, both below.
 - **The choice is kept in the browser**, per device, as which hosts are
   open is; it is set in Settings (below).
-  Quiet is the default, as the look that was live.
+  Native is the default and first in the picker (2026-11-19, the
+  owner's choice), as the phone apps' look; Quiet was, as the look that
+  was live. A browser that chose a look keeps it.
 - **The session's actions are a sheet** from the bottom: model, thinking
   level as one row of seven ("min" and "med" shortened, so that it fits a
   phone), cost and context (what it has cost and how full the context is,

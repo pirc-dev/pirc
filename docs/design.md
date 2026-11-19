@@ -2069,6 +2069,9 @@ Each step ends with something that can be seen working.
       a photo you choose to send in a message." Drafts (2026-11-04), as
       the web app's: a file per chat in the private folder, for a week, the
       newest hundred.
+      The web app's default look (2026-11-19, the owner's choice) is
+      Native, the apps' own, and it comes first in Settings' Look; a
+      browser that chose another keeps it (`web.md`, section 5).
 
     **Still to do before the app starts** (not decisions):
     - **Reaching the relay.** A self-hosted relay on a private network
