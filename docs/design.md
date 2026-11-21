@@ -353,9 +353,9 @@ The questions, as settled:
    publishes an opaque announcement per session, and the relay stores the
    latest one and replays it to clients without reading it, so a hosted relay
    will not see session names either. End-to-end encryption between client and
-   host arrives with the hosted relay. A design for it is proposed, and
-   open, in `docs/e2e.md` (2026-11-15): it changes the payloads, and the
-   relay's frames for the account, which becomes a list only clients can
+   host arrives with the hosted relay, as `docs/e2e.md` decides: a Noise
+   channel between each client and each pi process, announcements sealed to
+   each client, and an account whose list only the account's phone can
    change.
 
    **Transport security**: TLS is the relay's default. Plain `ws://` is an
@@ -376,13 +376,9 @@ The questions, as settled:
    person's own. On a hosted relay, the relay must not be able to add keys to
    an account (it could add its own and read everything once payloads are
    encrypted), so there the account becomes a **device-signed list**: a short
-   versioned list of device keys, a new version valid only when signed by a
-   device in the previous one; the relay stores and serves it but cannot forge
-   it. Device keys and the key format are the same in both stages, but the
-   second stage is real work: hosts must fetch, verify and enforce the list,
-   keep anti-rollback state across restarts, and clients must verify hosts;
-   the first device's bootstrap and recovery when every device is lost need
-   designing then. Remote Pi's `mesh_versions` is a reference.
+   list of device keys with a counter, each version signed by the account's
+   phone; the relay stores and serves it but cannot forge it (`docs/e2e.md`,
+   section 3).
 3. **How a host enrols** (approval decided 2026-10-24). Either way works:
    - **With a token.** The relay operator issues a one-time token (a relay
      command), and the host's extension is configured with the relay URL and
@@ -469,8 +465,8 @@ The questions, as settled:
    `/pirc status` on that machine, the address and software it came with,
    and a name for it. The Remote Pi app got none of it: the adapter did
    not offer it (section 10; retired 2026-11-07). With the hosted relay,
-   accepting a host becomes a client signing the next version of the
-   device list with the host's key in it.
+   accepting a host becomes the account's phone signing the next version
+   of the device list with the host's keys in it (`docs/e2e.md`).
 
    **Managing devices on the client (decided 2026-10-31; the list and
    all of it built in the web app the same day).** Any
@@ -592,7 +588,8 @@ The questions, as settled:
      refused as before.
 
    The adapter offered none of these either (retired 2026-11-07). With
-   the hosted relay each becomes a signed version of the device list.
+   the hosted relay, adding and removing become versions of the device
+   list that the account's phone signs, and names are sealed by it.
 4. **How a client joins.** The relay issues a one-time registration link or
    code, asked for on the command line or by another client (section 5.3);
    the client registers its own key with it. With the Remote Pi app,
@@ -822,10 +819,12 @@ Message groups:
 **`v1alpha2`, the hosted relay's** (named 2026-11-18, for `docs/e2e.md`):
 `proto/pirc/v1alpha2`, with the relay's frames in `relay.proto` and what
 devices sign and seal for each other in `e2e.proto`. `session.proto`
-stays `v1alpha1`: what changes is how its bytes travel. The registration
-frames of `v1alpha1` (`ApproveHost`, `RenameKey`, `RemoveKey`,
-`IssueToken`, `RegisterReadKey`) have no counterpart; versions of the
-list, pre-keys, bundles, labels, the join and sign-up take their place.
+stays `v1alpha1`: what changes is how its bytes travel, inside each
+client's Noise channel. The registration frames of `v1alpha1`
+(`ApproveHost`, `RenameKey`, `RemoveKey`, `IssueToken`, `RegisterReadKey`)
+have no counterpart; the list, the join and sign-up take their place.
+`e2e.proto` is being rewritten for the design of 2026-11-21 (step 14,
+stage 5).
 A self-hosted relay speaks only `v1alpha1`, a hosted one only
 `v1alpha2`. Until the first public release of the hosted relay (step 14,
 stage 7), `v1alpha2` may change incompatibly, as `v1alpha1` may.
@@ -2174,6 +2173,19 @@ Each step ends with something that can be seen working.
     gaps that are now closed in it. The owner accepted it as the design
     on 2026-11-18.
 
+    **Replaced** (2026-11-21): the cryptography of that design, our own
+    protocol for the list and its keys, gave way to one built from
+    standard parts, so that a reviewer can recognise each and need check
+    only how it is used: libsodium everywhere, a Noise channel between
+    each client and each pi process, one list signed only by the account's
+    phone, `crypto_box` for what the relay stores, and joining by a QR
+    code or its text. `docs/e2e.md` is that design; its section 10 says
+    why the first was set aside. Stages 0 to 3 below record what was built
+    on the first, and their references to `e2e.md`'s sections are to that
+    first page; its cryptography is removed in stage 5, part 2, which
+    keeps the relay's accounts, sign-up, attestation and routing. Stage 4,
+    the stores' checks and the lock, stays.
+
     **Decided** (2026-11-16, one at a time with the owner):
     1. **Price.** The hosted relay comes with the app's subscription: an
        account is free while any of its phones has a live subscription or
@@ -2183,9 +2195,10 @@ Each step ends with something that can be seen working.
        client. The app's price (step 15) is unchanged.
     2. **Signing up and joining** are anonymous and one tap, with no email
        or password: a phone creates the account, and every other device
-       joins with a code it shows, typed into a device already on the
-       account (`/pirc join` on a machine). The code, its checking and the
-       account's device list are in `e2e.md`, sections 3, 5 and 6. Abuse is
+       joins with a QR code it shows, or the same value as text, which the
+       account's phone scans or has pasted in (`/pirc join` on a machine;
+       decided 2026-11-21, replacing a typed code). The join and the
+       account's device list are in `e2e.md`, sections 3, 6 and 7. Abuse is
        held off by:
        - App Attest or Play Integrity when a phone creates or joins an
          account, and the subscription check above, per account. These
@@ -2240,17 +2253,17 @@ Each step ends with something that can be seen working.
        can run commands on every host, so whoever controls the page's code
        controls every account with a browser on it; with the page apart,
        that takes Cloudflare Pages or the publisher's deploy of it, not the
-       relay (`e2e.md`, section 9).
+       relay (`e2e.md`, section 7).
 
     **Planned** (2026-11-17): the order of the build, reviewed
     independently the same day (Claude Opus 5.5). Each stage ends tested.
     The self-hosted product keeps shipping from master meanwhile,
-    unchanged (`e2e.md`, section 8), so until stage 6 the hosted code is
+    unchanged (`e2e.md`, section 9), so until stage 6 the hosted code is
     kept out of every release: compiled out of the app by a
     `--dart-define`, as `PIRC_STORE` is (a switch at run time would be a
     hidden feature, which App Review refuses), and not registered in the
-    extension. Until stage 7, `v1alpha2`, the anchor's folder and the
-    `pirc-e2e:` value may change; the first public release fixes them.
+    extension. Until stage 7, `v1alpha2`, a computer's account files and
+    the `pirc-e2e:` value may change; the first public release fixes them.
 
     0. **`e2e.md` decided**, its proposed parts taken as the design, before
        any code. Done 2026-11-18.
@@ -2461,21 +2474,46 @@ Each step ends with something that can be seen working.
        side, a locked account's screen with Renew, comes with stage 5.
 
        Stage 4 done 2026-11-18.
-    5. **The app**: sign-up (the phone makes version 1), the list and all
-       that stage 3 does in TypeScript, in Dart; the join screen (typing a
-       code, approving by role); additions and removals shown; the keys
-       stored as `e2e.md` section 2 says; notifications from the read-only
-       key on both platforms (Dart on Android, `PircNotices` on iOS, which
-       now also logs in with `v1alpha2` and renews the read-only pre-key);
-       account deletion; the China mainland storefront check (decision 6).
-       Chosen at first run: a relay of one's own, as now, or the hosted
-       one. The export compliance answer is looked at again before the
-       first upload with this code in it.
+    5. **The design replaced, and built again** (planned 2026-11-21):
+       after stage 5's first parts failed review twice, the cryptography
+       was replaced (above). Stage 5 now builds `e2e.md` in nine parts,
+       each reviewed and merged before the next:
+       1. **Checks**, nothing merged: libsodium in Node, the three browser
+          engines, the app on iOS and Android, and the notification
+          extension, all giving the same bytes; folders flushed on macOS
+          and Linux. Done 2026-11-21 (`pirc-e2e-spikes/sodium`).
+       2. **The design in, the old cryptography out**: `e2e.md` replaced
+          (2a); then, in one change since the relay and its clients speak
+          one protocol (2b): `crypto/`, `app/lib/e2e`, the Swift and Go
+          copies, the hosted parts of the extension and of `web/core`,
+          `cases/e2e`, `cases/exchanges/hosted`, `e2e.proto` and the
+          patched Dart `cryptography` removed, and the relay's hosted mode
+          left with accounts, sign-up, attestation, subscriptions, the
+          lock and routing, its membership in a members table until
+          part 5.
+          The hosted end to end test goes until part 9.
+       3. **The shared pieces**: the list, its checks, the sealed
+          announcement and names, in TypeScript and Dart, with test files
+          every language agrees on (Swift opens a box and checks the list,
+          Go checks the list).
+       4. **Noise** in TypeScript and Dart over libsodium, held to the
+          published vectors and run against each other.
+       5. **The relay**: each account's newest list in place of the
+          members table, channel messages routed, the sealed copies
+          stored, the join's lookup.
+       6. **The computer**: its keys and list files, a channel per client,
+          sealed announcements; `/pirc join` and `/pirc leave`.
+       7. **Joining** from the app, the web app and the terminal.
+       8. **The app and the notification extension**: sign-up (the phone
+          signs the first version), the list, channels, notices from the
+          read-only key on both platforms, additions and removals shown,
+          account deletion, the China mainland storefront check (decision
+          6). Chosen at first run: a relay of one's own, as now, or the
+          hosted one. The export compliance answer is looked at again
+          before the first upload with this code in it.
+       9. **Removal and the end to end tests** across apps, relay and pi.
 
-       Planned in seven steps; the plan was reviewed three times (Claude
-       Fable, GLM 5.3, Kimi K3.1 Pro). **Decided** by the owner on
-       2026-11-19, but for export compliance, which is answered before
-       the first upload (step 6):
+       Of the owner's decisions of 2026-11-19 for the app, these stand:
        - *What gates a hosted phone* (D1): the account, as the relay
          says it, not each phone's subscription. A new account starts the
          store's trial or purchase before it is made, and the transaction
@@ -2494,42 +2532,36 @@ Each step ends with something that can be seen working.
          manage it there" on an iPhone): a new user, or a store reviewer
          who has not bought on the other platform, reads nothing of it,
          and a widget test fails on any mention of it in the screens.
-       - *A second phone* (D2) joins by showing a code a client types
-         (`web/core/hosted/join.ts` is the reference), attests in
-         `JoinWait`, buys nothing, and is refused on a China mainland
-         storefront as sign-up is.
+       - *A second phone* (D2) joins as every device does now, by showing
+         a QR code the account's phone scans, or its text pasted in; it attests in `JoinWait`,
+         buys nothing, and is refused on a China mainland storefront as
+         sign-up is.
        - *The iOS extension's hosted path* (D3) is compiled out of builds
          that are not hosted: the call into it sits under `#if
          PIRC_HOSTED`, set by an optional `Flutter/Hosted.xcconfig` that
          the build wrapper writes only for hosted builds.
-       - *Nothing the relay says deletes anything* (D5), made precise: a
-         removal is recorded and said before anything is deleted, then
-         the secrets go first, the record of the removal last (on a
-         phone: push registration, the extension's snapshot, the
-         keychain's items, the account, chats, drafts), so that a phone
-         stopped half-way finishes when opened; a phone removed by the
-         very device it was removing says so (`e2e.md`, section 3); a
-         withdrawal moves no device off its branch (decided 2026-11-20,
-         after part 1 of step 1's review: one signed by a removed
-         device could otherwise send devices back to a list it is on),
-         so a device whose adding version the relay shows as lost keeps
-         its branch and deletes nothing.
+       - *Nothing the relay says deletes anything* (D5): a removal is
+         recorded and said before anything is deleted, then the secrets
+         go first, the record of the removal last (on a phone: push
+         registration, the extension's snapshot, the keychain's items,
+         the account, chats, drafts), so that a phone stopped half-way
+         finishes when opened. A removal is read only from a list the
+         account's phone signed.
        - *Face ID* (D6): the settings stay as they are, with the same
-         meaning. On a hosted account the main key signs every request,
-         so it is held while the app is in the foreground, and only time
-         away locks it ("Every time" asks on each return, never on each
-         message); the lock switched off asks nothing, as now. A new
-         choice under "Ask again after", on both kinds of relay: "Once",
-         asked when PiRC starts and not again until it is closed or the
-         phone restarts.
-       - *A join cut off after its version was taken* (D7): the device
-         keeps its key and shows a new code; the client sees it listed
-         already, with the same key and role, and sends the approval
-         again with the version that added it, and no new version.
-       - *The label key after a client leaves* (D8) is made by a client
-         that stays, not by the one that left (`e2e.md`, section 3).
-       - *Caps* (D9): 256 hosts and 32 clients, each client with at most
-         its read-only key (`e2e.md`, section 3).
+         meaning. On a hosted account the keys behind Face ID (signing,
+         channel and box) are used on every connection and every look at
+         the session list, so they are held while the app is in the
+         foreground,
+         and only time away locks it ("Every time" asks on each return,
+         never on each message); the lock switched off asks nothing, as
+         now. A new choice under "Ask again after", on both kinds of
+         relay: "Once", asked when PiRC starts and not again until it is
+         closed or the phone restarts.
+       - *Caps* (D9), changed 2026-11-21: 10 clients and 50 computers
+         (`e2e.md`, section 3).
+       D7 (a join cut off) and D8 (the label key) went with the design
+       they belonged to.
+
     6. **Running it**: the abuse guards (caps, the sign-up switch and
        invite codes); the relay's own domain; the shared server (decision
        3), deployed from release tags, with the hourly off-site backup and
@@ -2551,8 +2583,9 @@ Each step ends with something that can be seen working.
     8. **Open**: sign-ups opened, the apps' production releases, and the
        store listings and `pirc.dev` saying the hosted relay exists.
     9. **The hosted web client** (decision 7): the page, keys by WebCrypto
-       in IndexedDB, joining by showing a code, served from Cloudflare
-       Pages, on stage 3's `web/core`; then accounts with no phone, paid on
+       in IndexedDB, joining by showing a QR code, served from Cloudflare
+       Pages, on `web/core` and stage 5's hosted client; then accounts
+       with no phone, paid on
        the web (decision 1). After the phones, since an account's first
        device is a phone.
 
