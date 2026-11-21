@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -11,6 +10,7 @@ import { test } from "node:test";
 import type { Place } from "@pirc/protocol";
 
 import { herdrPlace, parseGiven, PlaceTracker, tmuxPlace } from "../src/place.ts";
+import { oneShotHerdr } from "./herdr-stand-in.ts";
 
 const plain = (p: Place | undefined | null) => (p ? { kind: p.kind, group: p.group, groupNumber: p.groupNumber, window: p.window, windowNumber: p.windowNumber, pane: p.pane, display: p.display } : p);
 
@@ -52,23 +52,14 @@ test("herdr: the workspace and tab of pi's pane, over its socket", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pirc-herdr-"));
   const path = join(dir, "herdr.sock");
   const seen: string[] = [];
-  const server = createServer((c) => {
-    let buf = "";
-    c.on("data", (d) => {
-      buf += d;
-      let i;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const req = JSON.parse(buf.slice(0, i)) as { id: string; method: string; params: Record<string, string> };
-        buf = buf.slice(i + 1);
-        seen.push(`${req.method} ${JSON.stringify(req.params)}`);
-        const result = req.method === "pane.current"
-          ? { type: "pane_current", pane: { pane_id: "w2:p1", workspace_id: "w2", tab_id: "t5", label: "agent" } }
-          : req.method === "workspace.get"
-            ? { type: "workspace_info", workspace: { workspace_id: "w2", number: 2, label: "pirc" } }
-            : { type: "tab_info", tab: { tab_id: "t5", number: 3, label: "web" } };
-        c.write(`${JSON.stringify({ id: req.id, result })}\n`);
-      }
-    });
+  // As herdr does: one request per connection, answered, then closed.
+  const server = oneShotHerdr((req) => {
+    seen.push(`${req.method} ${JSON.stringify(req.params)}`);
+    return req.method === "pane.current"
+      ? { type: "pane_current", pane: { pane_id: "w2:p1", workspace_id: "w2", tab_id: "t5", label: "agent" } }
+      : req.method === "workspace.get"
+        ? { type: "workspace_info", workspace: { workspace_id: "w2", number: 2, label: "pirc" } }
+        : { type: "tab_info", tab: { tab_id: "t5", number: 3, label: "web" } };
   });
   await new Promise<void>((r) => server.listen(path, r));
   try {
