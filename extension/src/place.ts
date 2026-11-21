@@ -5,7 +5,7 @@
 // client's request.
 import { create } from "@bufbuild/protobuf";
 import { execFile } from "node:child_process";
-import { createConnection } from "node:net";
+import { createConnection, type Socket } from "node:net";
 
 import { PlaceSchema, type Place } from "@pirc/protocol";
 import { cutUtf8 } from "@pirc/relay-client";
@@ -78,49 +78,57 @@ export async function tmuxPlace(env: NodeJS.ProcessEnv): Promise<Place | undefin
 
 // --- herdr -------------------------------------------------------------
 
-// Requests on herdr's socket, one JSON object per line each way, over one
-// connection (herdr's socket API).
+// Requests on herdr's socket, one JSON object per line each way. herdr
+// answers one request per connection and then closes it (its
+// src/api/server.rs), so each request opens its own; a second request on
+// the first connection failed with EPIPE. close() ends those still open.
 export function herdrSession(path: string): { ask(method: string, params: object): Promise<Record<string, unknown>>; close(): void } {
-  const socket = createConnection(path);
-  let buf = "";
+  const open = new Set<Socket>();
   let n = 0;
-  const waiting = new Map<string, { resolve(v: Record<string, unknown>): void; reject(e: Error): void }>();
-  const failAll = (e: Error) => {
-    for (const w of waiting.values()) w.reject(e);
-    waiting.clear();
-  };
-  socket.setEncoding("utf8");
-  socket.on("data", (d: string) => {
-    buf += d;
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i);
-      buf = buf.slice(i + 1);
-      let m: { id?: string; result?: Record<string, unknown>; error?: { message?: string } };
-      try {
-        m = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const w = m.id ? waiting.get(m.id) : undefined;
-      if (!w) continue;
-      waiting.delete(m.id!);
-      if (m.result) w.resolve(m.result);
-      else w.reject(new Error(`herdr: ${m.error?.message ?? "no result"}`));
-    }
-  });
-  socket.on("error", (e) => failAll(e));
-  socket.on("close", () => failAll(new Error("herdr closed the connection")));
+  let closed = false;
   return {
     ask(method, params) {
       const id = `pirc-${++n}`;
       return new Promise((resolve, reject) => {
-        waiting.set(id, { resolve, reject });
+        if (closed) return reject(new Error("herdr did not answer in time"));
+        const socket = createConnection(path);
+        open.add(socket);
+        let buf = "";
+        let done = false;
+        const finish = (err: Error | undefined, result?: Record<string, unknown>) => {
+          if (done) return;
+          done = true;
+          open.delete(socket);
+          socket.destroy();
+          if (err) reject(err);
+          else resolve(result!);
+        };
+        socket.setEncoding("utf8");
+        socket.on("data", (d: string) => {
+          buf += d;
+          let i;
+          while ((i = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, i);
+            buf = buf.slice(i + 1);
+            let m: { id?: string; result?: Record<string, unknown>; error?: { message?: string } };
+            try {
+              m = JSON.parse(line);
+            } catch {
+              continue;
+            }
+            if (m.id !== id) continue;
+            if (m.result) finish(undefined, m.result);
+            else finish(new Error(`herdr: ${m.error?.message ?? "no result"}`));
+          }
+        });
+        socket.on("error", (e) => finish(new Error(`herdr: ${e.message}`)));
+        socket.on("close", () => finish(new Error(closed ? "herdr did not answer in time" : "herdr closed the connection")));
         socket.write(`${JSON.stringify({ id, method, params })}\n`);
       });
     },
     close() {
-      socket.destroy();
+      closed = true;
+      for (const s of open) s.destroy();
     },
   };
 }

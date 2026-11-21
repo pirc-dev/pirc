@@ -229,7 +229,9 @@ Within this:
     structure the extension does not know.
   - **Built in**, detected from the environment: tmux by `$TMUX_PANE` (one
     `tmux display-message` for the names), herdr by `HERDR_ENV` (its socket:
-    `pane.current` for the pane's workspace and tab, then their labels). Other
+    `pane.current` for the pane's workspace and tab, then their labels, each
+    request on a connection of its own, since herdr answers one per
+    connection and then closes it). Other
     multiplexers (zellij, wezterm, kitty) are left to extensions.
   - **Given by another pi extension**, through pi's inter-extension events:
     `pirc:place` with fields replaces the built-in detection for that
@@ -288,7 +290,10 @@ Within this:
   - **The launchers**, built in: tmux, a new window after pi's, in the
     background (`new-window -d -a`, on the window of `$TMUX_PANE`); herdr, a
     new tab in pi's workspace, not focused (its `layout.apply`, from its
-    0.7.5 documentation; not yet run against a real herdr). herdr's is
+    0.7.5 documentation). First run against a real herdr, 0.9.5, on
+    2026-11-21, after a user's New agent failed with "write EPIPE": both
+    the launcher and the place sent their second request on a connection
+    herdr had already closed. herdr's is
     tried first, as for the place. Nothing is built in for a plain
     terminal emulator, which has no general way to open a window.
   - **Given by another extension**, the way `pirc:place` gives the place:

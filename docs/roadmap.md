@@ -28,22 +28,19 @@ last item, was done on 2026-10-31.
 
 ## Smaller
 
-1. **herdr's launcher run against a real herdr.** Built from herdr 0.7.5's
-   socket API documentation (`layout.apply`) and tested against a stand-in
-   only (`design.md`, section 4).
-2. **Stopping a pi that no longer answers**, through another pi on the
+1. **Stopping a pi that no longer answers**, through another pi on the
    same machine (its tmux pane or herdr tab); today a pi stops only itself.
-3. **Pairing attempts logged.** Three pairing links made for devices were
+2. **Pairing attempts logged.** Three pairing links made for devices were
    never used, and the web app's server cannot say why: it logs neither a
    failed attempt nor its reason.
-4. **Past sessions open elsewhere marked.** The Resume list does not say
+3. **Past sessions open elsewhere marked.** The Resume list does not say
    that a session is open in another pi process; resuming it shows it open
    twice (`design.md`, section 4).
-5. **The web app's server recognised among the clients.** The relay could
+4. **The web app's server recognised among the clients.** The relay could
    send each key's software in `RegisteredKey`, so that both apps can
    recognise the web app's server and warn before removing it, since every
    browser signs in through it; only for both apps together.
-6. **A test notification from the app's Settings**, as the web app's, which
+5. **A test notification from the app's Settings**, as the web app's, which
    needs a relay request to send one; skipped for now (the owner's choice,
    2026-11-06), since real notifications already show the path works.
 

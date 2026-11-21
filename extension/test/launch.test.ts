@@ -2,12 +2,13 @@
 // of its multiplexer, the new pi's variables and folder, and launchers
 // another extension gives.
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { herdrLauncher, LauncherChoice, launchEnv, launchFolder, launchName, parseLauncher, piCommand, tmuxLauncher } from "../src/launch.ts";
+import { oneShotHerdr } from "./herdr-stand-in.ts";
 
 test("tmux: a window after pi's, in the background, named, in the folder, with the variables, on pi's server", async () => {
   const calls: { cmd: string; args: string[]; env: NodeJS.ProcessEnv }[] = [];
@@ -47,6 +48,24 @@ test("herdr: a tab in pi's workspace, not focused, labelled, running the command
   ]);
   assert.equal(closed, 2);
   assert.equal(herdrLauncher({ HERDR_SOCKET_PATH: "/s", HERDR_PANE_ID: "p" }), undefined);
+});
+
+// herdr answers one request per connection; both of the launch's requests
+// went on one before, and the second failed with "write EPIPE" (2026-11-21).
+test("herdr: the launch over a socket that answers once per connection", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pirc-herdr-"));
+  const path = join(dir, "herdr.sock");
+  const asked: string[] = [];
+  const server = oneShotHerdr((req) => (asked.push(req.method), req.method === "pane.current" ? { pane: { workspace_id: "w2" } } : {}));
+  await new Promise<void>((r) => server.listen(path, r));
+  try {
+    const l = herdrLauncher({ HERDR_ENV: "1", HERDR_SOCKET_PATH: path, HERDR_PANE_ID: "p7" });
+    await l!.launch({ cwd: "/w", command: ["pi"], env: {}, name: "w" });
+    assert.deepEqual(asked, ["pane.current", "layout.apply"]);
+  } finally {
+    server.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the new pi gets pi's and PiRC's settings, no token, and its launch", () => {
