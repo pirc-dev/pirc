@@ -1,22 +1,41 @@
 // A device's connection to a hosted relay (relay.proto v1alpha2;
-// docs/e2e.md, section 6): login with the account and the relay's origin
+// docs/e2e.md, section 7): login with the account and the relay's origin
 // signed, keepalive and reconnection. Nothing in it is Node's, so the
 // extension, Node's tests and a browser share it; each gives the socket
 // (hosted-ws.ts for Node, browserSocket for a page).
 //
 // A close never removes the device: 1008 means only that the relay refuses
-// its key now (docs/e2e.md, section 3, Removal). A refused login is tried
-// again, slowly; a device acts on its removal only from a version it has
-// checked.
+// its key now. A refused login is tried again, slowly.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ErrorCode } from "@pirc/protocol";
 import { FrameSchema, ProtocolVersion, type Frame, type Welcome } from "@pirc/protocol/v1alpha2";
 
-import { framed, utf8 } from "@pirc/crypto/bytes";
-import type { Signer } from "@pirc/crypto/ed25519";
+/** An Ed25519 key that signs the login. */
+export type Signer = { publicKey: Uint8Array; sign(message: Uint8Array): Promise<Uint8Array> };
 
 /** The login signature's context (relay.proto, Auth). */
 export const AUTH_CONTEXT = "pirc-auth-v1alpha2";
+
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+function leb128(n: number): number[] {
+  const out: number[] = [];
+  do {
+    out.push(n < 128 ? n : (n & 0x7f) | 0x80);
+    n = Math.floor(n / 128);
+  } while (n > 0);
+  return out;
+}
+
+/**
+ * How the login string is built: the context's ASCII, a NUL byte, then
+ * each part prefixed by its length as an unsigned LEB128.
+ */
+export function framed(context: string, ...parts: Uint8Array[]): Uint8Array {
+  const out: number[] = [...utf8(context), 0];
+  for (const p of parts) out.push(...leb128(p.length), ...p);
+  return Uint8Array.from(out);
+}
 export const HOSTED_PATH = "/v1alpha2";
 
 export interface SocketEvents {
@@ -76,7 +95,7 @@ export type HostedState =
   // Will retry; `reason` says why it is not connected.
   | { kind: "offline"; reason: string }
   // Will retry, slowly: the relay refuses this key now, or for this
-  // account. Only a checked version says the device was removed.
+  // account.
   | { kind: "refused"; code: ErrorCode; reason: string }
   // Will not retry: the relay does not speak v1alpha2.
   | { kind: "unsupported"; reason: string }

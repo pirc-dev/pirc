@@ -1,6 +1,6 @@
-// Joining (docs/e2e.md, section 5): the relay pairs the device that shows
-// a code with the client that types it, by the code's four lookup
-// characters, and passes their CPace steps along unread. Each lookup pairs
+// Joining: the relay pairs the device that shows a code with the client
+// that types it, by the code's four lookup characters, and passes their
+// steps along unread. Each lookup pairs
 // once; a wait ends after the code's ten minutes, and the join with it.
 
 package hosted

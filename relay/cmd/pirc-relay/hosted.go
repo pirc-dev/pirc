@@ -1,7 +1,7 @@
 //go:build hosted
 
 // serve-hosted runs the relay's hosted mode (docs/e2e.md; docs/design.md,
-// step 14, stage 2): many end-to-end encrypted accounts, v1alpha2 only.
+// step 14): many accounts, v1alpha2 only.
 // Built only with the hosted tag, so that until stage 6 no release has it:
 //
 //	go build -tags hosted ./cmd/pirc-relay

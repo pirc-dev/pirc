@@ -1,18 +1,16 @@
 // The relay protocol of a hosted relay (docs/e2e.md): every frame on a
 // WebSocket between the relay and a device. One Frame per binary
 // WebSocket message. A self-hosted relay speaks v1alpha1 only, and a
-// hosted relay v1alpha2 only (docs/e2e.md, section 8).
+// hosted relay v1alpha2 only (docs/e2e.md, section 9).
 //
-// The relay reads these frames and checks the signed objects in them
-// (e2e.proto), but cannot open any payload: announcements and routed
-// frames are encrypted between a session and its account's clients.
+// The relay reads these frames but not their payloads: announcements,
+// routed frames and join steps pass through it unread.
 syntax = "proto3";
 
 package pirc.v1alpha2;
 
 import "google/protobuf/timestamp.proto";
 import "pirc/v1alpha1/common.proto";
-import "pirc/v1alpha2/e2e.proto";
 
 enum ProtocolVersion {
   PROTOCOL_VERSION_UNSPECIFIED = 0;
@@ -28,11 +26,9 @@ message Frame {
     Auth auth = 3;
     Welcome welcome = 4;
 
-    // Host to relay: sessions of this connection, and the bundle of its
-    // process's keys.
+    // Host to relay: sessions of this connection.
     SessionAnnounce session_announce = 10;
     SessionEnd session_end = 11;
-    PublishBundle publish_bundle = 12;
 
     // Client or read-only key to relay: what to receive.
     SubscribeSessions subscribe_sessions = 20;
@@ -49,39 +45,17 @@ message Frame {
     // Between a session and clients, through the relay.
     Routed routed = 40;
 
-    // The device list (docs/e2e.md, section 3). Client to relay:
-    // publishing a version or a withdrawal. Any device to relay: asking
-    // for versions. Relay to every device of the account: versions it
-    // has not been sent.
-    PublishVersion publish_version = 70;
-    PublishWithdrawal publish_withdrawal = 71;
-    GetVersions get_versions = 72;
-    Versions versions = 73;
-
-    // Pre-keys (docs/e2e.md, section 2). Client or read-only key to
-    // relay: its new one. Relay to every device of the account: the
-    // current ones.
-    PublishPreKey publish_pre_key = 74;
-    PreKeys pre_keys = 75;
-
-    // Labels (docs/e2e.md, section 3). Client to relay: a label record,
-    // and label-key wraps. Relay to client or read-only key: the latest
-    // records, and the wraps for it.
-    PublishLabels publish_labels = 76;
-    PublishLabelKeyWraps publish_label_key_wraps = 77;
-    LabelState label_state = 78;
-
-    // Answers to the Publish* frames and to the account frames below.
+    // Answers to the account frames below.
     Done done = 79;
 
-    // Joining (docs/e2e.md, section 5).
+    // Joining: the relay pairs two devices and passes their steps on.
     JoinWait join_wait = 80;
     JoinLookup join_lookup = 81;
     JoinPaired join_paired = 82;
     JoinMessage join_message = 83;
     JoinEnded join_ended = 84;
 
-    // Accounts (docs/e2e.md, section 6). Client to relay, logged in
+    // Accounts (docs/e2e.md, section 7). Client to relay, logged in
     // without an account: making one. Client to relay: deleting its own.
     SignUp sign_up = 90;
     SignedUp signed_up = 91;
@@ -91,10 +65,11 @@ message Frame {
     RenewSubscription renew_subscription = 95;
 
     // Either direction, as in v1alpha1. A device is never removed by a
-    // close: 1008 means only that the relay refuses its key now
-    // (docs/e2e.md, section 3, Removal).
+    // close: 1008 means only that the relay refuses its key now.
     pirc.v1alpha1.Error error = 50;
   }
+  reserved 12, 70 to 78;
+  reserved "publish_bundle", "publish_version", "publish_withdrawal", "get_versions", "versions", "publish_pre_key", "pre_keys", "publish_labels", "publish_label_key_wraps", "label_state";
 }
 
 message Hello {
@@ -113,7 +88,8 @@ message Challenge {
 
 message Auth {
   // Ed25519 signature over framed("pirc-auth-v1alpha2", account ID, the
-  // relay's origin, nonce) (docs/e2e.md, section 2).
+  // relay's origin, nonce): the context's ASCII, a NUL byte, then each
+  // part prefixed by its length as an unsigned LEB128.
   bytes signature = 1;
 }
 
@@ -121,12 +97,11 @@ message Welcome {
   ProtocolVersion protocol_version = 1;
   // Largest Frame the relay accepts or sends, encoded.
   uint32 max_frame_bytes = 2;
-  // The key's role on the account's latest version; unspecified when
-  // logged in without an account.
+  // The key's role in the account; unspecified when logged in without
+  // an account.
   DeviceRole role = 3;
-  // The account's latest version, by number and hash: a device that has
-  // an older one asks for the rest (GetVersions).
-  VersionRef list_version = 4;
+  reserved 4;
+  reserved "list_version";
   // The account is locked: every subscription its phones had has lapsed,
   // and the stores' own grace with it (docs/design.md, step 14, stage 4).
   // Only a client logs in to a locked account, and it may only renew
@@ -140,6 +115,18 @@ message Welcome {
   // purchase only when none will carry the account on (docs/design.md,
   // step 14, stage 5, decision D1). Empty to hosts and read-only keys.
   repeated AccountSubscription subscriptions = 6;
+}
+
+// A device's role in its account.
+enum DeviceRole {
+  DEVICE_ROLE_UNSPECIFIED = 0;
+  // A machine running pi.
+  DEVICE_ROLE_HOST = 1;
+  // A phone, a browser or another app: a shell on every host.
+  DEVICE_ROLE_CLIENT = 2;
+  // A phone's second key, readable while it is locked: announcements
+  // only.
+  DEVICE_ROLE_READ_ONLY = 3;
 }
 
 // Which store a subscription is through.
@@ -166,37 +153,11 @@ message AccountSubscription {
   bool lapsed = 5;
 }
 
-// A frame's clear part: which keys, and where in their stream. Announced
-// and routed payloads from a host are AES-256-GCM under the key ID's
-// announcement or conversation key, with the nonce four zero bytes and
-// the counter as 8 bytes big-endian, and additional data
-// framed("pirc-e2e-v1 frame", account ID, key ID, host key, session ID,
-// instance ID, direction, kind, recipient, list version number, counter),
-// with the direction and kind each one byte (Direction, FrameKind), the
-// recipient the client's key for an answer to one client and empty
-// otherwise, and the numbers 8 bytes big-endian.
-message FrameKeys {
-  // 16 bytes.
-  bytes key_id = 1;
-  // From 0, one up for every frame the process sends under the key ID.
-  uint64 counter = 2;
-  // The number of the list version the host had.
-  uint64 list_version = 3;
-}
-
-enum FrameKind {
-  FRAME_KIND_UNSPECIFIED = 0;
-  FRAME_KIND_ANNOUNCEMENT = 1;
-  FRAME_KIND_BROADCAST = 2;
-  FRAME_KIND_ANSWER = 3;
-}
-
-// Host to relay, as in v1alpha1; the payload is a SignedObject
-// (AnnouncementBody), encrypted. Refused with INVALID unless this process
-// has published a bundle with keys.key_id (PublishBundle) first.
+// Host to relay, as in v1alpha1; the relay stores the payload unread.
 message SessionAnnounce {
   pirc.v1alpha1.SessionRef session = 1;
-  FrameKeys keys = 2;
+  reserved 2;
+  reserved "keys";
   bytes payload = 3;
   // As in v1alpha1: wake the clients registered for push.
   bool push = 4;
@@ -204,19 +165,6 @@ message SessionAnnounce {
 
 message SessionEnd {
   pirc.v1alpha1.SessionRef session = 1;
-}
-
-// Host to relay: a SignedObject (BundleBody), stored by key ID while a
-// stored announcement uses it, and sent to clients with the session list.
-// Answered by Done; a bundle whose signer is not this connection's key,
-// or whose list version is not one the relay has, is refused with
-// INVALID. A newer bundle of the same process with a key ID it has
-// replaces the older: the same keys wrapped again. The relay keeps a
-// process's bundles from the oldest a live announcement uses on, and its
-// newest while its connection lasts.
-message PublishBundle {
-  string request_id = 1;
-  SignedObject bundle = 2;
 }
 
 message SubscribeSessions {}
@@ -231,13 +179,11 @@ message Detach {
 
 message SessionEntry {
   pirc.v1alpha1.SessionRef session = 1;
-  FrameKeys keys = 2;
-  // The latest announcement, encrypted.
+  reserved 2, 5;
+  reserved "keys", "bundles";
+  // The latest announcement, as the host sent it.
   bytes payload = 3;
   google.protobuf.Timestamp announced_at = 4;
-  // The bundles of the session's process that the relay holds: the one
-  // the announcement uses and any newer, each a SignedObject (BundleBody).
-  repeated SignedObject bundles = 5;
 }
 
 // Relay to client: every live session, in frames of at most
@@ -247,7 +193,7 @@ message SessionList {
   bool more = 2;
 }
 
-// A session's announcement or bundles changed.
+// A session's announcement changed.
 message SessionUpdated {
   SessionEntry entry = 1;
 }
@@ -259,7 +205,7 @@ message SessionEnded {
 // Client to relay: send me Devices now and whenever it changes.
 message WatchDevices {}
 
-// When the relay last saw each device on the latest version.
+// When the relay last saw each device of the account.
 message DeviceStatus {
   bytes public_key = 1;
   bool online = 2;
@@ -272,95 +218,13 @@ message Devices {
   repeated DeviceStatus devices = 1;
 }
 
-// As in v1alpha1, with the clear part of an encrypted frame. Client to
-// relay: the payload is an envelope (e2e.proto's EnvelopeBody, signed),
-// sealed to the request key of keys.key_id; keys.counter and
-// keys.list_version are unset, as both are inside. Host to relay: the
-// payload is a session.proto SessionMessage, encrypted.
+// As in v1alpha1; the relay passes the payload on unread.
 message Routed {
   pirc.v1alpha1.SessionRef session = 1;
   bytes client_key = 2;
-  FrameKeys keys = 3;
+  reserved 3;
+  reserved "keys";
   bytes payload = 4;
-}
-
-// Client to relay: a SignedObject (ListVersionBody) chaining from the
-// latest. Answered by Done once the relay has taken it, after Versions to
-// every device; or by Error with the request_id: CONFLICT when another
-// version with its number was taken first, sent in Versions before the
-// error; INVALID when it does not check (docs/e2e.md, section 3).
-message PublishVersion {
-  string request_id = 1;
-  SignedObject version = 2;
-}
-
-// Client to relay: a SignedObject (WithdrawalBody) of a version that lost
-// to the relay's version with its number, signed by a client in the
-// version before. The relay never took the version withdrawn, so it
-// cannot check the withdrawal against it; the devices that took it do.
-// Answered by Done, after Versions to every device the first time; or by
-// Error with INVALID.
-message PublishWithdrawal {
-  string request_id = 1;
-  SignedObject withdrawal = 2;
-}
-
-// Any device to relay: every version from `from` on, and every
-// withdrawal, in Versions with the request_id.
-message GetVersions {
-  string request_id = 1;
-  uint64 from = 2;
-}
-
-// Versions, oldest first, and withdrawals; to a device that asked, or to
-// every device of the account when one is taken.
-message Versions {
-  string request_id = 1;
-  repeated SignedObject versions = 2;
-  repeated SignedObject withdrawals = 3;
-}
-
-// Client or read-only key to relay: a SignedObject (PreKeyBody) of its
-// own. It replaces the device's last one, and goes to every device of the
-// account in PreKeys. Answered by Done.
-message PublishPreKey {
-  string request_id = 1;
-  SignedObject pre_key = 2;
-}
-
-// Relay to device: after Welcome every current pre-key of the account,
-// with `all` set; later each new one.
-message PreKeys {
-  repeated SignedObject pre_keys = 1;
-  bool all = 2;
-}
-
-// Client to relay: a SignedObject (LabelsBody), signed by a client on the
-// latest version, its label key and list version naming versions the
-// relay has. Answered by Done; or by Error with CONFLICT, after LabelState,
-// when the relay has a newer label key, or a higher counter under this
-// one.
-message PublishLabels {
-  string request_id = 1;
-  SignedObject labels = 2;
-}
-
-// Client to relay: SignedObjects (LabelKeyWrapBody), each for a client or
-// read-only key on the latest version and wrapped for its current pre-key;
-// the relay keeps one per recipient and label key, the latest. Answered
-// by Done; or by Error with CONFLICT when the relay has a newer label
-// key.
-message PublishLabelKeyWraps {
-  string request_id = 1;
-  repeated SignedObject wraps = 2;
-}
-
-// Relay to client or read-only key: after Welcome, then on each change.
-// The relay keeps, per label key, the records with the highest counter.
-message LabelState {
-  repeated SignedObject labels = 1;
-  // The wraps for this device's pre-keys.
-  repeated SignedObject wraps = 2;
 }
 
 message Done {
@@ -375,7 +239,7 @@ message Done {
 message JoinWait {
   // Four Crockford base32 characters, upper case.
   string lookup = 1;
-  // A phone's (docs/e2e.md, section 6); unset for a host or a browser.
+  // A phone's (docs/e2e.md, section 7); unset for a host or a browser.
   Attestation attestation = 2;
 }
 
@@ -393,8 +257,7 @@ message JoinPaired {
   string join_id = 2;
 }
 
-// Either side: one step (e2e.proto's JoinStep, encoded), passed to the
-// other side unread.
+// Either side: one step of the join, passed to the other side unread.
 message JoinMessage {
   string join_id = 1;
   bytes step = 2;
@@ -406,29 +269,28 @@ message JoinEnded {
   string join_id = 1;
 }
 
-// Phone to relay, logged in without an account, with the key of version
-// 1's one device: make an account. Answered by SignedUp, or Error with
-// the request_id: PERMISSION_DENIED when sign-ups are closed and the
-// invite code is not good, or the attestation or subscription is refused;
-// INVALID when version 1 does not check. The phone then logs in again,
-// with the account's ID. The same version 1 sent again is answered by
-// SignedUp again.
+// Phone to relay, logged in without an account: make an account with
+// this key as its one client. Answered by SignedUp, or Error with the
+// request_id: PERMISSION_DENIED when sign-ups are closed and the invite
+// code is not good, or the attestation or subscription is refused. The
+// phone then logs in again, with the account's ID. A key that already
+// made an account is answered by SignedUp again, with that account's ID.
 message SignUp {
   string request_id = 1;
-  // A SignedObject (ListVersionBody) of number 1.
-  SignedObject version = 2;
+  reserved 2;
+  reserved "version";
   Attestation attestation = 3;
   string invite_code = 4;
 }
 
 message SignedUp {
   string request_id = 1;
-  // SHA-256 of version 1's body.
+  // SHA-256 of the signing-up key.
   bytes account_id = 2;
 }
 
-// That a real app on a real phone asks (docs/e2e.md, section 6). It
-// stops abuse only; it never stands in for the list.
+// That a real app on a real phone asks (docs/e2e.md, section 7). It
+// stops abuse only; it never decides who belongs to an account.
 message Attestation {
   oneof kind {
     AppAttest app_attest = 1;
@@ -465,14 +327,14 @@ message RenewSubscription {
   }
 }
 
-// Client to relay: delete this account, every version, pre-key, bundle and
-// label of it, and close every connection to it. Answered by Done before
+// Client to relay: delete this account and everything the relay holds
+// of it, and close every connection to it. Answered by Done before
 // the close.
 message DeleteAccount {
   string request_id = 1;
 }
 
-// As in v1alpha1, for clients on the latest version.
+// As in v1alpha1, for the account's clients.
 message RegisterPush {
   string request_id = 1;
   string handle = 2;

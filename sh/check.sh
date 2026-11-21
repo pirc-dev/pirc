@@ -52,7 +52,7 @@ node --experimental-transform-types --no-warnings sh/roundtrip.ts encode \
   | node --experimental-transform-types --no-warnings sh/roundtrip.ts compare
 
 step "relay client, extension and web app: unit tests"
-node --experimental-transform-types --no-warnings --test crypto/test/*.test.ts relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
+node --experimental-transform-types --no-warnings --test relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
 
 step "mobile app: generate, analyze, test"
 if command -v flutter >/dev/null; then
@@ -74,9 +74,9 @@ if command -v pi >/dev/null && command -v tmux >/dev/null; then
   echo "pi $(pi --version)"
   node --experimental-transform-types --no-warnings extension/test/e2e.ts
   node --experimental-transform-types --no-warnings web/test/e2e.ts
-  # The hosted account, with the extension from the tree (its release
-  # bundle leaves the hosted code out) and the last release before it.
-  node --experimental-transform-types --no-warnings extension/test/hosted-e2e.ts
+  # What a release before the hosted relay does with host.json's
+  # pirc-e2e: value, and answers kept across a /reload from it and back.
+  node --experimental-transform-types --no-warnings extension/test/old-code.ts
 else
   echo "skipped: needs pi and tmux on PATH"
 fi

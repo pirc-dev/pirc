@@ -1,6 +1,6 @@
-// What the stores say of a phone (docs/e2e.md, section 6): that a real app
+// What the stores say of a phone (docs/e2e.md, section 7): that a real app
 // on a real phone asks, and that its account is paid for. It stops abuse
-// only; it never stands in for the list. The real checks are Stores
+// only; it never says who belongs to an account. The real checks are Stores
 // (stores.go); tests and local runs use TestVerifier.
 
 package hosted
@@ -10,7 +10,6 @@ import (
 	"errors"
 	"time"
 
-	"pirc.dev/relay/internal/e2e"
 	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
 
@@ -22,7 +21,7 @@ const AttestContext = "pirc-attest-v1alpha2"
 
 // attestData is what c's attestation must bind.
 func (s *Server) attestData(c *conn) []byte {
-	return e2e.Framed(AttestContext, []byte(s.cfg.Origin), c.nonce, c.key)
+	return framed(AttestContext, []byte(s.cfg.Origin), c.nonce, c.key)
 }
 
 // Attested is what the relay keeps of an attestation, so that deleting the

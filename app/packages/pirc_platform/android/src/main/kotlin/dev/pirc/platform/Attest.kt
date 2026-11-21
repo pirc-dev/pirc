@@ -1,4 +1,4 @@
-// Play Integrity for the hosted relay (docs/e2e.md, section 6;
+// Play Integrity for the hosted relay (docs/e2e.md, section 7;
 // docs/design.md, step 14), over 'dev.pirc.app/attest': a classic request
 // whose nonce is base64url(SHA-256(what the relay's login binds)), with
 // the Cloud project linked to the app in Play Console. The relay has

@@ -173,7 +173,7 @@ export interface Pi {
 // An empty hostToken starts a host that asks the relay's operator to
 // approve it.
 // extensions: more pi extensions to load beside PiRC's.
-// relay: undefined for a host enrolled nowhere, as before /pirc join.
+// relay: undefined for a host enrolled nowhere.
 // o.extension: PiRC's extension to load, else PIRC_E2E_EXTENSION or the
 // tree's; o.config: another pi's host.json, for a second install on the
 // same machine.

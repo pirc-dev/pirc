@@ -28,21 +28,16 @@ type conn struct {
 	// Logged in to a locked account (lock.go): it may only renew or
 	// delete it. Under Server.mu.
 	locked bool
-	// The account and the key's role on its latest version; nil and
-	// unspecified when logged in without an account. Under Server.mu.
+	// The account and the key's role in it; nil and unspecified when
+	// logged in without an account. Under Server.mu.
 	acct *account
 	role pb.DeviceRole
-	// Sessions and bundles this connection has; under Server.mu.
+	// Sessions this connection has; under Server.mu.
 	sessions int
-	bundles  int
 	// A join this connection waits for, or takes part in; under Server.mu.
 	wait   *joinWait
 	joinID string
-	// The key was removed by the version this connection is publishing (a
-	// client leaving): closed once the answer is queued, so that the
-	// client learns its version was taken. Under Server.mu.
-	revokeAfterAnswer bool
-	send              chan []byte
+	send   chan []byte
 	// Bytes in send, and the most allowed.
 	queued    atomic.Int64
 	maxQueued int64
@@ -173,10 +168,6 @@ func denied(msg string) *frameError {
 
 func invalid(msg string) *frameError {
 	return &frameError{code: pb1.ErrorCode_ERROR_CODE_INVALID, msg: msg}
-}
-
-func conflict(msg string) *frameError {
-	return &frameError{code: pb1.ErrorCode_ERROR_CODE_CONFLICT, msg: msg}
 }
 
 func internal() *frameError {

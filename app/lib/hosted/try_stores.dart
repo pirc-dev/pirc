@@ -6,19 +6,16 @@
 // it came. Only in a build with --dart-define=PIRC_HOSTED=true, never in
 // a release until the hosted relay ships (stage 6).
 import 'dart:async';
+import 'dart:convert' as convert;
 import 'dart:io';
 
-import 'package:fixnum/fixnum.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 
-import '../e2e/bytes.dart';
-import '../e2e/ed25519.dart' as ed25519;
-import '../e2e/objects.dart' as objects;
-import '../gen/pirc/v1alpha2/e2e.pb.dart';
+import '../core/protocol.dart' show hex;
 import '../gen/pirc/v1alpha2/relay.pb.dart';
+import '../relay/keys.dart';
 import '../ui/look.dart';
 
 const hostedBuild = bool.fromEnvironment('PIRC_HOSTED');
@@ -34,16 +31,27 @@ const _attestContext = 'pirc-attest-v1alpha2';
 const _attest = MethodChannel('dev.pirc.app/attest');
 const _store = MethodChannel('dev.pirc.app/store');
 
+Uint8List _utf8(String s) => Uint8List.fromList(convert.utf8.encode(s));
+
+// The context's ASCII, a NUL byte, then each part prefixed by its length
+// as an unsigned LEB128 (relay.proto, Auth).
+@visibleForTesting
+Uint8List framed(String context, List<List<int>> parts) {
+  final out = <int>[..._utf8(context), 0];
+  for (final p in parts) {
+    var n = p.length;
+    do {
+      out.add(n < 128 ? n : (n & 0x7f) | 0x80);
+      n >>= 7;
+    } while (n > 0);
+    out.addAll(p);
+  }
+  return Uint8List.fromList(out);
+}
+
 // One sign-up, step by step into log; the relay's answer last.
 Future<void> trySignUp(String origin, void Function(String) log) async {
-  final signer = await ed25519.SeedSigner.generate();
-  final now = DateTime.now().toUtc();
-  final body = ListVersionBody(
-    number: Int64(1),
-    devices: [Device(role: DeviceRole.DEVICE_ROLE_CLIENT, publicKey: signer.publicKey, addedAt: Timestamp.fromDateTime(now))],
-    signer: signer.publicKey,
-  );
-  final v1 = await objects.sign(objects.Kind.list, Uint8List(0), signer, body);
+  final signer = await DeviceKey.generate();
 
   log('connecting to $origin');
   final ws = await WebSocket.connect('$origin/v1alpha2').timeout(const Duration(seconds: 15));
@@ -60,7 +68,7 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
     final challenge = await next();
     if (!challenge.hasChallenge()) throw StateError('expected Challenge, got ${challenge.whichBody()}');
     final nonce = challenge.challenge.nonce;
-    final sig = await signer.sign(framed(_authContext, [Uint8List(0), utf8(origin), nonce]));
+    final sig = await signer.sign(framed(_authContext, [Uint8List(0), _utf8(origin), nonce]));
     ws.add(Frame(auth: Auth(signature: sig)).writeToBuffer());
     final welcome = await next();
     if (!welcome.hasWelcome()) {
@@ -68,7 +76,7 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
     }
     log('logged in without an account');
 
-    final data = framed(_attestContext, [utf8(origin), nonce, signer.publicKey]);
+    final data = framed(_attestContext, [_utf8(origin), nonce, signer.publicKey]);
     final att = Attestation();
     final got = await _attest.invokeMapMethod<String, Object?>('attest', data);
     if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -86,7 +94,7 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
       log('subscription proof: ${proof.length} characters');
     }
 
-    ws.add(Frame(signUp: SignUp(requestId: 'try', version: v1, attestation: att)).writeToBuffer());
+    ws.add(Frame(signUp: SignUp(requestId: 'try', attestation: att)).writeToBuffer());
     for (;;) {
       final f = await next();
       if (f.hasSignedUp()) {

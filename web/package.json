@@ -13,7 +13,6 @@
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@fontsource-variable/literata": "5.3.0",
     "@hono/node-server": "2.1.8",
-    "@pirc/crypto": "workspace:*",
     "@pirc/protocol": "workspace:*",
     "@pirc/relay-client": "workspace:*",
     "@simplewebauthn/browser": "14.0.0",

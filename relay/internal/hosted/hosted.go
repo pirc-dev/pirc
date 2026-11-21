@@ -1,12 +1,12 @@
 // Package hosted is the relay's hosted mode (docs/e2e.md; docs/design.md,
-// step 14, stage 2): many accounts, each a device list its own clients
-// sign, which the relay checks and admits keys by but cannot change.
+// step 14): many accounts, each with its members, the device keys the
+// relay admits and the role of each. Signing up makes an account with the
+// signing-up phone as its one client.
 // It speaks v1alpha2 only; a relay started in this mode serves no
 // v1alpha1 at all, and the self-hosted mode (package server) knows nothing
 // of it.
 //
-// What it routes it cannot read: announcements and routed frames are
-// encrypted between a session and its account's clients, and the relay
+// It passes announcements, routed frames and join steps on unread, and
 // keeps no label of any device.
 package hosted
 
@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,7 +27,6 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/proto"
 
-	"pirc.dev/relay/internal/e2e"
 	pb1 "pirc.dev/relay/internal/pb/pirc/v1alpha1"
 	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 	"pirc.dev/relay/internal/proxy"
@@ -34,6 +34,18 @@ import (
 
 // AuthContext is the login signature's context (relay.proto, Auth).
 const AuthContext = "pirc-auth-v1alpha2"
+
+// framed is how the login and attestation strings are built: the
+// context's ASCII, a NUL byte, then each part prefixed by its length as an
+// unsigned LEB128.
+func framed(context string, parts ...[]byte) []byte {
+	out := append([]byte(context), 0)
+	for _, p := range parts {
+		out = binary.AppendUvarint(out, uint64(len(p)))
+		out = append(out, p...)
+	}
+	return out
+}
 
 // Path is where the hosted relay serves its WebSocket.
 const Path = "/v1alpha2"
@@ -43,24 +55,16 @@ const (
 	MaxIDBytes = 128
 	// The largest frame accepted before Welcome.
 	loginReadLimit = 4096
-	// A bundle with 256 devices is about 70 KB.
-	maxBundleBytes = 128 << 10
-	// Bundles one connection may have stored at once.
-	maxBundlesPerConn = 16
-	// A join step: the approval carries a version of up to 256 devices.
-	maxJoinStepBytes = 128 << 10
-	maxJoinSteps     = 8
-	// A label-key wrap: HPKE's 32-byte key and a 48-byte ciphertext.
-	maxWrapBytes = 256
-	// A label record: 256 labels of 128 bytes, sealed.
-	maxLabelsBytes     = 64 << 10
+	// A join step, and the steps one join may pass on.
+	maxJoinStepBytes   = 128 << 10
+	maxJoinSteps       = 8
 	MaxPushHandleBytes = 4096
 )
 
 type Config struct {
 	Store *Store
 	// The relay's origin as devices reach it, such as wss://relay.example:
-	// every login signs it (docs/e2e.md, section 2).
+	// every login signs it (relay.proto, Auth).
 	Origin string
 	// Checks a phone's attestation and subscription; without one, nobody
 	// can sign up, and a phone's attestation in a join is refused.
@@ -78,7 +82,7 @@ type Config struct {
 	MaxPendingLoginsPerAddr int
 	MaxAnnounceBytes        int
 	MaxSessionsPerConn      int
-	// How long a join code is good for (docs/e2e.md, section 5).
+	// How long a join's wait lasts.
 	JoinTimeout time.Duration
 	// How long an account stays locked before it is deleted (lock.go).
 	LockedFor time.Duration
@@ -271,14 +275,13 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 func shortKey(k []byte) string { return fmt.Sprintf("%x", k[:min(len(k), 6)]) }
 
 // account is an account with at least one connection, as the relay has it
-// in memory: its latest version, and its live sessions and bundles.
+// in memory: its connections and live sessions. Its members are read from
+// the store.
 type account struct {
-	id     []byte
-	latest *e2e.Version
-	conns  map[*conn]struct{}
-	// Live sessions, and the bundles of the processes that serve them.
+	id    []byte
+	conns map[*conn]struct{}
+	// Live sessions.
 	sessions    map[sessionID]*session
-	bundles     map[string]*bundle
 	subscribers map[*conn]struct{}
 	// Clients watching Devices.
 	watchers map[*conn]struct{}
@@ -299,37 +302,19 @@ func (s *Server) loadLocked(id []byte) (*account, error) {
 	if a := s.accounts[string(id)]; a != nil {
 		return a, nil
 	}
-	obj, err := s.store.Latest(id)
-	if err != nil || obj == nil {
-		return nil, err
-	}
-	v, err := openStored(id, obj)
-	if err != nil {
+	ok, err := s.store.HasAccount(id)
+	if err != nil || !ok {
 		return nil, err
 	}
 	a := &account{
 		id:          id,
-		latest:      v,
 		conns:       map[*conn]struct{}{},
 		sessions:    map[sessionID]*session{},
-		bundles:     map[string]*bundle{},
 		subscribers: map[*conn]struct{}{},
 		watchers:    map[*conn]struct{}{},
 	}
 	s.accounts[string(id)] = a
 	return a, nil
-}
-
-// openStored opens a version the relay stored after checking it.
-func openStored(id []byte, obj *pb.SignedObject) (*e2e.Version, error) {
-	body, err := e2e.OpenList(nil, obj)
-	if err != nil {
-		body, err = e2e.OpenList(id, obj)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("stored version does not open: %w", err)
-	}
-	return &e2e.Version{Body: body, Hash: e2e.Hash(obj), Object: obj}, nil
 }
 
 // unloadLocked forgets an account no connection has. Under s.mu.
@@ -364,24 +349,10 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	if len(id) != 0 && len(id) != 32 {
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INVALID, "account ID must be 32 bytes")
 	}
-	errNotListed := "key not on the account's list"
-	// Decide before the challenge whether this key may log in at all.
-	if len(id) > 0 {
-		s.mu.Lock()
-		a, err := s.loadLocked(id)
-		listed := a != nil && e2e.Device(a.latest.Body, pub) != nil
-		if a != nil {
-			s.unloadLocked(a)
-		}
-		s.mu.Unlock()
-		if err != nil {
-			s.log.Error("store unreadable", "err", err)
-			return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
-		}
-		if !listed {
-			return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotListed)
-		}
-	}
+	// Membership is decided only after the challenge: an account's ID is
+	// its first key's SHA-256, so an answer before it would tell anyone
+	// holding a public key whether that key has an account.
+	errNotMember := "key not a member of the account"
 
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
@@ -396,13 +367,12 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	if auth == nil {
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "expected Auth")
 	}
-	if !e2e.Verify(pub, e2e.Framed(AuthContext, id, []byte(s.cfg.Origin), nonce), auth.GetSignature()) {
+	if !ed25519.Verify(pub, framed(AuthContext, id, []byte(s.cfg.Origin), nonce), auth.GetSignature()) {
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, "bad signature")
 	}
 
-	// Admit under the lock that takes versions: a key removed during the
-	// challenge is refused here, or disconnected by the version that
-	// removed it.
+	// Admit under the lock that deleting the account takes: an account
+	// deleted during the challenge has no members left.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c.key = pub
@@ -415,31 +385,31 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 		}}})
 		return nil
 	}
+	role, err := s.store.Role(id, pub)
+	if err != nil {
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+	}
+	if role == pb.DeviceRole_DEVICE_ROLE_UNSPECIFIED {
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotMember)
+	}
 	a, err := s.loadLocked(id)
 	if err != nil {
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
 	}
-	d := (*pb.Device)(nil)
-	if a != nil {
-		d = e2e.Device(a.latest.Body, pub)
-	}
-	if d == nil {
-		if a != nil {
-			s.unloadLocked(a)
-		}
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotListed)
+	if a == nil {
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotMember)
 	}
 	locked, _, err := s.store.Locked(id)
 	if err != nil {
 		s.unloadLocked(a)
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
 	}
-	if locked && d.GetRole() != pb.DeviceRole_DEVICE_ROLE_CLIENT {
+	if locked && role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
 		s.unloadLocked(a)
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errLocked)
 	}
 	// What a client is told it pays with: unread, it is not told none.
-	subs, err := s.subscriptionsFor(a, d.GetRole())
+	subs, err := s.subscriptionsFor(a, role)
 	if err != nil {
 		s.unloadLocked(a)
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
@@ -448,12 +418,11 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 		s.admitLockedAccountLocked(c, a, subs)
 		return nil
 	}
-	s.admitLocked(c, a, d.GetRole(), subs)
+	s.admitLocked(c, a, role, subs)
 	return nil
 }
 
-// admitLocked logs c in to account a: Welcome, then every current pre-key,
-// and to a client or read-only key the label state. Under s.mu.
+// admitLocked logs c in to account a, with Welcome. Under s.mu.
 func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole, subs []*pb.AccountSubscription) {
 	c.acct, c.role = a, role
 	s.conns[c] = struct{}{}
@@ -465,13 +434,8 @@ func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole, subs []*pb
 		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		Role:            role,
-		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
 		Subscriptions:   subs,
 	}}})
-	c.queue(&pb.Frame{Body: &pb.Frame_PreKeys{PreKeys: &pb.PreKeys{PreKeys: s.currentPreKeysLocked(a), All: true}}})
-	if role != pb.DeviceRole_DEVICE_ROLE_HOST {
-		s.sendLabelStateLocked(c)
-	}
 	s.pushDevicesLocked(a)
 }
 
@@ -499,8 +463,7 @@ func (s *Server) disconnect(c *conn) {
 		}
 		delete(se.attached, c)
 	}
-	s.pruneBundlesLocked(a)
-	if !a.deleted && e2e.Device(a.latest.Body, c.key) != nil {
+	if !a.deleted {
 		if err := s.store.Seen(a.id, c.key, s.cfg.Now().UnixMilli()); err != nil {
 			s.log.Error("cannot record a device as seen", "err", err)
 		}
@@ -596,10 +559,6 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 			return e.withID(id)
 		}
 		s.done(c, id)
-		if c.revokeAfterAnswer {
-			c.revokeAfterAnswer = false
-			c.closeAfterFlush(websocket.StatusPolicyViolation, "key revoked")
-		}
 		return nil
 	}
 	only := func(ok bool, refusal string, run func() *frameError) *frameError {
@@ -613,8 +572,6 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 		return only(host, "only hosts announce sessions", func() *frameError { return s.announce(c, b.SessionAnnounce) })
 	case *pb.Frame_SessionEnd:
 		return only(host, "only hosts end sessions", func() *frameError { return s.end(c, b.SessionEnd.GetSession()) })
-	case *pb.Frame_PublishBundle:
-		return request(host, "only hosts publish bundles", b.PublishBundle.GetRequestId(), func() *frameError { return s.publishBundle(c, b.PublishBundle.GetBundle()) })
 	case *pb.Frame_SubscribeSessions:
 		return only(client || readOnly, "only clients subscribe", func() *frameError { s.subscribe(c); return nil })
 	case *pb.Frame_Attach:
@@ -631,18 +588,6 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 			return s.routeFromClient(c, b.Routed)
 		}
 		return denied("a read-only key sends nothing to sessions")
-	case *pb.Frame_PublishVersion:
-		return request(client, "only clients publish versions", b.PublishVersion.GetRequestId(), func() *frameError { return s.publishVersion(c, b.PublishVersion.GetVersion()) })
-	case *pb.Frame_PublishWithdrawal:
-		return request(client, "only clients publish withdrawals", b.PublishWithdrawal.GetRequestId(), func() *frameError { return s.publishWithdrawal(c, b.PublishWithdrawal.GetWithdrawal()) })
-	case *pb.Frame_GetVersions:
-		return s.getVersions(c, b.GetVersions).withID(b.GetVersions.GetRequestId())
-	case *pb.Frame_PublishPreKey:
-		return request(client || readOnly, "only clients and read-only keys publish pre-keys", b.PublishPreKey.GetRequestId(), func() *frameError { return s.publishPreKey(c, b.PublishPreKey.GetPreKey()) })
-	case *pb.Frame_PublishLabels:
-		return request(client, "only clients publish labels", b.PublishLabels.GetRequestId(), func() *frameError { return s.publishLabels(c, b.PublishLabels.GetLabels()) })
-	case *pb.Frame_PublishLabelKeyWraps:
-		return request(client, "only clients publish label-key wraps", b.PublishLabelKeyWraps.GetRequestId(), func() *frameError { return s.publishWraps(c, b.PublishLabelKeyWraps.GetWraps()) })
 	case *pb.Frame_RegisterPush:
 		return request(client, "only clients register for push", b.RegisterPush.GetRequestId(), func() *frameError { return s.setPush(c, b.RegisterPush.GetHandle()) })
 	case *pb.Frame_UnregisterPush:

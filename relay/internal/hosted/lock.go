@@ -30,7 +30,6 @@ func (s *Server) admitLockedAccountLocked(c *conn, a *account, subs []*pb.Accoun
 		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		Role:            pb.DeviceRole_DEVICE_ROLE_CLIENT,
-		ListVersion:     &pb.VersionRef{Number: a.latest.Body.GetNumber(), Hash: a.latest.Hash},
 		Locked:          true,
 		Subscriptions:   subs,
 	}}})

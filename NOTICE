@@ -4,7 +4,7 @@ Copyright (c) 2026 Justino Ltd
 PiRC is open source, under three licences by part:
 
   - MIT (LICENSE): the pi extension (extension/), the code it shares
-    with clients (proto/, protocol/, crypto/, relay-client/, cases/), the push
+    with clients (proto/, protocol/, relay-client/, cases/), the push
     gateway (relay/cmd/pirc-gateway, relay/internal/gateway), and the
     rest of the repository.
   - AGPL-3.0 only: the relay (relay/cmd/pirc-relay, relay/internal/server,
@@ -21,29 +21,7 @@ Code adapted from other projects
 Anything adapted keeps its project's copyright notice and is listed here
 and in docs/design.md, section 11, with the upstream commit it came from.
 
-  - third_party/dart-cryptography/: the Dart package cryptography 2.9.0, as
-    published on pub.dev (https://github.com/dint-dev/cryptography),
-    Copyright 2019-2020 Gohilla. Apache-2.0. Two lines changed, to fix
-    Ed25519's point comparison (README.pirc.md and equals-y.patch there).
-    The mobile app uses it in place of the published package.
-
-Test vectors from other projects
---------------------------------
-
-cases/e2e/ holds test data from elsewhere, in no release:
-
-  - ed25519.json: the 12 vectors of ed25519-speccheck, commit
-    65519336fda78a3d016e947df6d82848aca0c9da
-    (https://github.com/novifinancial/ed25519-speccheck), Copyright (c)
-    Facebook, Inc. and its affiliates. Apache-2.0:
-    third_party/ed25519-speccheck/
-  - hpke.json: one vector of the CFRG's HPKE test-vectors.json, commit
-    b1f7cb0cdeab6906c61b3d6574e8bdfdbe1cd3fb
-    (https://github.com/cfrg/draft-irtf-cfrg-hpke), published with
-    RFC 9180.
-  - cpace.json: the test vectors of draft-irtf-cfrg-cpace-21, appendix B.1,
-    code components of an IETF document under the Revised BSD License
-    (IETF Trust Legal Provisions, section 4).
+Nothing at present.
 
 Third-party code in PiRC's releases
 -----------------------------------
@@ -88,9 +66,8 @@ Geist, Geist Mono and IBM Plex Sans, are under the SIL Open Font License
 1.1 and are listed there with it.
 
 The mobile app (app/): its Dart and Flutter packages, among them image,
-re_highlight, mobile_scanner, qr and cryptography (from
-third_party/dart-cryptography/, above), and Flutter's engine and framework,
-each with its licence in full, are listed in the NOTICES file that
+re_highlight, mobile_scanner, qr and cryptography, and Flutter's engine
+and framework, each with its licence in full, are listed in the NOTICES file that
 Flutter's build writes from the packages themselves and ships inside every
 build of the app (flutter_assets/NOTICES.Z, read by the framework's
 LicenseRegistry). The Android libraries Gradle adds (AndroidX, Firebase

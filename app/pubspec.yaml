@@ -49,12 +49,6 @@ dependencies:
   image: ^4.3.0
   qr: ^4.0.1
 
-# Ed25519's point comparison fixed (third_party/dart-cryptography/README.pirc.md),
-# until upstream takes it.
-dependency_overrides:
-  cryptography:
-    path: ../third_party/dart-cryptography
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

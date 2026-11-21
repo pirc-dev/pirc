@@ -10,9 +10,6 @@ changes the cases, and every client is made to pass them again.
   frames sent, view events, replies and state that must follow.
 - `functions/`: the client logic's pure functions, arguments in, result
   out.
-- `e2e/`: the hosted relay's cryptography (`docs/e2e.md`), which the
-  relay's Go, `crypto/`'s TypeScript, the app's Dart and the notification
-  extension's Swift must each decide alike (below).
 - `notices/`: notifications, in the same form as `functions/`: which
   sessions have a notice not yet shown, and the title and body written
   from it (`web/core/notices.ts`). The iOS notification extension's Swift
@@ -62,31 +59,6 @@ check did not see.
 - Events, snapshots and chats are the view's JSON (`web/core/view.ts`),
   with absent fields left out.
 
-### Hosted exchanges
-
-`exchanges/hosted/` holds a hosted account's client (`web/core/hosted`,
-`docs/e2e.md`, section 4): the phone of `e2e/objects.json`, with its
-pre-key and its chain, reading what hosts send and sealing what it asks.
-A file is `{"about", "fixture", "steps"}`. The fixture names the device
-(`me`), the versions of its list (`list`, from `objects.json`'s objects),
-the devices' labels by key, and the ephemeral keys its envelopes are sealed
-with, in order. Each step is one of:
-
-```
-{"now": "<ms>"}               the clock, from objects.json's now_ms
-{"in": <v1alpha2 frame>}      a frame arrives from the relay
-{"send": <v1alpha1 frame>}    web/core's Client sends a frame
-{"out": [<v1alpha1 frame>...]}   the frames given to the Client since the last "out", opened
-{"sent": [<v1alpha2 frame>...]}  the frames sent to the relay since the last "sent", sealed
-```
-
-Frames are Protocol Buffers' JSON form, bytes in base64, as the relay
-sends them; sealed payloads are the exact bytes, which a client makes the
-same from the same keys (Ed25519 and AES-GCM are deterministic, and the
-envelopes' HPKE ephemeral keys are given). `web/test/hosted-exchange.ts`
-builds the files from `objects.json` and plays them; its test checks both,
-and `--record` writes them again.
-
 ## Functions
 
 A file is `{"about": "...", "cases": [{"fn", "about", "args", "is"}]}`:
@@ -130,30 +102,3 @@ Positions in a text, and lengths cut to, count UTF-16 code units, as both
 JavaScript's and Dart's strings do. Sessions equal in time and window are
 ordered by title in the platform's collation (`localeCompare`), which may
 differ between languages; no case depends on it.
-
-## End-to-end encryption
-
-`e2e/` holds vectors, not exchanges:
-
-- `ed25519.json`: 33 signatures and whether each is valid under PiRC's
-  rule (`docs/e2e.md`, section 2): the byte checks, then the cofactorless
-  equation. Every verifier must decide all of them as `valid` says.
-- `hpke.json`: the CFRG's vector for HPKE's base mode with DHKEM(X25519,
-  HKDF-SHA256), HKDF-SHA256 and AES-256-GCM.
-- `cpace.json`: CPACE-X25519-SHA512's vectors from draft 21, and the
-  X25519 inputs that must end an exchange.
-- `objects.json`: every signed object of the protocol from fixed seeds
-  (each body as Protocol Buffers' JSON and as the bytes signed), what the
-  list's checks decide, a bundle and what each device unwraps, frames that
-  open only where they were sealed, an envelope, labels and a whole join.
-  A runner encodes each body from its JSON and must get the same bytes,
-  verifies each signature, and decides each check alike; a randomized
-  signer (CryptoKit's) need not reproduce the signatures.
-
-`objects.json` is written by `crypto/test/record.ts` from
-`crypto/test/objects.ts`, and `crypto/test/objects.test.ts` fails if the
-file and the code differ:
-
-```sh
-node --experimental-transform-types --no-warnings crypto/test/record.ts
-```

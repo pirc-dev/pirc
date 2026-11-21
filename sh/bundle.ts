@@ -40,18 +40,7 @@ const result = await build({
   // pi supplies its own packages to extensions; the extension imports only
   // their types, so nothing of pi ends up in the bundle either way.
   external: ["@earendil-works/*"],
-  // The hosted relay's code stays out of releases until it ships
-  // (docs/design.md, step 14; extension/src/hosted/enabled.ts): switched
-  // off, and its modules, which only dynamic imports behind the switch
-  // reach, left empty.
-  define: { PIRC_VERSION: JSON.stringify(version), ...(what === "extension" && { PIRC_HOSTED: "false" }) },
-  plugins: what === "extension" ? [{
-    name: "no-hosted",
-    setup(b) {
-      b.onResolve({ filter: /(^@pirc\/relay-client\/hosted|\/hosted\/(anchor|join|transport)\.ts$)/ }, (a) => ({ path: a.path, namespace: "no-hosted" }));
-      b.onLoad({ filter: /.*/, namespace: "no-hosted" }, () => ({ contents: "export {};", loader: "js" }));
-    },
-  }] : [],
+  define: { PIRC_VERSION: JSON.stringify(version) },
   // ws is CommonJS and require()s Node's modules, which esbuild's ES output
   // cannot do on its own: without this the bundle throws on load. Its
   // optional native modules (bufferutil, utf-8-validate) are required inside

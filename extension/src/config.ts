@@ -69,17 +69,11 @@ export function saveRelay(relay: string): void {
   write({ ...f, relay });
 }
 
-// The value /pirc join writes as the relay, which every release before
-// the hosted relay refuses before it opens a socket, as it refuses anything
-// but ws: and wss: (docs/e2e.md, section 8). The hosted relay's address is
-// in the anchor only.
+// The relay host.json holds on a computer that joined a hosted account,
+// and keeps after it left (host.ts reports it as such): every
+// release before the hosted relay refuses it before it opens a socket, as
+// it refuses anything but ws: and wss: (docs/e2e.md, section 9).
 export const HOSTED_MARKER = "pirc-e2e:anchor";
-
-// Forgets the relay: /pirc leave.
-export function clearRelay(): void {
-  const { relay: _, removed: __, ...f } = readFile(configPath());
-  write(f);
-}
 
 // Records that the relay removed this host.
 export function saveRemoved(at: Date): void {

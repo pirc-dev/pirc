@@ -53,8 +53,7 @@ enum ErrorCode {
   // it: a host that logged in without a registration token (docs/design.md,
   // 5.3). Retry later; the login succeeds once it is approved.
   ERROR_CODE_APPROVAL_PENDING = 14;
-  // Another change got there first: on a hosted relay (v1alpha2), another
-  // list version with the same number.
+  // Another change got there first.
   ERROR_CODE_CONFLICT = 15;
 }
 

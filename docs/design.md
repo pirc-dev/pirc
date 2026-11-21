@@ -817,14 +817,13 @@ Message groups:
 - **Limits**: a maximum frame size; images travel inline.
 
 **`v1alpha2`, the hosted relay's** (named 2026-11-18, for `docs/e2e.md`):
-`proto/pirc/v1alpha2`, with the relay's frames in `relay.proto` and what
-devices sign and seal for each other in `e2e.proto`. `session.proto`
+`proto/pirc/v1alpha2`, with the relay's frames in `relay.proto`; what
+devices sign and seal for each other gets a file of its own with step 14,
+stage 5's part 3. `session.proto`
 stays `v1alpha1`: what changes is how its bytes travel, inside each
 client's Noise channel. The registration frames of `v1alpha1`
 (`ApproveHost`, `RenameKey`, `RemoveKey`, `IssueToken`, `RegisterReadKey`)
 have no counterpart; the list, the join and sign-up take their place.
-`e2e.proto` is being rewritten for the design of 2026-11-21 (step 14,
-stage 5).
 A self-hosted relay speaks only `v1alpha1`, a hosted one only
 `v1alpha2`. Until the first public release of the hosted relay (step 14,
 stage 7), `v1alpha2` may change incompatibly, as `v1alpha1` may.
@@ -1269,14 +1268,12 @@ Anything adapted keeps Remote Pi's MIT copyright notice ("Copyright (c) 2026
 Jacob Moura") and is listed here and in a `NOTICE` file, with the upstream
 commit it came from.
 
-| From | What | Upstream commit | Where in PiRC |
-|---|---|---|---|
-| dint-dev/cryptography | The Dart package `cryptography`, with Ed25519's point comparison fixed (two lines) | 2.9.0, as published on pub.dev | `third_party/dart-cryptography/`, used by the app through `dependency_overrides` |
-
-Test data from elsewhere, in `cases/e2e/` and in no release (2026-11-18),
-listed in `NOTICE`: the 12 vectors of ed25519-speccheck (Apache-2.0, its
-licence in `third_party/ed25519-speccheck/`), one vector of the CFRG's HPKE
-test vectors, and CPace's draft-21 vectors.
+Nothing is adapted at present. The patched copy of the Dart package
+`cryptography` (`third_party/dart-cryptography/`) and the test vectors in
+`cases/e2e/` (ed25519-speccheck's, the CFRG's HPKE vector and CPace's
+draft-21 vectors) went with the hosted relay's first cryptography
+(step 14, stage 5); the app uses `cryptography` 2.9.0 as published on
+pub.dev.
 
 ## 12. Plan
 
@@ -2561,6 +2558,19 @@ Each step ends with something that can be seen working.
          (`e2e.md`, section 3).
        D7 (a join cut off) and D8 (the label key) went with the design
        they belonged to.
+
+       Part 2b done 2026-11-21. Sign-up carries no list: the account's ID
+       is the SHA-256 of the signing-up phone's key, which becomes its one
+       member, a client, in the members table; nothing else adds members
+       until part 5. The login challenge is verified by Go's
+       `crypto/ed25519`. `/pirc join` and `/pirc leave` are gone until
+       part 6. What a release before the hosted relay does with
+       `host.json`'s `pirc-e2e:` value, and answers kept across a
+       `/reload` from it and back, are checked by
+       `extension/test/old-code.ts`.
+       The test relay's `hosted.db` keeps the old tables and accounts,
+       which no key can log in to; it is wiped when part 5's relay is
+       deployed there.
 
     6. **Running it**: the abuse guards (caps, the sign-up switch and
        invite codes); the relay's own domain; the shared server (decision

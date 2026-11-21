@@ -1,4 +1,4 @@
-// App Attest for the hosted relay (docs/e2e.md, section 6; docs/design.md,
+// App Attest for the hosted relay (docs/e2e.md, section 7; docs/design.md,
 // step 14), over 'dev.pirc.app/attest': a new key attested for what the
 // relay's login binds, whose SHA-256 is the clientDataHash. A key attests
 // once, so each sign-up or join makes its own.
