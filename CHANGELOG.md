@@ -6,6 +6,15 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## 0.3.13 (2026-11-21)
+
+- New agent works when pi runs in herdr. It failed every time with
+  "write EPIPE": herdr answers one request per connection, and the
+  extension asked its second on the first. The session list now also
+  shows herdr's workspace and tab names, which it never did.
+- The web app's default look is Native, the phone apps' own, first in
+  Settings → Look; a browser that chose another look keeps it.
+
 ## 0.3.12 (2026-11-18)
 
 - A phone can leave a relay: the relay now takes a client's own key off
