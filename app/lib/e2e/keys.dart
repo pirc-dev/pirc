@@ -13,6 +13,7 @@ import '../gen/pirc/v1alpha2/relay.pbenum.dart';
 import 'bytes.dart';
 import 'hpke.dart' as hpke;
 import 'list.dart';
+import 'utf8_check.dart';
 
 typedef SendingKeys = ({Uint8List announcement, Uint8List conversation});
 
@@ -168,7 +169,8 @@ Future<Labels?> openLabels(List<int> labelKey, List<int> accountId, LabelKeyRef 
   final plain = await hpke.aesOpen(labelKey, sealed.sublist(0, 12), _labelsAad(accountId, ref, counter), sealed.sublist(12));
   if (plain == null) return null;
   try {
-    return Labels.fromBuffer(plain);
+    final l = Labels.fromBuffer(plain);
+    return stringsAreUtf8(l.info_, plain) ? l : null;
   } catch (_) {
     return null;
   }

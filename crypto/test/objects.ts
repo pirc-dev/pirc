@@ -272,6 +272,40 @@ export async function build() {
     ),
   };
 
+  // --- refused whatever its signature: a string that is not UTF-8 ---
+  // The bundle's body with its instance ID's last two bytes made 0xff 0xfe,
+  // the same length, then signed: every decoder must refuse it (Go's and
+  // TypeScript's do as they decode; the Dart and the Swift check).
+  const okBody = toBinary(BundleBodySchema, fromBinary(BundleBodySchema, bundle.body));
+  const id = utf8(session.instanceId);
+  const idAt = okBody.findIndex((_, i) => id.every((b, j) => okBody[i + j] === b));
+  const badBody = okBody.slice();
+  badBody[idAt + id.length - 2] = 0xff;
+  badBody[idAt + id.length - 1] = 0xfe;
+  const laptop = devs.laptop.signer;
+  const notUtf8: SignedObject = {
+    $typeName: "pirc.v1alpha2.SignedObject",
+    body: badBody,
+    signer: laptop.publicKey,
+    signature: await laptop.sign(framed("pirc-e2e-v1 bundle", account, badBody)),
+  };
+  // The same, its instance ID's key (field 2, bytes, 0x12) written as a
+  // five-byte varint over 32 bits: Go's and TypeScript's decoders refuse
+  // the key, Dart's keeps its low 32 bits and reads the instance ID, which
+  // its check must not take for another field and skip.
+  if (badBody[idAt - 2] !== 0x12) throw new Error("the instance ID's key is not where it was");
+  const longKeyBody = new Uint8Array([...badBody.subarray(0, idAt - 2), 0x92, 0x80, 0x80, 0x80, 0x10, ...badBody.subarray(idAt - 1)]);
+  const longKey: SignedObject = {
+    $typeName: "pirc.v1alpha2.SignedObject",
+    body: longKeyBody,
+    signer: laptop.publicKey,
+    signature: await laptop.sign(framed("pirc-e2e-v1 bundle", account, longKeyBody)),
+  };
+  out.refused = [
+    { about: "a bundle whose instance ID is not valid UTF-8, signed by its host", kind: "bundle", account_id: hex(account), encoded: hex(encode(notUtf8)), why: "a string that is not valid UTF-8" },
+    { about: "the same, its instance ID's key written as a varint over 32 bits", kind: "bundle", account_id: hex(account), encoded: hex(encode(longKey)), why: "a field key over 32 bits, and a string that is not valid UTF-8" },
+  ];
+
   // --- frames ---
   const sessionJson = toJson(SessionRefSchema, session);
   const announcement = await obj("announcement", "announcement", account, "laptop", {

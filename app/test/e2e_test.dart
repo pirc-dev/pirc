@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:protobuf/protobuf.dart' show PbFieldType;
 
 import 'package:pirc/e2e/bytes.dart';
 import 'package:pirc/e2e/cpace.dart' as cp;
@@ -19,6 +20,7 @@ import 'package:pirc/e2e/join.dart' as join;
 import 'package:pirc/e2e/keys.dart' as keys;
 import 'package:pirc/e2e/list.dart' as list;
 import 'package:pirc/e2e/objects.dart';
+import 'package:pirc/e2e/utf8_check.dart';
 import 'package:pirc/gen/pirc/v1alpha1/common.pb.dart';
 import 'package:pirc/gen/pirc/v1alpha2/e2e.pb.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pbenum.dart';
@@ -120,6 +122,63 @@ void main() {
 
     Future<list.Version> v3() async =>
         list.checkNext(account, await list.checkNext(account, await list.checkFirst(obj('v1')), obj('v2')), obj('v3'));
+
+    test('every object in refused is refused, though its signature checks', () async {
+      final refused = file['refused'] as List;
+      expect(refused, isNotEmpty);
+      for (final r in refused.cast<Json>()) {
+        final o = decode(unhex(r['encoded']));
+        final acct = unhex(r['account_id']);
+        expect(await ed25519.verify(o.signer, framed('pirc-e2e-v1 ${r['kind']}', [acct, o.body]), o.signature), isTrue, reason: r['about']);
+        final kind = {'bundle': Kind.bundle}[r['kind']]!;
+        // Dart's protobuf alone takes it, with U+FFFD in place of the bytes.
+        expect(BundleBody.fromBuffer(o.body).instanceId, contains("\ufffd"));
+        expect(await open(kind, acct, o), isNull, reason: r['about']);
+      }
+    });
+
+    test('the UTF-8 check refuses wire bytes no decoder takes, and does not crash on them', () {
+      final named = JoinDeviceBody(name: 'ab').writeToBuffer();
+      // The name's key, 0x22, as ten bytes; the tenth holding bit 63, or more.
+      final key63 = [0xa2, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01];
+      expect(stringsAreUtf8(JoinDeviceBody().info_, [...key63, 0x02, 0x61, 0x62]), isFalse, reason: 'a key with bit 63');
+      final key64 = [...key63.sublist(0, 9), 0x02];
+      expect(stringsAreUtf8(JoinDeviceBody().info_, [...key64, 0x02, 0x61, 0x62]), isFalse, reason: 'a key over 64 bits');
+      final eleven = [0xa2, for (var i = 0; i < 9; i++) 0x80, 0x00];
+      expect(stringsAreUtf8(JoinDeviceBody().info_, [...eleven, 0x02, 0x61, 0x62]), isFalse, reason: 'an eleven-byte varint');
+      // The name's length as 2^63 - 1, and as 2^63 + 2: refused, not read.
+      final big = [0x22, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f, 0x61, 0x62];
+      expect(stringsAreUtf8(JoinDeviceBody().info_, big), isFalse, reason: 'a length of 2^63 - 1');
+      final bit63 = [0x22, 0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01, 0x61, 0x62];
+      expect(stringsAreUtf8(JoinDeviceBody().info_, bit63), isFalse, reason: 'a length with bit 63');
+      expect(stringsAreUtf8(JoinDeviceBody().info_, named), isTrue);
+    });
+
+    test('JoinDevice holds no string: its signed body is what objects.open checks', () {
+      for (final f in JoinDevice().info_.fieldInfo.values) {
+        expect(PbFieldType.baseType(f.type), isNot(PbFieldType.STRING_BIT), reason: f.name);
+      }
+    });
+
+    test("the UTF-8 check: nested messages' strings checked, a valid U+FFFD taken", () {
+      final good = JoinDevice(device: SignedObject(body: [1])).writeToBuffer();
+      expect(stringsAreUtf8(JoinDevice().info_, good), isTrue);
+      final named = JoinDeviceBody(name: 'caf\u00e9 \ufffd').writeToBuffer();
+      expect(stringsAreUtf8(JoinDeviceBody().info_, named), isTrue);
+      final bad = Uint8List.fromList(named)..[named.length - 1] = 0xff;
+      expect(stringsAreUtf8(JoinDeviceBody().info_, bad), isFalse);
+      // Nested: a JoinResult's approval's approver name.
+      final r = JoinResult(approval: JoinApproval(approverName: 'abcd')).writeToBuffer();
+      final i = r.indexOf(0x64); // 'd'
+      expect(stringsAreUtf8(JoinResult().info_, r), isTrue);
+      expect(stringsAreUtf8(JoinResult().info_, Uint8List.fromList(r)..[i] = 0xc3), isFalse);
+      // An unknown group, field 50, with a nested group and a string in it,
+      // is skipped as the decoders skip it; one never ended is refused.
+      final grouped = [...named, 0x93, 0x03, 0x9b, 0x03, 0x9c, 0x03, 0x0a, 0x01, 0x41, 0x94, 0x03];
+      expect(JoinDeviceBody.fromBuffer(grouped).name, 'caf\u00e9 \ufffd');
+      expect(stringsAreUtf8(JoinDeviceBody().info_, grouped), isTrue);
+      expect(stringsAreUtf8(JoinDeviceBody().info_, [...named, 0x93, 0x03]), isFalse);
+    });
 
     test('framed strings', () {
       for (final f in file['framed'] as List) {

@@ -263,7 +263,7 @@ export class HostedTransport {
     const c = change ?? (await this.anchor.refresh());
     const state = this.anchor.state(this.hostKey, c.forks);
     if (state.kind === "joined") {
-      if (c.taken.length || c.dropped.length) await this.listChanged();
+      if (c.taken.length) await this.listChanged();
       return true;
     }
     this.stop();

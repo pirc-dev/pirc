@@ -11,6 +11,7 @@ import '../gen/pirc/v1alpha2/e2e.pb.dart';
 import 'bytes.dart';
 import 'ed25519.dart' as ed25519;
 import 'hpke.dart' as hpke;
+import 'utf8_check.dart';
 
 // Each kind of signed object: its context, its body, and which field names its signer.
 class Kind<B extends GeneratedMessage> {
@@ -102,6 +103,9 @@ Future<B?> open<B extends GeneratedMessage>(Kind<B> kind, List<int> accountId, S
   } catch (_) {
     return null;
   }
+  // A string that is not valid UTF-8 refuses it, as Go's and TypeScript's
+  // decoders do (cases/e2e, "refused").
+  if (!stringsAreUtf8(body.info_, obj.body)) return null;
   return equal(kind.signerOf(body), obj.signer) ? body : null;
 }
 

@@ -1,6 +1,7 @@
 // What a hosted account's client does with versions it is shown, with no
-// relay: a fork it adopted neither side of blocks it; a withdrawn version
-// that added it is a failed join, which deletes nothing; a removal is
+// relay: a fork it adopted neither side of blocks it, whatever the
+// withdrawals; a withdrawn version that added it moves it nowhere and
+// deletes nothing; a removal is
 // recorded and said before anything is deleted, a mutual one said as
 // such, and one stopped half-way finished at the next open; the caps of
 // 256 hosts and 32 clients (docs/e2e.md, section 3).
@@ -13,7 +14,7 @@ import { test } from "node:test";
 import type { Frame as Frame1 } from "@pirc/protocol";
 import { DeviceRole, DeviceSchema, FrameSchema, type Device, type SignedObject } from "@pirc/protocol/v1alpha2";
 import type { OpenSocket } from "@pirc/relay-client/hosted";
-import { compare, unhex, utf8 } from "@pirc/crypto/bytes";
+import { compare, hex, unhex, utf8 } from "@pirc/crypto/bytes";
 import * as ed25519 from "@pirc/crypto/ed25519";
 import { sha256, x25519FromPrivate } from "@pirc/crypto/hpke";
 import { checkFirst, checkNext, MAX_CLIENTS, MAX_HOSTS, Refused } from "@pirc/crypto/list";
@@ -83,7 +84,7 @@ test("a fork at a version this client adopted neither side of blocks it; one it 
   assert.ok(took.events.some((e) => e.type === "fork"));
 });
 
-test("a version that added this client, withdrawn, is a failed join: nothing is deleted", async () => {
+test("a version that added this client, withdrawn: the client keeps its branch, deletes nothing, and is not told its join failed", async () => {
   const phone = await signer("phone"), tablet = await signer("tablet"), me = await signer("me"), host = await signer("host");
   const first = await v1(phone);
   const account = await hash(first);
@@ -94,8 +95,10 @@ test("a version that added this client, withdrawn, is a failed join: nothing is 
   const won = await next(account, two, 3n, [...d2, dev(DeviceRole.HOST, host, tablet)], tablet);
   const c = await clientOn(me, [first, two, mine]);
   await c.client.takeVersions([won], [await withdrawal(account, phone, mine, won, 3n)]);
-  assert.ok(c.events.some((e) => e.type === "join-failed"));
-  assert.ok(!c.events.some((e) => e.type === "removed-me"));
+  // A device never leaves its branch for a withdrawal (docs/e2e.md, section 3, Forks).
+  assert.equal(hex(c.client.latest.hash), hex(await hash(mine)));
+  assert.ok(!c.events.some((e) => e.type === "join-failed" || e.type === "removed-me"));
+  assert.equal(c.client.blocked, undefined);
   assert.ok(await c.store.get("account"), "nothing deleted");
 });
 
@@ -174,7 +177,7 @@ test("an account holds at most 256 hosts and 32 clients, each client with its re
   assert.equal(roomy.client.room(DeviceRole.CLIENT), true);
 });
 
-test("a fork a withdrawal then explains lifts the block, as opening again does", async () => {
+test("a fork a withdrawal then explains keeps the block: a client that took neither side takes neither, opened again too", async () => {
   const phone = await signer("phone"), tablet = await signer("tablet"), me = await signer("me");
   const first = await v1(phone);
   const account = await hash(first);
@@ -186,10 +189,11 @@ test("a fork a withdrawal then explains lifts the block, as opening again does",
   await c.client.takeVersions([threeA, threeB], []);
   assert.ok(c.client.blocked);
   await c.client.takeVersions([], [await withdrawal(account, tablet, threeB, threeA, 3n)]);
-  assert.equal(c.client.latest.body.number, 3n);
-  assert.equal(c.client.blocked, undefined);
+  // A withdrawal does not choose for it: its signer may be a device removed since.
+  assert.equal(c.client.latest.body.number, 2n);
+  assert.ok(c.client.blocked);
   const reopened = (await HostedClient.open({ origin: "wss://relay.example", open: nowhere, store: c.store, signer: me, name: "me" }))!;
-  assert.equal(reopened.blocked, undefined);
+  assert.ok(reopened.blocked);
 });
 
 test("a blocked client signs no label record, and asks nothing of a host", async () => {
@@ -224,7 +228,7 @@ test("once removed, work queued behind the removal writes nothing back", async (
   assert.equal(await c.store.get("account"), undefined);
 });
 
-test("a failed join stays one when the client is opened again", async () => {
+test("a client whose adding version was withdrawn keeps its branch when opened again", async () => {
   const phone = await signer("phone"), tablet = await signer("tablet"), me = await signer("me"), host = await signer("host");
   const first = await v1(phone);
   const account = await hash(first);
@@ -235,7 +239,8 @@ test("a failed join stays one when the client is opened again", async () => {
   const c = await clientOn(me, [first, two, mine]);
   await c.client.takeVersions([won], [await withdrawal(account, phone, mine, won, 3n)]);
   const again = (await HostedClient.open({ origin: "wss://relay.example", open: nowhere, store: c.store, signer: me, name: "me" }))!;
-  assert.match(again.blocked ?? "", /join failed/);
+  assert.equal(hex(again.latest.hash), hex(await hash(mine)));
+  assert.equal(again.blocked, undefined);
 });
 
 test("a session frame behind a version is opened under the list that version makes", async () => {

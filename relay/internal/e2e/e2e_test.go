@@ -72,6 +72,10 @@ type objectsFile struct {
 		Check, Prev, Object, About string
 		Valid                      bool
 	}
+	Refused []struct {
+		About, Kind, Encoded string
+		AccountID            string `json:"account_id"`
+	}
 	Objects map[string]struct {
 		Kind      string
 		AccountID string `json:"account_id"`
@@ -103,6 +107,35 @@ func (f *objectsFile) object(t *testing.T, name string) *pb.SignedObject {
 		t.Fatalf("%s: %v", name, err)
 	}
 	return &obj
+}
+
+// Every object in refused is refused by the relay as it decodes it,
+// though its signature checks.
+func TestRefused(t *testing.T) {
+	f := loadObjects(t)
+	if len(f.Refused) == 0 {
+		t.Fatal("objects.json has no refused objects")
+	}
+	for _, r := range f.Refused {
+		var obj pb.SignedObject
+		if err := proto.Unmarshal(dehex(t, r.Encoded), &obj); err != nil {
+			t.Fatalf("%s: %v", r.About, err)
+		}
+		acct := dehex(t, r.AccountID)
+		if !Verify(obj.Signer, Framed("pirc-e2e-v1 "+r.Kind, acct, obj.Body), obj.Signature) {
+			t.Errorf("%s: the signature does not check", r.About)
+		}
+		var err error
+		switch r.Kind {
+		case "bundle":
+			_, err = OpenBundle(acct, &obj)
+		default:
+			t.Fatalf("%s: no opener for %q", r.About, r.Kind)
+		}
+		if err == nil {
+			t.Errorf("%s: opened", r.About)
+		}
+	}
 }
 
 func TestFramed(t *testing.T) {

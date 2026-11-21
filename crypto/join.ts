@@ -143,6 +143,8 @@ const MAX_NAME_BYTES = 128;
  */
 export class DeviceJoin {
   private channel: Channel | undefined;
+  /** Set by the first answer, whatever comes of it: one try per code. */
+  private answered = false;
   private constructor(
     private readonly ci: Uint8Array,
     private readonly nonce: Uint8Array,
@@ -158,10 +160,17 @@ export class DeviceJoin {
     return { join: new DeviceJoin(ci, nonce, party, me), offer: step({ case: "offer", value: { nonce, share: party.Y } }) };
   }
 
-  /** The client's answer: its share and confirmation. Gives the confirm step. */
+  /**
+   * The client's answer: its share and confirmation. Gives the confirm
+   * step. Only the first is taken (docs/e2e.md, section 5, The code): each
+   * try gives the relay one guess at the code's secret, and a wrong one
+   * leaves nothing to try again.
+   */
   async onAnswer(b: Uint8Array): Promise<Uint8Array> {
+    if (this.answered) throw new JoinFailed("this code was tried already: show a new one");
+    this.answered = true;
     const s = readStep(b);
-    if (s.case !== "answer" || this.channel) throw new JoinFailed("expected the client's answer");
+    if (s.case !== "answer") throw new JoinFailed("expected the client's answer");
     let isk: Uint8Array;
     try {
       isk = (await cp.finish(env, this.party, "initiator", s.value.share, NONE)).isk;

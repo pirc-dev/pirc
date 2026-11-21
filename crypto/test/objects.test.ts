@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { framed, hex, unhex, utf8 } from "../bytes.ts";
+import * as ed25519 from "../ed25519.ts";
 import * as cp from "../cpace.ts";
 import * as hpke from "../hpke.ts";
 import * as join from "../join.ts";
@@ -62,6 +63,15 @@ test("every check decided as the file says", async () => {
     assert.equal(valid, c.valid, c.about);
   }
   assert.equal(hex(V.v1.hash), file.account_id);
+});
+
+test("every object in refused is refused, though its signature checks", async () => {
+  assert.ok(file.refused.length > 0);
+  for (const r of file.refused) {
+    const o = decode(unhex(r.encoded));
+    assert.ok(await ed25519.verify(o.signer, framed(`pirc-e2e-v1 ${r.kind}`, unhex(r.account_id), o.body), o.signature), `${r.about}: its signature checks`);
+    assert.equal(await open(r.kind, unhex(r.account_id), o), null, r.about);
+  }
 });
 
 const dev = (n: string) => file.devices[n];

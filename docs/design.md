@@ -2504,8 +2504,11 @@ Each step ends with something that can be seen working.
          keychain's items, the account, chats, drafts), so that a phone
          stopped half-way finishes when opened; a phone removed by the
          very device it was removing says so (`e2e.md`, section 3); a
-         device whose adding version is withdrawn has had a failed join
-         and deletes nothing.
+         withdrawal moves no device off its branch (decided 2026-11-20,
+         after part 1 of step 1's review: one signed by a removed
+         device could otherwise send devices back to a list it is on),
+         so a device whose adding version the relay shows as lost keeps
+         its branch and deletes nothing.
        - *Face ID* (D6): the settings stay as they are, with the same
          meaning. On a hosted account the main key signs every request,
          so it is held while the app is in the foreground, and only time

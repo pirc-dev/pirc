@@ -190,8 +190,17 @@ must reproduce or accept byte for byte.
   to its default (a whole second's `nanos = 0`), so the app clears those
   first. Bodies are verified as received, so this matters only for
   `cases/`, where every language must make the same bytes. A string that
-  is not valid UTF-8 refuses the object: Go's and TypeScript's decoders
-  refuse it already, and the app's needs a check of its own (stage 5).
+  is not valid UTF-8 refuses the object: Go's, TypeScript's and Swift's
+  decoders refuse it as they decode; Dart's takes it, so the app checks
+  each string's bytes itself (`app/lib/e2e/utf8_check.dart`), and
+  `cases/e2e/objects.json`'s `refused` holds one for every language, and
+  one with a field key written over 32 bits, which Go's and TypeScript's
+  decoders refuse and Dart's would read. Known to differ still, each
+  needing a signer's own key: an enum field given twice, a known value
+  then an unknown one (Dart keeps the first, Go and TypeScript the last);
+  a length written over 32 bits (TypeScript cuts it to 32, Go and Dart
+  refuse); a string starting with a byte-order mark (Dart and TypeScript
+  drop it, Go keeps it). Swift's answers to these three are not tested.
 - The label key is named by the list version that made it (number and
   hash). A label record's labels are AES-256-GCM under it with a random
   nonce, since several clients write under one key.
@@ -267,39 +276,53 @@ withdrawal: the hash of its own N+1, signed, naming the one that won. It
 then signs its change again on top of the winner, if it still applies.
 
 **Forks.** Two versions with the same number and different hashes (of
-their bodies), both validly signed, are a fork. They come about in two
-ways: two clients changing the list at once, which is honest and is
-resolved by a withdrawal; or a dishonest signer, most likely a removed
-device whose key was stolen, signing a version on top of one it was still
-in. The relay can also make the first kind look like the second, by
-showing a dropped version to some devices and holding back its
-withdrawal. So:
+their bodies), both validly signed, are a fork. With an honest relay a
+device never sees one: the relay takes the first version of a number and
+refuses the rest, and the client that lost never adopts its own (Adopting
+a version, above), so no other device ever holds it. A fork shown to a
+device therefore means the relay showed it a version it should not have,
+whether one that lost an honest race or one a dishonest signer made, most
+likely a removed device whose key was stolen, on top of one it was still
+in. This is the guarantee known as fork consistency: a dishonest relay can
+show two groups of devices two histories, but not hide it from a device
+that hears from the other group, since every request and announcement
+carries its sender's list version (Freshness, below). So:
 
-- **A device that took a version and then sees it withdrawn** by its own
-  signer, in favour of the other, moves to the other branch. A withdrawal
-  travels like versions do: from the relay, and in the requests that carry
-  missing versions (Freshness, below).
-- **A client** shown a fork that no withdrawal explains keeps the chain it
-  and the clients it trusts have built: the one with the versions it
-  adopted. It does not stop. It marks the hosts that announce the other
-  branch as needing `/pirc join`. It says that the relay may have caused
-  it, and names the other branch's signer as a suspect only if that device
-  has been removed.
+- **No device ever leaves the branch it follows.** A withdrawal moves no
+  one, however it is signed: it may be signed by a device removed since,
+  taking back an old version of its own, and a device that followed it
+  would go back to a list that device is on. A withdrawal counts only to
+  tell the person that a fork was an honest race: once the version it
+  withdraws and the winner it names are both on the device, and the
+  winner is another device's version of the same number chaining from the
+  same version. It explains only the version it withdraws, and only to a
+  device that version is beside: a device whose own branch holds it is on
+  the side that lost, and its fork stands. A withdrawal of a version not yet seen is kept only from a
+  key some version has as a client, a few per signer and 64 in all. It
+  travels like versions do: from the relay, and in the requests that
+  carry missing versions.
+- **A client** shown a fork keeps the chain it and the clients it trusts
+  have built: the one with the versions it adopted. It does not stop. It
+  says that the relay showed it another branch; unless a withdrawal
+  explains it as an honest race, it marks the hosts that announce the
+  other branch as needing `/pirc join`, and names the other branch's
+  signer as a suspect only if that device has been removed.
 - **A client that adopted neither branch** (one that was away, or has
-  just joined) takes neither: it says so, and is joined again from a
-  client of the person's choosing.
+  just joined) takes neither, a withdrawal or none: it says so, and is
+  joined again from a client of the person's choosing.
 - **A host** shown a fork that no withdrawal explains stops serving, and
   says so at its terminal: it cannot tell which branch is its account's.
   It is joined again with `/pirc join`.
-- **A device added by a version that is then withdrawn**, so that the
-  winning branch lacks it, has not been removed: its join failed. It
-  stops and says so, deletes nothing, and can be joined again. Otherwise
-  a relay that tells the adding client its version lost could make a new
-  device wipe itself.
+- **A device added by a version the relay later shows as lost** stays on
+  its branch and deletes nothing; it may find the relay refusing it, and
+  is joined again.
 
 So the relay, with a stolen key of a removed device, can stop a host until
-the person is at it; without one, only until a withdrawal reaches it.
-Neither can make the person's own clients stop.
+the person is at it, or leave a device on a branch the others are not on
+until it is joined again: a client away since before a change, shown that
+change and another version beside it at once, takes neither and is
+blocked until it is joined again. Neither can put a removed device back
+on the list of a device that has seen its removal.
 
 **Labels.** The relay needs keys and roles to admit and route, but not
 the names. Names are in a label record, outside the list: each device's
@@ -348,16 +371,29 @@ takes a new one only if it chains from it.
 folder of their own, not in `host.json`: the relay's address, the account
 ID, and one file per version they have checked, named by its number and
 hash, and one per withdrawal it has checked, named by the hash withdrawn,
-each created with an exclusive link (the call `relay-client` uses to
-create a key file once), so that a file is never replaced. The anchor is
-the highest version present that is not withdrawn, on the chain from the
-version `/pirc join` set. Two versions with one number, neither
-withdrawn, are a fork, which every process finds by reading the folder.
+its signer and the winner it names, each created with an exclusive link
+(the call `relay-client` uses to create a key file once), so that a file
+is never replaced. It also keeps the host's branch, one file per number
+naming the version the host follows there, written when a process takes
+it; a process reads those first and follows them, so that a new or idle
+process is on the same branch as the others, and the branch only grows
+(Forks, above). A process writes a withdrawal before the versions, and a
+version before its branch file, so that neither another process nor a
+crash leaves a branch file whose version is not there. A process that
+took another version of a number than the file names, or cannot follow a
+branch file past its own latest version, or holds a version beside the
+branch its signer did not withdraw, or two versions from its tip, has a
+fork, and the host stops. A file that does not check yet, such as a
+withdrawal whose signer is in a version not yet read, is read again
+later.
 The folder is never pruned: a version is a few hundred bytes, and an
 account makes a few dozen a year. Every process
 reads the folder before it checks a request's signer and before it signs a
 bundle, and makes new keys at once when it finds a removal there, so that
-no process stays on an older version than another has seen.
+no process stays on an older version than another has seen. A process
+that finds the folder removed, or replaced by another join, stops serving
+and writes nothing more into it; it reads the folder again as a new
+process would.
 
 The anchor is set only by `/pirc join`, typed at the host's terminal
 (section 5). On a host that already has one, `/pirc join` replaces it;
@@ -879,8 +915,8 @@ still:
   that version to hosts while holding it back from the person's other
   clients. The clients see it once a host reports a newer version than
   theirs (section 3, Freshness), and every addition is shown;
-- show a dropped version to some devices and hold back its withdrawal,
-  which stops hosts until a withdrawal reaches them (section 3, Forks);
+- show a lost version to some devices: one shown it first stays on it, a
+  host stops, and each is joined again (section 3, Forks);
 - show a client an older stored announcement on its first look at a
   session, before a question was asked, say; counters catch a rollback
   within a stream, not on the first view. This is withholding by another
@@ -1099,6 +1135,18 @@ its own, is not covered.
   first guesses.
 - **Padding** frames to fixed sizes, and hiding session IDs from the
   relay (section 7).
+- **A fork settled by the devices on both sides.** A device shown a fork
+  could trust only the devices on both branches, which a fork can only
+  narrow, never widen: a removed device stays out, one added on one side
+  only waits to be added again. Every check that asks who is on the list
+  (requests, wraps, names, pre-keys, joins, the notification extension)
+  would ask for that set, and settling the fork would need a version with
+  two parents, a change to the protocol. Until then a device keeps its
+  branch and says so (section 3, Forks).
+- **The withdrawn hashes a version carries.** Each version still lists
+  every withdrawal its signer knows of, and none may be dropped later,
+  though a withdrawal no longer moves any device: a removed device's key,
+  with the relay, can add a few to every later version. They could go.
 - **Moving the hosted relay's domain.** The anchor holds the relay's
   origin and every login signs it, so a move means `/pirc join` at every
   host and every client signing in again. A move signed by the account's

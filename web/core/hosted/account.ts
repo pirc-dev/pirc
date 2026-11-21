@@ -85,19 +85,22 @@ export type AccountEvent =
   // Every addition, shown in every client (docs/e2e.md, section 3).
   | { type: "added"; device: Device; by: Uint8Array }
   | { type: "removed"; device: Device }
-  // A version no withdrawal explains: this client keeps its branch.
+  // A version beside this client's branch, which its signer did not
+  // withdraw: the relay showed it another branch. It keeps its own.
   | { type: "fork"; number: bigint; signer: Uint8Array }
-  // A fork no withdrawal explains, at a version this client adopted
-  // neither side of (docs/e2e.md, section 3, Forks): it changes nothing and
-  // sends nothing until it is joined again.
+  // Two versions from the branch's tip, a side this client never took
+  // (docs/e2e.md, section 3, Forks), withdrawn or not: it changes nothing
+  // and sends nothing until it is joined again.
   | { type: "undecided"; number: bigint }
   // This client was removed by a version it checked: it keeps nothing.
   // `mutual` when the remover is a device this client was removing at the
   // same time: the account may be in that device's hands. `by` is this
   // client's own key when it left.
   | { type: "removed-me"; by: Uint8Array; mutual: boolean }
-  // The version that added this client was withdrawn: its join failed. It
-  // stops, deletes nothing, and can be joined again.
+  // This client is on no version of the branch it follows: a store that
+  // never listed it. It stops, deletes nothing, and can be joined again.
+  // (A withdrawal never takes a version off a branch, so it is never the
+  // cause.)
   | { type: "join-failed" }
   | { type: "labels" };
 
@@ -179,7 +182,7 @@ export class HostedClient {
   private readonly store: Store;
   /** Set when a version this client checked removed it: it does nothing more. */
   private gone = false;
-  /** Set when the version that added this client was withdrawn: its join failed. */
+  /** Set when this client is on no version of its branch: a join that never was. */
   private joinFailed = false;
   /** When this client first saw each removal still lacking its new label key, by version number. */
   private awaitingLabelKey = new Map<bigint, number>();
@@ -302,7 +305,8 @@ export class HostedClient {
     c.preKeys = (await o.store.get<PreKey[]>(S.preKeys)) ?? [];
     c.labelKeys = (await o.store.get<LabelKey[]>(S.labelKeys)) ?? [];
     c.undecidedAt = c.chain.undecided()?.body.number;
-    // Not on its own list, and no removal recorded: a join that failed.
+    // Not on its own list, and no removal recorded: a store that never
+    // listed it, a join that never was.
     c.joinFailed = !c.chain.latest.body.devices.some((d) => equal(d.publicKey, o.signer.publicKey));
     return c;
   }
@@ -359,7 +363,7 @@ export class HostedClient {
    */
   get blocked(): string | undefined {
     if (this.gone) return "this client was removed from the account";
-    if (this.joinFailed) return "the version that added this client was withdrawn: its join failed; join it again";
+    if (this.joinFailed) return "this client is not on its account's list: join it again";
     return this.undecidedAt === undefined ? undefined : `the list forks at version ${this.undecidedAt}, and this client took neither side: join it again from another client`;
   }
 
@@ -529,9 +533,10 @@ export class HostedClient {
     for (const r of change.refused) this.log(`refused: ${r.reason}`);
     const undecided = this.chain.undecided();
     // Forks too: what it was shown must outlive a restart.
-    if (change.taken.length || change.dropped.length || change.forks.length || withdrawals.length) await this.save();
+    if (change.taken.length || change.forks.length || withdrawals.length) await this.save();
     for (const v of change.forks) if (!undecided) this.emit({ type: "fork", number: v.body.number, signer: v.body.signer });
-    // Lifted when a withdrawal explains the fork, as on the next open.
+    // Kept until it is joined again: a withdrawal does not choose a side
+    // for it, its signer may be a device removed since.
     if (undecided && this.undecidedAt === undefined) this.emit({ type: "undecided", number: undecided.body.number });
     this.undecidedAt = undecided?.body.number;
     if (before !== this.chain.latest) await this.listChanged(before);
@@ -544,8 +549,8 @@ export class HostedClient {
     const has = new Map(now.body.devices.map((d) => [hex(d.publicKey), d]));
     if (!has.has(hex(this.publicKey))) {
       this.stop();
-      // Never on the branch it follows now: the version that added it was
-      // withdrawn, and its join failed. Nothing is deleted.
+      // On no version of the branch it follows: a join that never was.
+      // Nothing is deleted.
       if (!this.chain.from(1n).some((v) => v.body.devices.some((d) => equal(d.publicKey, this.publicKey)))) {
         this.joinFailed = true;
         this.emit({ type: "join-failed" });

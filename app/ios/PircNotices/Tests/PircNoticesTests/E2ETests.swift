@@ -83,6 +83,21 @@ struct ObjectsTests {
         Devices(try Pirc_V1alpha2_ListVersionBody(serializedBytes: try obj(version).body))
     }
 
+    /// Every object in refused is refused, though its signature checks:
+    /// SwiftProtobuf refuses a string that is not valid UTF-8 as it decodes.
+    @Test func refused() throws {
+        let refused = file["refused"] as! [[String: String]]
+        #expect(!refused.isEmpty)
+        for r in refused {
+            let o = try Pirc_V1alpha2_SignedObject(serializedBytes: unhex(r["encoded"]!))
+            let acct = unhex(r["account_id"]!)
+            #expect(Ed25519.verify(publicKey: o.signer, message: Objects.signedBytes(r["kind"]!, accountID: acct, body: o.body), signature: o.signature), "\(r["about"]!)")
+            #expect(r["kind"] == "bundle")
+            #expect(throws: (any Error).self) { try Pirc_V1alpha2_BundleBody(serializedBytes: o.body) }
+            #expect(Objects.open(Pirc_V1alpha2_BundleBody.self, accountID: acct, o) == nil, "\(r["about"]!)")
+        }
+    }
+
     @Test func framedStrings() {
         for f in file["framed"] as! [[String: Any]] {
             let got = framed(f["context"] as! String, (f["parts"] as! [String]).map(unhex))
