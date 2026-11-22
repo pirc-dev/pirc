@@ -963,14 +963,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(asked().rename.name, 'docs for 0.2');
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: asked().rename.requestId)));
-    // A new session, asked first, and refused: why, under the header.
+    // Clear conversation (a new session), asked first, and refused: why,
+    // under the header.
     await openActions(tester);
-    await tester.tap(find.text('New session'));
+    await tester.tap(find.text('Clear conversation'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('pi starts an empty conversation'), findsOneWidget);
+    expect(find.textContaining("the action of pi's /new command"), findsOneWidget);
     await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/new_session_light.png'));
     sent.clear();
-    await tester.tap(find.text('New session').last);
+    await tester.tap(find.text('Clear').last);
     await tester.pumpAndSettle();
     expect(asked().hasNewSession(), isTrue);
     await answer(tester, model, SessionMessage(error: Error(requestId: asked().newSession.requestId, code: ErrorCode.ERROR_CODE_PI_FAILED, message: 'another extension cancelled it')));

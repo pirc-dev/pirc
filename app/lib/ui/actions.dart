@@ -146,15 +146,13 @@ class _ActionsState extends State<SessionActions> {
                 _act((r) => SessionMessage(navigateTree: NavigateTree(requestId: r, entryId: x['leafId'] as String, summarize: summarize)), compacts: true, done: 'Switched to the branch $name');
               }),
             _Mode.launch => LaunchSheet(model: widget.model, beside: s, open: widget.open!),
-            _Mode.fresh => _confirm(context, s, 'Start a new session?', [
-                const TextSpan(text: 'pi starts an empty conversation'),
-                if (windowOf(s) != null) ...[const TextSpan(text: ' in '), TextSpan(text: windowOf(s), style: const TextStyle(fontStyle: FontStyle.italic))],
-                const TextSpan(text: ". This one stays in pi's history, to resume later."),
-              ], 'New session', () => _act((r) => SessionMessage(newSession: NewSession(requestId: r)))),
+            // What PiRC does, and pi's command for it; what pi does then is
+            // pi's to say (docs/design.md).
+            _Mode.fresh => _confirm(context, s, 'Clear the conversation?', [
+                const TextSpan(text: "PiRC asks this pi for a new session, the action of pi's /new command. The chat here then starts empty."),
+              ], 'Clear', () => _act((r) => SessionMessage(newSession: NewSession(requestId: r)))),
             _Mode.stop => _confirm(context, s, 'Stop pi?', [
-                const TextSpan(text: 'pi quits, as it does at its terminal'),
-                if (windowOf(s) != null) ...[const TextSpan(text: '; '), TextSpan(text: windowOf(s), style: const TextStyle(fontStyle: FontStyle.italic)), const TextSpan(text: ' closes if pi was all it ran')],
-                const TextSpan(text: ". The conversation stays in pi's history, to resume later."),
+                const TextSpan(text: "PiRC asks this pi to quit, the action of pi's /quit command. The session then leaves PiRC's list."),
               ], 'Stop pi', () async {
                 _close();
                 final r = await widget.model.act(widget.id, (r) => SessionMessage(stop: Stop(requestId: r)));
@@ -252,14 +250,14 @@ class _ActionsState extends State<SessionActions> {
           onTap: () => _act((r) => SessionMessage(clone_20: Clone(requestId: r)), done: "Now in a copy of the session; the original stays in pi's history"),
         ),
         if (movesInTree(s)) SheetRow(label: 'Branches', sub: 'Switch to another branch of this conversation', disabled: busy, onTap: () => setState(() => _mode = _Mode.branches)),
-        SheetRow(label: 'Resume', sub: 'Go back to a session pi has saved', disabled: busy, onTap: () => setState(() => _mode = _Mode.resume)),
-        SheetRow(label: 'New session', danger: true, disabled: busy, onTap: () => setState(() => _mode = _Mode.fresh)),
+        SheetRow(label: 'Resume', sub: 'The sessions pi lists for /resume', disabled: busy, onTap: () => setState(() => _mode = _Mode.resume)),
+        SheetRow(label: 'Clear conversation', sub: 'Asks pi for a new session (/new)', danger: true, disabled: busy, onTap: () => setState(() => _mode = _Mode.fresh)),
       ]),
       if (takes(s, 'stop') || (s.launcher != null && widget.open != null))
         SheetGroup(children: [
           if (s.launcher != null && widget.open != null)
             SheetRow(label: 'New agent', sub: 'Another pi beside this one, in ${besideWhere(s)}', onTap: () => setState(() => _mode = _Mode.launch)),
-          if (takes(s, 'stop')) SheetRow(label: 'Stop pi', sub: "Quit this pi; the conversation stays in its history", danger: true, disabled: busy, onTap: () => setState(() => _mode = _Mode.stop)),
+          if (takes(s, 'stop')) SheetRow(label: 'Stop pi', sub: 'Asks pi to quit (/quit)', danger: true, disabled: busy, onTap: () => setState(() => _mode = _Mode.stop)),
         ]),
     ]);
   }

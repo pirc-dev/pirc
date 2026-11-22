@@ -48,7 +48,7 @@ export function MessageSheet(p: { session: SessionView; item: UserItem; close: (
 }
 
 // The session's actions, in a sheet, with what the session has cost so far
-// and how full its context is. New session and Rename ask in it.
+// and how full its context is. Clear conversation and Rename ask in it.
 export function Actions(p: {
   session: SessionView;
   run: Run;
@@ -87,12 +87,13 @@ export function Actions(p: {
   };
   if (mode === "new") {
     return (
-      <Sheet key="new" title="Start a new session?" close={p.close}>
+      <Sheet key="new" title="Clear the conversation?" close={p.close}>
         <div className="flex flex-col gap-3.5 px-5">
           <p className="font-read text-[17px] leading-relaxed text-ink2 cards:text-[15.5px] cockpit:text-[15px]">
-            pi starts an empty conversation{windowOf(s) ? <> in <i>{windowOf(s)}</i></> : ""}. This one stays in pi's history, to resume later.
+            {/* What PiRC does, and pi's command for it; what pi does then is pi's to say. */}
+            PiRC asks this pi for a new session, the action of pi's /new command. The chat here then starts empty.
           </p>
-          <Answers cancel={() => setMode("menu")} label="New session" danger disabled={busy} go={() => void act("new", {})} />
+          <Answers cancel={() => setMode("menu")} label="Clear" danger disabled={busy} go={() => void act("new", {})} />
         </div>
       </Sheet>
     );
@@ -102,7 +103,7 @@ export function Actions(p: {
       <Sheet key="stop" title="Stop pi?" close={p.close}>
         <div className="flex flex-col gap-3.5 px-5">
           <p className="font-read text-[17px] leading-relaxed text-ink2 cards:text-[15.5px] cockpit:text-[15px]">
-            pi quits, as it does at its terminal{windowOf(s) ? <>; <i>{windowOf(s)}</i> closes if pi was all it ran</> : ""}. The conversation stays in pi's history, to resume later.
+            PiRC asks this pi to quit, the action of pi's /quit command. The session then leaves PiRC's list.
           </p>
           {busy && <p className="text-[14px] text-ink2">pi is working; stop the turn first.</p>}
           <Answers cancel={() => setMode("menu")} label="Stop pi" danger disabled={busy} go={async () => {
@@ -211,12 +212,12 @@ export function Actions(p: {
           if (r?.ok) p.say("Now in a copy of the session; the original stays in pi's history");
         }} />
         {movesInTree(s) && <SheetRow label="Branches" sub="Switch to another branch of this conversation" disabled={busy} onClick={() => setMode("branches")} />}
-        <SheetRow label="Resume" sub="Go back to a session pi has saved" disabled={busy} onClick={() => setMode("resume")} />
-        <SheetRow label="New session" danger disabled={busy} onClick={() => setMode("new")} />
+        <SheetRow label="Resume" sub="The sessions pi lists for /resume" disabled={busy} onClick={() => setMode("resume")} />
+        <SheetRow label="Clear conversation" sub="Asks pi for a new session (/new)" danger disabled={busy} onClick={() => setMode("new")} />
       </SheetGroup>
       <SheetGroup>
         {s.launcher && p.open && <SheetRow label="New agent" sub={`Another pi beside this one, in ${besideWhere(s)}`} onClick={() => setMode("launch")} />}
-        {takes(s, "stop") && <SheetRow label="Stop pi" sub="Quit this pi; the conversation stays in its history" danger disabled={busy} onClick={() => setMode("stop")} />}
+        {takes(s, "stop") && <SheetRow label="Stop pi" sub="Asks pi to quit (/quit)" danger disabled={busy} onClick={() => setMode("stop")} />}
       </SheetGroup>
       {picking && (
         <ModelPicker

@@ -2077,6 +2077,15 @@ Each step ends with something that can be seen working.
       The web app's default look (2026-11-19, the owner's choice) is
       Native, the apps' own, and it comes first in Settings' Look; a
       browser that chose another keeps it (`web.md`, section 5).
+      Session actions say what PiRC does and name pi's command for it,
+      never what pi, tmux or the computer does then (2026-11-22, the
+      owner's choice): what pi keeps, and for how long, is pi's to say,
+      not PiRC's. New session is Clear conversation ("Asks pi for a new
+      session (/new)"; "PiRC asks this pi for a new session, the action
+      of pi's /new command. The chat here then starts empty."), since a
+      new session read as a new agent; Stop pi asks pi to quit (/quit),
+      and the session leaves PiRC's list; Resume lists what pi lists for
+      /resume.
 
     **Still to do before the app starts** (not decisions):
     - **Reaching the relay.** A self-hosted relay on a private network
