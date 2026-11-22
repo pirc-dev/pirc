@@ -199,4 +199,8 @@ for XXpsk3.
 The TypeScript runner is `e2e/test/noise.test.ts`, and
 `e2e/test/noise-webcrypto.test.ts` runs both files again with every
 static key in Node's WebCrypto (`e2e/test/webcrypto.ts`, which a browser
-can run too).
+can run too). The app's Dart runner, of both, every case of
+`channel.json` with each party in its role (the IK responder and XXpsk3
+through their test entry points), is `app/test/noise_cases_test.dart`,
+and `app/integration_test/e2e_cases_test.dart` runs it on a phone or
+simulator.

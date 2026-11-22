@@ -1,6 +1,7 @@
-// cases/e2e/ framed.json, list.json, sealed.json and names.json against the
-// app's Dart (lib/e2e), on a phone or simulator, where sodium is the native
-// library the app ships. A device cannot read the tree, so the test fetches the files from
+// cases/e2e/ framed.json, list.json, sealed.json, names.json and
+// channel.json, and cases/noise/'s vectors, against the app's Dart
+// (lib/e2e), on a phone or simulator, where sodium is the native library the
+// app ships. A device cannot read the tree, so the test fetches the files from
 // serve_e2e_cases.dart, run on the same machine (it says how):
 //   dart run integration_test/serve_e2e_cases.dart &
 //   flutter test integration_test/e2e_cases_test.dart -d <device>
@@ -15,6 +16,7 @@ import 'package:sodium/sodium_sumo.dart';
 import 'package:pirc/e2e/list.dart';
 
 import '../test/support/e2e_cases.dart';
+import '../test/support/noise_cases.dart' show runChannel, runVectors;
 
 const casesUrl = String.fromEnvironment('PIRC_E2E_CASES', defaultValue: 'http://127.0.0.1:47815');
 
@@ -56,5 +58,22 @@ void main() {
     expect(sealed.left, sealedCases.where((c) => c['check'] == 'seal').length);
     expect(names.outcomes.length, ((jsonDecode(namesJson) as Map)['cases'] as List).length);
     expect(names.left, 0);
+  });
+
+  testWidgets('cases/noise/ and channel.json', (_) async {
+    final channelJson = await fetch('channel.json');
+    final vectorFiles = {for (final name in ['cacophony.json', 'snow.json']) name: await fetch('noise/$name')};
+    await E2e.load();
+    final sodium = await SodiumSumoInit.init();
+    final vectors = [for (final MapEntry(:key, :value) in vectorFiles.entries) ...runVectors(key, value, sodium)];
+    final channel = runChannel(channelJson, sodium);
+    final failures = [for (final o in [...vectors, ...channel.outcomes]) if (o.failure != null) '${o.about}: ${o.failure}'];
+    final roles = [for (final MapEntry(:key, :value) in channel.roles.entries) '$value $key'].join(', ');
+    // ignore: avoid_print
+    print('NOISE_CASES libsodium ${sodium.version}: ${vectors.length} vectors, ${channel.outcomes.length} channel ($roles), ${failures.length} failed');
+    expect(failures, isEmpty);
+    expect(vectors.length, [for (final f in vectorFiles.values) ((jsonDecode(f) as Map)['vectors'] as List).length].reduce((a, b) => a + b));
+    expect(channel.outcomes.length, ((jsonDecode(channelJson) as Map)['cases'] as List).length);
+    expect(channel.left, 0);
   });
 }
