@@ -111,7 +111,10 @@ differ between languages; no case depends on it.
 `e2e/framed.json` holds `framed` and its 8-byte number (`docs/e2e.md`,
 section 2); `e2e/list.json` the device list's check (section 3), the
 phone's list maker to exact bytes, and RFC 8032's test 1 for the raw
-Ed25519 verify. They are written from fixed seeds by
+Ed25519 verify; `e2e/sealed.json` a computer's sealing of a session's
+announcement and notice, to exact bytes with the nonces given, and their
+opening (section 5); `e2e/names.json` opening the devices' names, and the
+phone's names maker to exact bytes (section 3). They are written from fixed seeds by
 `e2e/test/gen.ts` alone, never by hand, and `sh/check.sh` fails if they
 differ from what it writes; the runners' checks of each file's shape are
 a second guard. To write them:
@@ -122,11 +125,17 @@ node --experimental-transform-types --no-warnings e2e/test/gen.ts
 
 A file is `{"about", "cases": [...]}`. Bytes are hex; numbers that may
 pass 2^53 are decimal strings. Each case names its `check` and the parts
-it `needs` (`first-mode`, `self`, `make-list`, ...); a runner states the
+it `needs` (`first-mode`, `self`, `make-list`, `seal`, `announcement`,
+`notice`, `names`, `make-names`); a runner states the
 parts it has, runs every case needing only those, and checks how many it
 ran against the file. `expect` is the result exactly, with its reason,
-counter and SHA-256 of the body where the check returns them, or
-`{"throws": true}` for a caller's mistake; `go` is the relay's result
+counter and SHA-256 of the body, the ordering value and the opened text
+where the check returns them, or `{"throws": true}` for a caller's
+mistake. A seal or make case's `expect` holds the copies in the list's
+order of recipients and the recipient keys skipped, and a seal case's
+also, when there are copies, the text each copy opens to, for the recipients' secret keys it
+gives; `go` is the relay's result
 where Go's `crypto/ed25519` accepts a signature libsodium refuses. The
 TypeScript runner is `e2e/test/cases.test.ts`; the relay's Go
-runner, of both files, is `relay/internal/hosted/list_test.go`.
+runner, of `framed.json` and `list.json`, is
+`relay/internal/hosted/list_test.go`.

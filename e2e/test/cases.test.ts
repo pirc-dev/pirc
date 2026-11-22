@@ -1,5 +1,4 @@
-// Every case in cases/e2e/framed.json and list.json that the package can
-// run, against the package. Which parts it has is stated here; a case
+// Every case in cases/e2e/ that the package can run, against the package. Which parts it has is stated here; a case
 // needing any other is left out, and the count run is checked against the
 // file.
 import assert from "node:assert/strict";
@@ -10,27 +9,69 @@ import { runInNewContext } from "node:vm";
 import sodium from "libsodium-wrappers-sumo";
 
 import { framed, framedNumber, leb128 } from "../framed.ts";
-import { load } from "../index.ts";
-import { CASES_DIR, deviceKeys, expectOf, hex, unhex, type CaseFile, type FramedCase, type ListCase } from "./cases.ts";
+import { CAPS, load } from "../index.ts";
+import { openSealed, sealWithNonces } from "../sealed.ts";
+import {
+  CASES_DIR,
+  deviceKeys,
+  expectOf,
+  hex,
+  listView,
+  namesExpectOf,
+  openExpectOf,
+  sealedJson,
+  slotOf,
+  unhex,
+  type CaseFile,
+  type FramedCase,
+  type ListCase,
+  type NamesCase,
+  type SealedCase,
+} from "./cases.ts";
 
-/** The parts this package has. It makes no lists: make-list is the phone's. */
-const HAS = new Set(["first-mode", "self"]);
+/**
+ * The parts this package has. It makes no lists or names (make-list,
+ * make-names: the phone's) and opens no notices (notice: the phone's and
+ * the notification extension's).
+ */
+const HAS = new Set(["first-mode", "self", "seal", "announcement", "names"]);
 /** The checks this runner knows, by file. */
 const CHECKS: Record<string, Set<string>> = {
   "framed.json": new Set(["framed", "number"]),
   "list.json": new Set(["list", "verify"]),
+  "sealed.json": new Set(["open", "seal"]),
+  "names.json": new Set(["open-names"]),
 };
 
-/** What each check's cases hold: every key in required, exactly one of oneOf, and nothing else. */
-const SHAPES: Record<string, { required: string[]; optional?: string[]; oneOf?: string[] }> = {
+/**
+ * What each check's cases hold: every key in required, exactly one of
+ * oneOf, and nothing else; expect's keys from expectKeys.
+ */
+const SHAPES: Record<string, { required: string[]; optional?: string[]; oneOf?: string[]; expectKeys?: string[] }> = {
   framed: { required: ["check", "about", "needs", "context", "parts"], oneOf: ["bytes", "throws"] },
   number: { required: ["check", "about", "needs", "value"], oneOf: ["bytes", "throws"] },
-  list: { required: ["check", "about", "needs", "bytes", "phoneKey", "mode", "highest", "expect"], optional: ["accountId", "self", "go"] },
+  list: { required: ["check", "about", "needs", "bytes", "phoneKey", "mode", "highest", "expect"], optional: ["accountId", "self", "go"], expectKeys: ["result", "reason", "counter", "hash", "list", "throws"] },
   "make-list": { required: ["check", "about", "needs", "seed", "accountId", "counter", "previousBody", "devices", "bytes"] },
   verify: { required: ["check", "about", "needs", "key", "message", "signature", "valid"] },
+  open: { required: ["check", "about", "needs", "sealed", "slot", "recipientSecretKey", "list", "now", "expect"], optional: ["highest"], expectKeys: ["result", "reason", "ordering", "body"] },
+  seal: { required: ["check", "about", "needs", "list", "boxSecretKey", "slot", "ordering", "body", "nonces", "recipientSecretKeys", "expect"], expectKeys: ["copies", "skipped", "opened", "throws"] },
+  "open-names": { required: ["check", "about", "needs", "sealed", "accountId", "list", "phoneKey", "recipientSecretKey", "now", "expect"], optional: ["highest"], expectKeys: ["result", "reason", "ordering", "listCounter", "names", "dropped"] },
+  "make-names": { required: ["check", "about", "needs", "accountId", "list", "phoneSeed", "phoneBoxSecretKey", "ordering", "names", "nonces", "expect"], expectKeys: ["copies", "skipped"] },
 };
-const EXPECT_KEYS = new Set(["result", "reason", "counter", "hash", "list", "throws"]);
 const DEVICE_KEYS = ["role", "signingKey", "channelKey", "boxKey", "readOnlyKey", "notificationKey"];
+const SLOT_KEYS = ["accountId", "computerKey", "sessionId", "kind"];
+/** A need, and what in a case makes it need it. */
+const EVIDENCE: Record<string, (c: Record<string, unknown>) => boolean> = {
+  self: (c) => "self" in c,
+  "make-list": (c) => c.check === "make-list",
+  seal: (c) => c.check === "seal",
+  announcement: (c) => c.check === "open" && (c.slot as { kind?: string }).kind === "announcement",
+  notice: (c) => c.check === "open" && (c.slot as { kind?: string }).kind === "notice",
+  names: (c) => c.check === "open-names",
+  "make-names": (c) => c.check === "make-names",
+};
+
+const sameKeys = (o: unknown, keys: string[], what: string) => assert.deepEqual(Object.keys(o as object).sort(), [...keys].sort(), what);
 
 function shapeOf(where: string, c: Record<string, unknown>): void {
   const shape = SHAPES[String(c.check)];
@@ -43,16 +84,18 @@ function shapeOf(where: string, c: Record<string, unknown>): void {
   for (const k of ["expect", "go"]) {
     if (!(k in c)) continue;
     const e = c[k] as Record<string, unknown>;
-    for (const ek of Object.keys(e)) assert.ok(EXPECT_KEYS.has(ek), `${where}: unknown key ${k}.${ek}`);
-    assert.notEqual("result" in e, "throws" in e, `${where}: ${k} has not exactly one of result and throws`);
+    for (const ek of Object.keys(e)) assert.ok(shape.expectKeys?.includes(ek), `${where}: unknown key ${k}.${ek}`);
+    if (shape.expectKeys?.includes("result")) assert.notEqual("result" in e, "throws" in e, `${where}: ${k} has not exactly one of result and throws`);
+    else assert.notEqual("copies" in e, "throws" in e, `${where}: ${k} has not exactly one of copies and throws`);
   }
   const needs = c.needs as string[];
-  assert.equal(needs.includes("self"), "self" in c, `${where}: needs self iff it has a self`);
-  assert.equal(needs.includes("make-list"), c.check === "make-list", `${where}: needs make-list iff it is a make-list case`);
-  if ("self" in c) assert.deepEqual(Object.keys(c.self as object).sort(), [...DEVICE_KEYS].sort(), `${where}: self's keys`);
-  if ("devices" in c) {
-    for (const d of c.devices as object[]) assert.deepEqual(Object.keys(d).sort(), [...DEVICE_KEYS].sort(), `${where}: a device's keys`);
-  }
+  for (const n of needs) assert.ok(n === "first-mode" || n in EVIDENCE, `${where}: unknown need ${n}`);
+  for (const [n, has] of Object.entries(EVIDENCE)) assert.equal(needs.includes(n), has(c), `${where}: needs ${n} iff the case shows it`);
+  if ("self" in c) sameKeys(c.self, DEVICE_KEYS, `${where}: self's keys`);
+  if ("slot" in c) sameKeys(c.slot, SLOT_KEYS, `${where}: the slot's keys`);
+  const devices = [...((c.devices as object[] | undefined) ?? []), ...(((c.list as { devices?: object[] } | undefined)?.devices) ?? [])];
+  if ("list" in c && c.check !== "list") sameKeys(c.list, ["counter", "devices"], `${where}: the list's keys`);
+  for (const d of devices) sameKeys(d, DEVICE_KEYS, `${where}: a device's keys`);
 }
 
 /** A file of cases/e2e, its shape checked: no unknown key, every needed key present, at least one case. */
@@ -108,6 +151,76 @@ test("list.json", () => {
   assert.equal(file.cases.length - ran, file.cases.filter((c) => c.check === "make-list").length, "only the maker's cases are left out");
 });
 
+test("sealed.json", () => {
+  const file = read<SealedCase>("sealed.json");
+  let ran = 0;
+  for (const c of file.cases) {
+    if (!runnable("sealed.json", c)) continue;
+    if (c.check === "open") {
+      const r = e2e.openAnnouncement({
+        sealed: unhex(c.sealed),
+        slot: slotOf(c.slot),
+        recipientSecretKey: unhex(c.recipientSecretKey),
+        list: listView(c.list),
+        highest: c.highest === undefined ? null : BigInt(c.highest),
+        now: BigInt(c.now),
+      });
+      assert.deepEqual(openExpectOf(r), c.expect, c.about);
+    } else {
+      const input = { list: listView(c.list), boxSecretKey: unhex(c.boxSecretKey), slot: slotOf(c.slot), ordering: BigInt(c.ordering), body: c.body as never };
+      const nonces = c.nonces.map(unhex);
+      if ("throws" in c.expect) {
+        assert.throws(() => sealWithNonces(sodium, input, (i) => nonces[i]), TypeError, c.about);
+        assert.throws(() => e2e.seal(input), TypeError, c.about);
+      } else {
+        const { opened, ...copies } = c.expect;
+        assert.equal(opened !== undefined, c.expect.copies.length > 0, `${c.about}: an opened text exactly when there are copies`);
+        assert.deepEqual(sealedJson(sealWithNonces(sodium, input, (i) => nonces[i])), copies, c.about);
+        // With random nonces: the same recipients, a fresh nonce for every
+        // copy within a call and across calls, and each copy opening for its
+        // recipient to the body.
+        const one = e2e.seal(input);
+        const two = e2e.seal(input);
+        for (const random of [one, two]) {
+          const j = sealedJson(random);
+          assert.deepEqual(j.copies.map((x) => x.recipientKey), c.expect.copies.map((x) => x.recipientKey), c.about);
+          assert.deepEqual(j.skipped, c.expect.skipped, c.about);
+        }
+        const used = [...one.copies, ...two.copies].map((x) => hex(x.sealed.subarray(0, 24)));
+        assert.equal(new Set(used).size, used.length, `${c.about}: every nonce fresh`);
+        for (const random of [one.copies, two.copies, sealWithNonces(sodium, input, (i) => nonces[i]).copies]) {
+          random.forEach((x, i) => {
+            const r = openSealed(sodium, input.slot.kind, { sealed: x.sealed, slot: input.slot, recipientSecretKey: unhex(c.recipientSecretKeys[i]), list: input.list, highest: null, now: input.ordering });
+            assert.deepEqual(openExpectOf(r), { result: "accepted", ordering: c.ordering, body: opened }, `${c.about}: copy ${i} opens`);
+          });
+        }
+      }
+    }
+    ran++;
+  }
+  assert.equal(file.cases.length - ran, file.cases.filter((c) => c.needs.includes("notice")).length, "only the notices' opening is left out");
+});
+
+test("names.json", () => {
+  const file = read<NamesCase>("names.json");
+  let ran = 0;
+  for (const c of file.cases) {
+    if (!runnable("names.json", c) || c.check !== "open-names") continue;
+    const r = e2e.openNames({
+      sealed: unhex(c.sealed),
+      accountId: unhex(c.accountId),
+      list: listView(c.list),
+      phoneKey: unhex(c.phoneKey),
+      recipientSecretKey: unhex(c.recipientSecretKey),
+      highest: c.highest === undefined ? null : BigInt(c.highest),
+      now: BigInt(c.now),
+    });
+    assert.deepEqual(namesExpectOf(r), c.expect, c.about);
+    ran++;
+  }
+  assert.equal(file.cases.length - ran, file.cases.filter((c) => c.check === "make-names").length, "only the maker's cases are left out");
+});
+
 test("framed's lengths past 32 bits, by hand", () => {
   const cases: [number, string][] = [
     [2 ** 31 - 1, "ffffffff07"],
@@ -157,6 +270,58 @@ test("an accepted list shares no bytes with the caller's buffer", () => {
   const before = hex(r.list.devices[1].signingKey);
   buffer.fill(0xaa);
   assert.equal(hex(r.list.devices[1].signingKey), before);
+});
+
+test("no input makes opening throw", () => {
+  const c = read<SealedCase>("sealed.json").cases.find((c) => c.check === "open" && c.about === "an announcement");
+  assert.ok(c && c.check === "open");
+  const list = listView(c.list);
+  const slot = slotOf(c.slot);
+  for (const sealed of [new Uint8Array(0), new Uint8Array(40), new Uint8Array(1000).fill(0xff), unhex(c.sealed)]) {
+    for (const key of [new Uint8Array(0), new Uint8Array(31), new Uint8Array(32), unhex(c.recipientSecretKey)]) {
+      for (const sessionId of [new Uint8Array(0), slot.sessionId, Uint8Array.of(0xff)]) {
+        const s = { ...slot, sessionId };
+        for (const l of [list, { counter: 0n, devices: [] }]) {
+          const r = e2e.openAnnouncement({ sealed, slot: s, recipientSecretKey: key, list: l, highest: null, now: 0n });
+          assert.ok(r.result === "accepted" || r.result === "refused");
+          const n = e2e.openNames({ sealed, accountId: s.accountId, list: l, phoneKey: s.computerKey, recipientSecretKey: key, highest: null, now: 0n });
+          assert.ok(n.result === "accepted" || n.result === "later" || n.result === "refused");
+        }
+      }
+    }
+  }
+});
+
+test("sealing's and opening's caller mistakes throw", () => {
+  const c = read<SealedCase>("sealed.json").cases.find((c) => c.check === "seal" && !("throws" in c.expect));
+  assert.ok(c && c.check === "seal");
+  const good = { list: listView(c.list), boxSecretKey: unhex(c.boxSecretKey), slot: slotOf(c.slot), ordering: BigInt(c.ordering), body: c.body as never };
+  for (const bad of [
+    { ordering: 2n ** 63n },
+    { ordering: -1n },
+    { ordering: 1 as unknown as bigint },
+    { boxSecretKey: new Uint8Array(31) },
+    { body: { sessionName: "x" } as never },
+    { slot: { ...good.slot, kind: "other" as never } },
+    { list: { devices: [] } as never },
+  ]) {
+    assert.throws(() => e2e.seal({ ...good, ...bad }), TypeError, JSON.stringify(Object.keys(bad)));
+  }
+  // Checked before the list is read: a computer not on it still throws.
+  const unlisted = { ...good.slot, computerKey: new Uint8Array(32) };
+  assert.equal(e2e.seal({ ...good, slot: unlisted }).copies.length, 0);
+  assert.throws(() => e2e.seal({ ...good, slot: unlisted, boxSecretKey: new Uint8Array(31) }), TypeError);
+  // A nonce of the wrong length is the tests' own mistake, never a skipped recipient.
+  assert.throws(() => sealWithNonces(sodium, good, () => new Uint8Array(23)), TypeError);
+  const open = { sealed: new Uint8Array(100), slot: good.slot, recipientSecretKey: new Uint8Array(32), list: good.list, highest: null, now: 0n };
+  for (const bad of [{ highest: -1n }, { highest: 1 as unknown as bigint }, { now: 0 as unknown as bigint }, { sealed: "00" as unknown as Uint8Array }]) {
+    assert.throws(() => e2e.openAnnouncement({ ...open, ...bad }), TypeError);
+    assert.throws(() => e2e.openNames({ ...open, accountId: good.slot.accountId, phoneKey: good.slot.computerKey, ...bad }), TypeError);
+  }
+});
+
+test("the caps cannot be changed", () => {
+  assert.ok(Object.isFrozen(CAPS) && Object.isFrozen(CAPS.announcement) && Object.isFrozen(CAPS.notice));
 });
 
 test("the checks are given only after libsodium has started, the same each time", async () => {

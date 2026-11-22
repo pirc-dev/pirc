@@ -1,5 +1,6 @@
-// Writes cases/e2e/framed.json and cases/e2e/list.json from fixed seeds.
-// With --check it writes nothing, and fails if either file would change.
+// Writes cases/e2e/framed.json, list.json, sealed.json and names.json from
+// fixed seeds. With --check it writes nothing, and fails if a file would
+// change.
 //
 //   node --experimental-transform-types --no-warnings e2e/test/gen.ts [--check]
 //
@@ -9,16 +10,58 @@
 // expected bytes are also written out by hand below, and RFC 8032's test 1
 // holds the raw Ed25519 calls to a published answer.
 //
-// The list maker and the raw signing here are test-only: no device makes
-// lists in TypeScript.
+// The list maker, the names maker, the raw signing and the sealing with
+// given nonces here are test-only: no device makes lists or names in
+// TypeScript, and the package seals only with random nonces.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { DeviceSchema, ListBodySchema } from "@pirc/protocol/v1alpha2";
+import { AnnouncementSchema, DeviceSchema, ListBodySchema, NamesSchema, NoticeSchema } from "@pirc/protocol/v1alpha2";
 import sodium from "libsodium-wrappers-sumo";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
-import { framed, framedNumber, LIST_CONTEXT, load, type DeviceKeys, type ListInput } from "../index.ts";
-import { CASES_DIR, deviceJson, expectOf, hex, unhex, type CaseFile, type Expect, type FramedCase, type ListCase } from "./cases.ts";
+import { utf8Cut } from "../bytes.ts";
+import {
+  ANNOUNCEMENT_CONTEXT,
+  CAPS,
+  framed,
+  framedNumber,
+  FUTURE_MS,
+  LIST_CONTEXT,
+  load,
+  NAME_MAX_BYTES,
+  NAMES_CONTEXT,
+  NOTICE_CONTEXT,
+  type AnnouncementText,
+  type DeviceKeys,
+  type Kind,
+  type ListInput,
+  type ListView,
+  type NoticeText,
+  type SealInput,
+  type Sealed,
+  type Slot,
+} from "../index.ts";
+import { openSealed, sealWithNonces } from "../sealed.ts";
+import {
+  CASES_DIR,
+  deviceJson,
+  expectOf,
+  hex,
+  listViewJson,
+  namesExpectOf,
+  openExpectOf,
+  sealedJson,
+  slotJson,
+  unhex,
+  type CaseFile,
+  type Expect,
+  type FramedCase,
+  type ListCase,
+  type NamesCase,
+  type SealedCase,
+  type SealExpect,
+} from "./cases.ts";
 
 await sodium.ready;
 const e2e = await load();
@@ -89,7 +132,7 @@ function framedCases(): FramedCase[] {
   refuse("a context with 0x7F", "a\x7f");
   refuse("a context with a NUL", "a\x00b");
   refuse("a context with 0x1F", "a\x1f");
-  refuse("a context with a character above 0x7F", "café");
+  refuse("a context with a character above 0x7F", "caf\u00e9");
 
   const number = (about: string, value: bigint, byHand: string): void => {
     const bytes = framedNumber(value);
@@ -557,9 +600,488 @@ function listCases(): ListCase[] {
   return listOut;
 }
 
+// ------------------------------------------------ sealed.json, names.json
+
+const boxSecret = (name: string): Uint8Array => sodium.crypto_box_seed_keypair(seed(`${name} box`)).privateKey;
+const notificationSecret = (name: string): Uint8Array => sodium.crypto_box_seed_keypair(seed(`${name} notification`)).privateKey;
+const nonce = (name: string): Uint8Array => sha256(utf8(`pirc e2e test nonce: ${name}`)).slice(0, 24);
+const NOW = 1_800_000_000_000n;
+const ORDERING = NOW - 60_000n;
+const SESSION = utf8("0193f1c2-7a4b-7c3d-9e8f-0a1b2c3d4e5f");
+const ZERO_KEY = new Uint8Array(32);
+
+const C3 = computer("computer 3");
+const W2 = browser("browser 2");
+// The newest list of account A that sealing and opening read.
+const LV: ListView = { counter: 4n, devices: [P, C1, C2, W1, Q] };
+
+const slotA = (kind: Kind, over: Partial<Slot> = {}): Slot => ({ accountId: idA, computerKey: C1.signingKey, sessionId: SESSION, kind, ...over });
+const ANNOUNCEMENT: AnnouncementText = { sessionName: "fix the flaky test", folder: "/home/user/src/project", model: "a model", computerName: "build box", notice: "Which branch should I use?" };
+const NOTICE: NoticeText = { sessionName: "fix the flaky test", computerName: "build box", notice: "Which branch should I use?" };
+
+function bodyBytes(kind: Kind, text: Record<string, string | Uint8Array>): Uint8Array {
+  const f: Record<string, Uint8Array> = {};
+  for (const [k, v] of Object.entries(text)) f[k] = typeof v === "string" ? utf8(v) : v;
+  return kind === "announcement" ? toBinary(AnnouncementSchema, create(AnnouncementSchema, f)) : toBinary(NoticeSchema, create(NoticeSchema, f));
+}
+
+/** The plaintext as a computer writes it, with an ordering of any 64-bit value. */
+function plaintextOf(kind: Kind, slot: Omit<Slot, "kind">, ordering: bigint, b: Uint8Array): Uint8Array {
+  const n = new Uint8Array(8);
+  new DataView(n.buffer).setBigUint64(0, ordering);
+  return concat(framed(kind === "announcement" ? ANNOUNCEMENT_CONTEXT : NOTICE_CONTEXT, slot.accountId, slot.computerKey, slot.sessionId), Uint8Array.of(8), n, b);
+}
+
+const box = (plaintext: Uint8Array, to: Uint8Array, fromSecret: Uint8Array, n = nonce("a copy")): Uint8Array => concat(n, sodium.crypto_box_easy(plaintext, n, to, fromSecret));
+
+type OpenWant = { result: "accepted"; ordering: bigint; body: Record<string, string> } | { result: "refused"; reason: string };
+const sealedOut: SealedCase[] = [];
+
+/** The recipient each kind's cases open as: the browser's box key, or the phone's notification key. */
+const RECIPIENT = {
+  announcement: { key: W1.boxKey, secret: boxSecret("browser 1") },
+  notice: { key: P.notificationKey, secret: notificationSecret("phone") },
+} as const;
+const TEXT: Record<Kind, Record<string, string>> = { announcement: { ...ANNOUNCEMENT }, notice: { ...NOTICE } };
+
+function open(
+  about: string,
+  kind: Kind,
+  input: { sealed: Uint8Array; slot?: Omit<Slot, "kind">; recipientSecretKey?: Uint8Array; list?: ListView; highest?: bigint | null; now?: bigint },
+  want: OpenWant,
+): void {
+  const full = { slot: slotA(kind), recipientSecretKey: RECIPIENT[kind].secret, list: LV, highest: null, now: NOW, ...input };
+  const got = openSealed(sodium, kind, full);
+  const reason = got.result === "refused" ? got.reason : undefined;
+  must(got.result === want.result && reason === ("reason" in want ? want.reason : undefined), `${about}: wanted ${want.result} ${"reason" in want ? want.reason : ""}, got ${got.result} ${reason ?? ""}`);
+  if (got.result === "accepted" && want.result === "accepted") {
+    must(got.ordering === want.ordering && isDeepStrictEqual({ ...got.body }, want.body), `${about}: the ordering and body opened`);
+  }
+  sealedOut.push({
+    check: "open",
+    about,
+    needs: [kind],
+    sealed: hex(full.sealed),
+    slot: slotJson({ ...full.slot, kind }),
+    recipientSecretKey: hex(full.recipientSecretKey),
+    list: listViewJson(full.list),
+    ...(full.highest !== null ? { highest: full.highest.toString() } : {}),
+    now: full.now.toString(),
+    expect: openExpectOf(got),
+  });
+}
+
+/** A device's secret key for the kind's copies: its box key's, or its notification key's. */
+function secretOf(kind: Kind, signingKey: Uint8Array): Uint8Array {
+  const name = DEVICE_NAMES.get(hex(signingKey))!;
+  return kind === "announcement" ? boxSecret(name) : notificationSecret(name);
+}
+
+function sealCase(
+  about: string,
+  input: SealInput,
+  nonces: Uint8Array[],
+  want: "throws" | { to: Uint8Array[]; skipped: Uint8Array[]; opened?: Record<string, string> },
+): void {
+  let expect: SealExpect;
+  let secrets: Uint8Array[] = [];
+  if (want === "throws") {
+    let threw = false;
+    try {
+      sealWithNonces(sodium, input, (i) => nonces[i]);
+    } catch {
+      threw = true;
+    }
+    must(threw, `${about}: throws`);
+    expect = { throws: true };
+  } else {
+    const got = sealWithNonces(sodium, input, (i) => nonces[i]);
+    must(
+      got.copies.length === want.to.length && got.copies.every((c, i) => equal(c.signingKey, want.to[i])) && got.skipped.length === want.skipped.length && got.skipped.every((k, i) => equal(k, want.skipped[i])),
+      `${about}: the copies' recipients and the keys skipped`,
+    );
+    // Each copy carries one of the nonces given, none the same as the copy before.
+    got.copies.forEach((c, i) => must(nonces.some((n) => equal(c.sealed.subarray(0, 24), n)) && (i === 0 || !equal(c.sealed.subarray(0, 24), got.copies[i - 1].sealed.subarray(0, 24))), `${about}: copy ${i}'s nonce`));
+    // Each copy opens, for its recipient, to the body as given here.
+    secrets = got.copies.map((c) => secretOf(input.slot.kind, c.signingKey));
+    got.copies.forEach((c, i) => {
+      const r = openSealed(sodium, input.slot.kind, { sealed: c.sealed, slot: input.slot, recipientSecretKey: secrets[i], list: input.list, highest: null, now: input.ordering });
+      must(r.result === "accepted" && r.ordering === input.ordering && isDeepStrictEqual({ ...r.body }, want.opened), `${about}: copy ${i} opens to the body given`);
+    });
+    must((want.opened !== undefined) === got.copies.length > 0, `${about}: an opened text exactly when there are copies`);
+    expect = { ...sealedJson(got), ...(want.opened ? { opened: want.opened } : {}) };
+  }
+  sealedOut.push({
+    check: "seal",
+    about,
+    needs: ["seal"],
+    list: listViewJson(input.list),
+    boxSecretKey: hex(input.boxSecretKey),
+    slot: slotJson(input.slot),
+    ordering: input.ordering.toString(),
+    body: { ...(input.body as unknown as Record<string, string>) },
+    nonces: nonces.map(hex),
+    recipientSecretKeys: secrets.map(hex),
+    expect,
+  });
+}
+
+const DEVICE_NAMES = new Map<string, string>(
+  [
+    ["phone", P],
+    ["computer 1", C1],
+    ["computer 2", C2],
+    ["browser 1", W1],
+    ["phone 2", Q],
+    ["computer 3", C3],
+    ["browser 2", W2],
+  ].map(([n, d]) => [hex((d as Dev).signingKey), n as string]),
+);
+
+/** Malformed UTF-8, each in a form decoders are known to differ on. */
+const MALFORMED: [string, Uint8Array][] = [
+  ["a truncated two-byte sequence", Uint8Array.of(0x61, 0xc3)],
+  ["an overlong '/' (c0 af)", Uint8Array.of(0xc0, 0xaf)],
+  ["an overlong NUL (c0 80)", Uint8Array.of(0xc0, 0x80)],
+  ["an encoded surrogate (ed a0 80)", Uint8Array.of(0xed, 0xa0, 0x80)],
+  ["a code point above U+10FFFF (f4 90 80 80)", Uint8Array.of(0xf4, 0x90, 0x80, 0x80)],
+  ["a lone continuation byte (80)", Uint8Array.of(0x80)],
+];
+
+/** A box anyone can make for an all-zero public key: the X25519 shared point is all zeros whatever the other secret. */
+function zeroPointBox(plaintext: Uint8Array, n: Uint8Array): Uint8Array {
+  const k = sodium.crypto_core_hsalsa20(new Uint8Array(16), new Uint8Array(32), null);
+  const sealed = concat(n, sodium.crypto_secretbox_easy(plaintext, n, k));
+  must(equal(sodium.crypto_box_open_easy_afternm(sealed.subarray(24), n, k), plaintext), "the zero-point box opens under the zero point's key");
+  return sealed;
+}
+
+function sealedCases(): SealedCase[] {
+  const c1 = boxSecret("computer 1");
+  const refused = (reason: string) => ({ result: "refused" as const, reason });
+  const text = (kind: Kind, over: Record<string, string> = {}) => ({ ...TEXT[kind], ...over });
+  const bodyOf = (kind: Kind, over: Record<string, string | Uint8Array> = {}) => bodyBytes(kind, { ...TEXT[kind], ...over });
+  const to = (kind: Kind, pt: Uint8Array, from = c1) => box(pt, RECIPIENT[kind].key, from);
+  const plain = (kind: Kind, over: { slot?: Omit<Slot, "kind">; ordering?: bigint; body?: Uint8Array; context?: Kind } = {}) =>
+    plaintextOf(over.context ?? kind, over.slot ?? slotA(kind), over.ordering ?? ORDERING, over.body ?? bodyOf(kind));
+  const good = (kind: Kind, ordering = ORDERING, slot: Omit<Slot, "kind"> = slotA(kind)) => to(kind, plain(kind, { ordering, slot }));
+  const ok = (kind: Kind, over: Record<string, string> = {}, ordering = ORDERING) => ({ result: "accepted" as const, ordering, body: text(kind, over) });
+
+  for (const kind of ["announcement", "notice"] as const) {
+    const a = kind === "announcement" ? "an announcement" : "a notice";
+    const other: Kind = kind === "announcement" ? "notice" : "announcement";
+    const caps = CAPS[kind] as Record<string, number>;
+    const first = Object.keys(caps)[0];
+
+    // Accepted.
+    open(`${a}`, kind, { sealed: good(kind) }, ok(kind));
+    open(`${a}: ordering far in the past, none seen`, kind, { sealed: good(kind, 1n) }, ok(kind, {}, 1n));
+    open(`${a}: ordering above the highest seen`, kind, { sealed: good(kind), highest: ORDERING - 1n }, ok(kind));
+    open(`${a}: ordering exactly a day ahead`, kind, { sealed: good(kind, NOW + FUTURE_MS) }, ok(kind, {}, NOW + FUTURE_MS));
+    open(`${a}: an unknown field`, kind, { sealed: to(kind, plain(kind, { body: concat(bodyOf(kind), Uint8Array.of(0x48, 0x01)) })) }, ok(kind));
+    const atCaps = Object.fromEntries(Object.entries(caps).map(([k, cap]) => [k, k[0].repeat(cap)]));
+    open(`${a}: every field exactly at its cap`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, atCaps) })) }, ok(kind, atCaps));
+    const empty = Object.fromEntries(Object.keys(caps).map((k) => [k, ""]));
+    open(`${a}: every field empty`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, empty) })) }, ok(kind, empty));
+    open(`${a}: the ${first} 100 two-byte characters, 200 bytes: at its cap`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [first]: "\u00e9".repeat(100) }) })) }, ok(kind, { [first]: "\u00e9".repeat(100) }));
+    open(`${a}: the ${first} beginning with U+FEFF: kept, as text`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [first]: "\ufeffname" }) })) }, ok(kind, { [first]: "\ufeffname" }));
+    for (const [about, id] of [
+      ["a session ID of 1 byte", utf8("a")],
+      ["a session ID of 128 bytes", utf8("a".repeat(128))],
+      ["a session ID with a multi-byte character", utf8("sess-\u00e9")],
+    ] as const) {
+      const slot = slotA(kind, { sessionId: id });
+      open(`${a}: ${about}`, kind, { sealed: good(kind, ORDERING, slot), slot }, ok(kind));
+    }
+    {
+      const base = plain(kind);
+      const pad = (n: number) => to(kind, concat(base, Uint8Array.of(0x7a), Uint8Array.from(varint(BigInt(n))), new Uint8Array(n)));
+      let n = 65_536 - 64 - base.length - 3;
+      while (pad(n).length < 65_536) n++;
+      must(pad(n).length === 65_536, "a copy of exactly 65,536 bytes");
+      open(`${a}: exactly 65,536 bytes, padded by an unknown field`, kind, { sealed: pad(n) }, ok(kind));
+      open(`${a}: 65,537 bytes`, kind, { sealed: pad(n + 1) }, refused("size"));
+    }
+
+    // Slot.
+    for (const [about, id] of [
+      ["an empty session ID", EMPTY],
+      ["a session ID of 129 bytes", utf8("a".repeat(129))],
+      ...MALFORMED.map(([m, b]) => [`a session ID holding ${m}`, concat(utf8("sess-"), b)] as const),
+    ] as const) {
+      const slot = slotA(kind, { sessionId: id });
+      open(`${a}: ${about}`, kind, { sealed: good(kind, ORDERING, slot), slot }, refused("slot"));
+    }
+    open(`${a}: an empty session ID and 10 bytes: the slot, before the size`, kind, { sealed: new Uint8Array(10), slot: slotA(kind, { sessionId: EMPTY }) }, refused("slot"));
+
+    // Size.
+    open(`${a}: 39 bytes, shorter than the nonce and the MAC`, kind, { sealed: good(kind).slice(0, 39) }, refused("size"));
+    open(`${a}: 40 bytes: through the size check`, kind, { sealed: good(kind).slice(0, 40) }, refused("box"));
+    open(`${a}: 39 bytes from a computer not listed: the size, before the computer`, kind, { sealed: new Uint8Array(39), slot: slotA(kind, { computerKey: C3.signingKey }) }, refused("size"));
+
+    // Computer not listed.
+    {
+      const s3 = slotA(kind, { computerKey: C3.signingKey });
+      open(`${a}: from a computer not on the list`, kind, { sealed: to(kind, plain(kind, { slot: s3 }), boxSecret("computer 3")), slot: s3 }, refused("computer-not-listed"));
+      const sq = slotA(kind, { computerKey: Q.signingKey });
+      open(`${a}: from a device listed as a client`, kind, { sealed: to(kind, plain(kind, { slot: sq }), boxSecret("phone 2")), slot: sq }, refused("computer-not-listed"));
+      open(`${a}: 100 bytes of zeros from a computer not listed: the computer, before the box`, kind, { sealed: new Uint8Array(100), slot: s3 }, refused("computer-not-listed"));
+    }
+
+    // Box.
+    open(`${a}: opened by another device`, kind, { sealed: good(kind), recipientSecretKey: kind === "announcement" ? boxSecret("phone 2") : notificationSecret("phone 2") }, refused("box"));
+    {
+      const flipped = good(kind);
+      flipped[40] ^= 0x01;
+      open(`${a}: a ciphertext bit changed`, kind, { sealed: flipped }, refused("box"));
+    }
+    open(`${a}: a listed computer with an all-zero box key, the box made under the all-zero shared point`, kind, { sealed: zeroPointBox(plain(kind), nonce("zero point")), list: { counter: 4n, devices: [P, { ...C1, boxKey: ZERO_KEY }, C2, W1, Q] } }, refused("box"));
+    open(`${a}: sealed by computer 2 with computer 1's header`, kind, { sealed: to(kind, plain(kind), boxSecret("computer 2")) }, refused("box"));
+    if (kind === "announcement") {
+      open(`${a} sealed to the phone's notification key`, kind, { sealed: box(plain(kind), P.notificationKey, c1), recipientSecretKey: boxSecret("phone") }, refused("box"));
+    } else {
+      open(`${a} sealed to the phone's box key`, kind, { sealed: box(plain(kind), P.boxKey, c1) }, refused("box"));
+    }
+
+    // Prefix.
+    open(`${a}: sealed by computer 1 with computer 2's header`, kind, { sealed: to(kind, plain(kind, { slot: slotA(kind, { computerKey: C2.signingKey }) })) }, refused("prefix"));
+    open(`${a}: another account's ID in the header`, kind, { sealed: to(kind, plain(kind, { slot: slotA(kind, { accountId: idB }) })) }, refused("prefix"));
+    open(`${a}: another session in the header`, kind, { sealed: to(kind, plain(kind, { slot: slotA(kind, { sessionId: utf8("0193f1c2-7a4b-7c3d-9e8f-0a1b2c3d4e60") }) })) }, refused("prefix"));
+    open(`${a}: the session ID in upper case in the header`, kind, { sealed: to(kind, plain(kind, { slot: slotA(kind, { sessionId: utf8(new TextDecoder().decode(SESSION).toUpperCase()) }) })) }, refused("prefix"));
+    open(`${a}: the ${other}'s context`, kind, { sealed: to(kind, plain(kind, { context: other })) }, refused("prefix"));
+    {
+      const start = plain(kind, { body: EMPTY });
+      open(`${a}: a plaintext of the prefix and 7 bytes`, kind, { sealed: to(kind, start.slice(0, start.length - 1)) }, refused("prefix"));
+      open(`${a}: a plaintext of the prefix and 8 bytes, an empty body`, kind, { sealed: to(kind, start) }, ok(kind, empty));
+    }
+    open(`${a}: an empty plaintext`, kind, { sealed: to(kind, EMPTY) }, refused("prefix"));
+    open(`${a}: another account's header and ordering 2^63: the prefix, before the range`, kind, { sealed: to(kind, plain(kind, { slot: slotA(kind, { accountId: idB }), ordering: 2n ** 63n })) }, refused("prefix"));
+
+    // Ordering.
+    open(`${a}: ordering 2^63`, kind, { sealed: good(kind, 2n ** 63n) }, refused("range"));
+    open(`${a}: ordering equal to the highest seen`, kind, { sealed: good(kind), highest: ORDERING }, refused("ordering"));
+    open(`${a}: ordering below the highest seen`, kind, { sealed: good(kind), highest: ORDERING + 1n }, refused("ordering"));
+    open(`${a}: ordering a day and a millisecond ahead`, kind, { sealed: good(kind, NOW + FUTURE_MS + 1n) }, refused("future"));
+    open(`${a}: ordering two days ahead, but below the highest seen: the ordering, before the future`, kind, { sealed: good(kind, NOW + 2n * FUTURE_MS), highest: NOW + 3n * FUTURE_MS }, refused("ordering"));
+    open(`${a}: ordering a day and a millisecond ahead, a body that does not parse: the future, before the parse`, kind, { sealed: to(kind, plain(kind, { ordering: NOW + FUTURE_MS + 1n, body: Uint8Array.of(0xff) })) }, refused("future"));
+
+    // Body.
+    open(`${a}: a body that does not parse`, kind, { sealed: to(kind, plain(kind, { body: Uint8Array.of(0xff) })) }, refused("parse"));
+    for (const [k, cap] of Object.entries(caps)) {
+      open(`${a}: the ${k} one byte over its cap`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [k]: "x".repeat(cap + 1) }) })) }, refused("text"));
+      open(`${a}: the ${k} not UTF-8`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [k]: Uint8Array.of(0x61, 0xc3) }) })) }, refused("text"));
+    }
+    open(`${a}: the ${first} 101 two-byte characters, 202 bytes: over its cap of 200`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [first]: "\u00e9".repeat(101) }) })) }, refused("text"));
+    for (const [m, b] of MALFORMED.slice(1)) {
+      open(`${a}: the ${first} holding ${m}`, kind, { sealed: to(kind, plain(kind, { body: bodyOf(kind, { [first]: concat(utf8("x"), b) }) })) }, refused("text"));
+    }
+  }
+
+  // Sealing, to exact bytes with the nonces given.
+  const nonces = (n: number) => Array.from({ length: n }, (_, i) => nonce(`seal ${i}`));
+  const sealIn = (over: Partial<SealInput> = {}): SealInput => ({ list: LV, boxSecretKey: c1, slot: slotA("announcement"), ordering: ORDERING, body: ANNOUNCEMENT, ...over });
+  const notice = (over: Partial<SealInput> = {}) => sealIn({ slot: slotA("notice"), body: NOTICE, ...over });
+  const clients = [P.signingKey, W1.signingKey, Q.signingKey];
+  const phones = [P.signingKey, Q.signingKey];
+  const LV5: ListView = { counter: 5n, devices: [P, C1, C2, W1, Q, W2] };
+  sealCase("an announcement, on a newer list with browser 2: a copy for each client, browser 2 among them", sealIn({ list: LV5 }), nonces(4), { to: [...clients, W2.signingKey], skipped: [], opened: text("announcement") });
+  sealCase("an announcement, on the list before browser 2 was added: a copy for each client on it, none for browser 2", sealIn(), nonces(3), { to: clients, skipped: [], opened: text("announcement") });
+  sealCase("a notice: a copy for each phone, to its notification key, none for the browser", notice(), nonces(2), { to: phones, skipped: [], opened: text("notice") });
+  sealCase("from a computer not on the list: nothing, with a box secret key not its own", sealIn({ slot: slotA("announcement", { computerKey: C3.signingKey }) }), nonces(3), { to: [], skipped: [] });
+  sealCase("from a device listed as a client: nothing", sealIn({ slot: slotA("announcement", { computerKey: Q.signingKey }), boxSecretKey: boxSecret("phone 2") }), nonces(3), { to: [], skipped: [] });
+  sealCase("a listed client with an all-zero box key: skipped, the others sealed", sealIn({ list: { counter: 4n, devices: [P, C1, C2, { ...W1, boxKey: ZERO_KEY }, Q] } }), nonces(3), { to: phones, skipped: [ZERO_KEY], opened: text("announcement") });
+  sealCase("a phone with an all-zero notification key: skipped, the other sealed", notice({ list: { counter: 4n, devices: [P, C1, C2, W1, { ...Q, notificationKey: ZERO_KEY }] } }), nonces(2), { to: [P.signingKey], skipped: [ZERO_KEY], opened: text("notice") });
+  sealCase("a session name whose cap falls inside a two-byte character: cut before it, to 199 bytes", sealIn({ body: { ...ANNOUNCEMENT, sessionName: "a".repeat(199) + "\u00e9" } }), nonces(3), { to: clients, skipped: [], opened: text("announcement", { sessionName: "a".repeat(199) }) });
+  sealCase("a session name of 150 two-byte characters: cut to 100, 200 bytes", sealIn({ body: { ...ANNOUNCEMENT, sessionName: "\u00e9".repeat(150) } }), nonces(3), { to: clients, skipped: [], opened: text("announcement", { sessionName: "\u00e9".repeat(100) }) });
+  sealCase("a notice whose cap falls inside a four-byte character: cut before it, to 4,094 bytes", notice({ body: { ...NOTICE, notice: "a".repeat(4094) + "\u{1f600}" } }), nonces(2), { to: phones, skipped: [], opened: text("notice", { notice: "a".repeat(4094) }) });
+  sealCase("a box secret key that is not the computer's: the caller's mistake", sealIn({ boxSecretKey: boxSecret("computer 2") }), nonces(3), "throws");
+  sealCase("an empty session ID: the caller's mistake", sealIn({ slot: slotA("announcement", { sessionId: EMPTY }) }), nonces(3), "throws");
+  sealCase("a session ID of 129 bytes: the caller's mistake", sealIn({ slot: slotA("announcement", { sessionId: utf8("a".repeat(129)) }) }), nonces(3), "throws");
+  sealCase("a session ID that is not UTF-8: the caller's mistake", sealIn({ slot: slotA("announcement", { sessionId: Uint8Array.of(0x61, 0xff) }) }), nonces(3), "throws");
+  sealCase("an empty session ID from a computer not on the list: the caller's mistake, first", sealIn({ slot: slotA("announcement", { sessionId: EMPTY, computerKey: C3.signingKey }) }), nonces(3), "throws");
+  sealCase("a session name with a lone surrogate: replaced by U+FFFD", sealIn({ body: { ...ANNOUNCEMENT, sessionName: "a\ud800b" } }), nonces(3), { to: clients, skipped: [], opened: text("announcement", { sessionName: "a\ufffdb" }) });
+  return sealedOut;
+}
+
+// Names.
+
+const namesOut: NamesCase[] = [];
+const phoneBox = boxSecret("phone");
+
+function namesBody(n: { listCounter?: bigint; ordering?: bigint; names?: { signingKey: Uint8Array; name: Uint8Array }[] }): Uint8Array {
+  return toBinary(NamesSchema, create(NamesSchema, { listCounter: n.listCounter ?? LV.counter, ordering: n.ordering ?? ORDERING, names: n.names ?? goodNames() }));
+}
+const nameOf = (d: Dev, name: string) => ({ signingKey: d.signingKey, name: utf8(name) });
+const goodNames = () => [nameOf(P, "Pixel"), nameOf(C1, "build box"), nameOf(C2, "laptop"), nameOf(W1, "work browser"), nameOf(Q, "tablet")];
+const signNames = (b: Uint8Array, accountId = idA, secret = pSecret, context = NAMES_CONTEXT) => concat(sodium.crypto_sign_detached(framed(context, accountId, b), secret), b);
+const sealNames = (plaintext: Uint8Array, fromSecret = phoneBox, to = W1.boxKey) => box(plaintext, to, fromSecret, nonce("names"));
+
+/** The test-only names maker: what the account's phone does (in Dart). */
+function makeNames(m: { accountId: Uint8Array; list: ListView; phoneSeed: Uint8Array; phoneBoxSecretKey: Uint8Array; ordering: bigint; names: { signingKey: Uint8Array; name: string }[] }, nonces: Uint8Array[]) {
+  const b = toBinary(NamesSchema, create(NamesSchema, { listCounter: m.list.counter, ordering: m.ordering, names: m.names.map((n) => ({ signingKey: n.signingKey, name: utf8Cut(n.name, NAME_MAX_BYTES) })) }));
+  const plaintext = concat(sodium.crypto_sign_detached(framed(NAMES_CONTEXT, m.accountId, b), sodium.crypto_sign_seed_keypair(m.phoneSeed).privateKey), b);
+  const out: Sealed = { copies: [], skipped: [] };
+  m.list.devices
+    .filter((d) => d.role === CLIENT)
+    .forEach((d, i) => {
+      try {
+        out.copies.push({ signingKey: d.signingKey, recipientKey: d.boxKey, sealed: box(plaintext, d.boxKey, m.phoneBoxSecretKey, nonces[i]) });
+      } catch {
+        out.skipped.push(d.boxKey);
+      }
+    });
+  return out;
+}
+
+type NamedList = [Dev, string][];
+type NamesWant = { result: "accepted"; ordering: bigint; listCounter: bigint; names: NamedList; dropped: NamedList } | { result: "later" } | { result: "refused"; reason: string };
+const namedJson = (ns: NamedList) => ns.map(([d, name]) => ({ signingKey: hex(d.signingKey), name }));
+
+function names(about: string, input: { sealed: Uint8Array; accountId?: Uint8Array; list?: ListView; phoneKey?: Uint8Array; recipientSecretKey?: Uint8Array; highest?: bigint | null; now?: bigint }, want: NamesWant): void {
+  const full = { accountId: idA, list: LV, phoneKey: P.signingKey, recipientSecretKey: boxSecret("browser 1"), highest: null, now: NOW, ...input };
+  const got = e2e.openNames(full);
+  const reason = got.result === "refused" ? got.reason : undefined;
+  must(got.result === want.result && reason === ("reason" in want ? want.reason : undefined), `${about}: wanted ${want.result} ${"reason" in want ? want.reason : ""}, got ${got.result} ${reason ?? ""}`);
+  if (got.result === "accepted" && want.result === "accepted") {
+    const e = namesExpectOf(got) as { names: unknown; dropped: unknown };
+    must(got.ordering === want.ordering && got.listCounter === want.listCounter && isDeepStrictEqual(e.names, namedJson(want.names)) && isDeepStrictEqual(e.dropped, namedJson(want.dropped)), `${about}: the names opened`);
+  }
+  namesOut.push({
+    check: "open-names",
+    about,
+    needs: ["names"],
+    sealed: hex(full.sealed),
+    accountId: hex(full.accountId),
+    list: listViewJson(full.list),
+    phoneKey: hex(full.phoneKey),
+    recipientSecretKey: hex(full.recipientSecretKey),
+    ...(full.highest !== null ? { highest: full.highest.toString() } : {}),
+    now: full.now.toString(),
+    expect: namesExpectOf(got),
+  });
+}
+
+function namesCases(): NamesCase[] {
+  const refused = (reason: string) => ({ result: "refused" as const, reason });
+  const sealed = (n: Parameters<typeof namesBody>[0] = {}) => sealNames(signNames(namesBody(n)));
+  const GOOD: NamedList = [
+    [P, "Pixel"],
+    [C1, "build box"],
+    [C2, "laptop"],
+    [W1, "work browser"],
+    [Q, "tablet"],
+  ];
+  const ok = (over: { names?: NamedList; dropped?: NamedList; ordering?: bigint; listCounter?: bigint } = {}) =>
+    ({ result: "accepted", ordering: over.ordering ?? ORDERING, listCounter: over.listCounter ?? 4n, names: over.names ?? GOOD, dropped: over.dropped ?? [] }) as const;
+  const accepted = ok();
+
+  // Accepted.
+  names("good names", { sealed: sealed() }, accepted);
+  names("list_counter equal to the list's", { sealed: sealed({ listCounter: 4n }) }, accepted);
+  names("list_counter below the list's", { sealed: sealed({ listCounter: 3n }) }, ok({ listCounter: 3n }));
+  names("an unknown field", { sealed: sealNames(signNames(concat(namesBody({}), Uint8Array.of(0x48, 0x01)))) }, accepted);
+  names("ordering above the highest seen", { sealed: sealed(), highest: ORDERING - 1n }, accepted);
+  names("ordering exactly a day ahead", { sealed: sealed({ ordering: NOW + FUTURE_MS }) }, ok({ ordering: NOW + FUTURE_MS }));
+  names("a name for a device not on the list: dropped, returned apart", { sealed: sealed({ names: [nameOf(W1, "work browser"), nameOf(W2, "old browser"), nameOf(Q, "tablet")] }) }, ok({ names: [[W1, "work browser"], [Q, "tablet"]], dropped: [[W2, "old browser"]] }));
+  names("a name of 200 bytes", { sealed: sealed({ names: [nameOf(P, "p".repeat(200))] }) }, ok({ names: [[P, "p".repeat(200)]] }));
+  names("a name of 100 two-byte characters, 200 bytes", { sealed: sealed({ names: [nameOf(P, "\u00e9".repeat(100))] }) }, ok({ names: [[P, "\u00e9".repeat(100)]] }));
+  names("a name beginning with U+FEFF: kept, as text", { sealed: sealed({ names: [nameOf(P, "\ufeffPixel")] }) }, ok({ names: [[P, "\ufeffPixel"]] }));
+  {
+    const base = signNames(namesBody({}));
+    const pad = (n: number) => sealNames(signNames(concat(namesBody({}), Uint8Array.of(0x7a), Uint8Array.from(varint(BigInt(n))), new Uint8Array(n))));
+    let n = 32_768 - base.length - 64 - 3;
+    while (pad(n).length < 32_768) n++;
+    must(pad(n).length === 32_768, "names of exactly 32,768 bytes");
+    names("exactly 32,768 bytes, padded by an unknown field", { sealed: pad(n) }, accepted);
+    names("32,769 bytes", { sealed: pad(n + 1) }, refused("size"));
+  }
+
+  // Later.
+  names("list_counter above the list's", { sealed: sealed({ listCounter: 5n }) }, { result: "later" });
+  names("list_counter ahead with a name over its cap: later, before the text", { sealed: sealed({ listCounter: 5n, names: [nameOf(P, "p".repeat(201))] }) }, { result: "later" });
+  names("list_counter ahead with a key twice: later, before the duplicate", { sealed: sealed({ listCounter: 5n, names: [nameOf(P, "a"), nameOf(P, "b")] }) }, { result: "later" });
+
+  // Box and signature.
+  names("boxed from another key", { sealed: sealNames(signNames(namesBody({})), boxSecret("phone 2")) }, refused("box"));
+  names("the phone not on the list", { sealed: sealed(), list: { counter: 4n, devices: [C1, C2, W1, Q] } }, refused("box"));
+  names("39 bytes", { sealed: sealed().slice(0, 39) }, refused("box"));
+  names("an opened plaintext of 63 bytes", { sealed: sealNames(new Uint8Array(63)) }, refused("signature"));
+  names("an opened plaintext of 64 bytes: a signature over an empty body, bad", { sealed: sealNames(new Uint8Array(64)) }, refused("signature"));
+  {
+    const bad = signNames(namesBody({}));
+    bad[5] ^= 0x01;
+    names("a bad signature", { sealed: sealNames(bad) }, refused("signature"));
+  }
+  names("signed over another account's ID", { sealed: sealNames(signNames(namesBody({}), idB)) }, refused("signature"));
+  names("signed by another key", { sealed: sealNames(signNames(namesBody({}), idA, signingSecret("phone 2"))) }, refused("signature"));
+  names("a list's signature and body offered as names", { sealed: sealNames(list2) }, refused("signature"));
+  {
+    const cut = signNames(namesBody({}).slice(0, -3));
+    names("a signed body cut short", { sealed: sealNames(cut) }, refused("parse"));
+    cut[5] ^= 0x01;
+    names("a body cut short under a bad signature: the signature, before the parse", { sealed: sealNames(cut) }, refused("signature"));
+  }
+
+  // Ordering.
+  names("ordering 2^63", { sealed: sealed({ ordering: 2n ** 63n }) }, refused("range"));
+  names("ordering equal to the highest seen", { sealed: sealed(), highest: ORDERING }, refused("ordering"));
+  names("ordering below the highest seen", { sealed: sealed(), highest: ORDERING + 1n }, refused("ordering"));
+  names("ordering a day and a millisecond ahead", { sealed: sealed({ ordering: NOW + FUTURE_MS + 1n }) }, refused("future"));
+  names("ordering two days ahead, below the highest seen: the ordering, before the future", { sealed: sealed({ ordering: NOW + 2n * FUTURE_MS }), highest: NOW + 3n * FUTURE_MS }, refused("ordering"));
+  names("ordering a day and a millisecond ahead, list_counter ahead: the future, before later", { sealed: sealed({ ordering: NOW + FUTURE_MS + 1n, listCounter: 5n }) }, refused("future"));
+
+  // Names.
+  names("a name of 201 bytes", { sealed: sealed({ names: [nameOf(P, "p".repeat(201))] }) }, refused("text"));
+  names("a name of 101 two-byte characters, 202 bytes", { sealed: sealed({ names: [nameOf(P, "\u00e9".repeat(101))] }) }, refused("text"));
+  for (const [m, b] of MALFORMED) {
+    names(`a name holding ${m}`, { sealed: sealed({ names: [{ signingKey: P.signingKey, name: concat(utf8("x"), b) }] }) }, refused("text"));
+  }
+  names("a signing key twice", { sealed: sealed({ names: [nameOf(P, "a"), nameOf(C1, "b"), nameOf(P, "c")] }) }, refused("duplicate-key"));
+  names("a key twice, then a name that is not UTF-8: the text, before the duplicate", { sealed: sealed({ names: [nameOf(P, "a"), nameOf(P, "b"), { signingKey: C1.signingKey, name: Uint8Array.of(0xc3) }] }) }, refused("text"));
+  names("a key twice, of a device not on the list", { sealed: sealed({ names: [nameOf(W2, "a"), nameOf(W2, "b")] }) }, refused("duplicate-key"));
+
+  // The maker, to exact bytes with the nonces given.
+  const make = (about: string, m: Parameters<typeof makeNames>[0], nonces: Uint8Array[], copies: number, skipped: number, opened: NamedList) => {
+    const out = makeNames(m, nonces);
+    must(out.copies.length === copies && out.skipped.length === skipped, `make: ${about}`);
+    // Each copy opens, for its recipient, to the names given here.
+    for (const c of out.copies) {
+      const r = e2e.openNames({ sealed: c.sealed, accountId: m.accountId, list: m.list, phoneKey: P.signingKey, recipientSecretKey: boxSecret(DEVICE_NAMES.get(hex(c.signingKey))!), highest: null, now: m.ordering });
+      must(r.result === "accepted" && isDeepStrictEqual((namesExpectOf(r) as { names: unknown }).names, namedJson(opened)), `make: ${about}: a copy opens to the names given`);
+    }
+    namesOut.push({
+      check: "make-names",
+      about,
+      needs: ["make-names"],
+      accountId: hex(m.accountId),
+      list: listViewJson(m.list),
+      phoneSeed: hex(m.phoneSeed),
+      phoneBoxSecretKey: hex(m.phoneBoxSecretKey),
+      ordering: m.ordering.toString(),
+      names: m.names.map((n) => ({ signingKey: hex(n.signingKey), name: n.name })),
+      nonces: nonces.map(hex),
+      expect: sealedJson(out),
+    });
+  };
+  const nonces = (n: number) => Array.from({ length: n }, (_, i) => nonce(`names ${i}`));
+  const textNames = [
+    { signingKey: P.signingKey, name: "Pixel" },
+    { signingKey: C1.signingKey, name: "build box" },
+    { signingKey: C2.signingKey, name: "laptop" },
+    { signingKey: W1.signingKey, name: "work browser" },
+    { signingKey: Q.signingKey, name: "tablet" },
+  ];
+  const m = { accountId: idA, list: LV, phoneSeed: seed("phone signing"), phoneBoxSecretKey: phoneBox, ordering: ORDERING, names: textNames };
+  make("every device's name, a copy for each client", m, nonces(3), 3, 0, GOOD);
+  make("a name whose cap falls inside a three-byte character: cut before it, to 198 bytes", { ...m, names: [...textNames.slice(0, 4), { signingKey: Q.signingKey, name: "t".repeat(198) + "\u20ac" }] }, nonces(3), 3, 0, [...GOOD.slice(0, 4), [Q, "t".repeat(198)]]);
+  make("a name with a lone surrogate: replaced by U+FFFD", { ...m, names: [...textNames.slice(0, 4), { signingKey: Q.signingKey, name: "tab\ud800let" }] }, nonces(3), 3, 0, [...GOOD.slice(0, 4), [Q, "tab\ufffdlet"]]);
+  make("a client with an all-zero box key: skipped, the others sealed", { ...m, list: { counter: 4n, devices: [P, C1, C2, { ...W1, boxKey: ZERO_KEY }, Q] } }, nonces(3), 2, 1, GOOD);
+  return namesOut;
+}
+
 // ------------------------------------------------------------- writing
 
-const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase>> = {
+const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile<SealedCase> | CaseFile<NamesCase>> = {
   "framed.json": {
     about: "framed(context, parts...) and the 8-byte number in a part (docs/e2e.md, section 2). A case with throws is refused: the context, or the number, is the caller's mistake.",
     cases: framedCases(),
@@ -567,6 +1089,14 @@ const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase>> = {
   "list.json": {
     about: "A version of the device list, checked (docs/e2e.md, sections 3 and 6); the phone's list maker, to exact bytes; RFC 8032's test 1 for the raw Ed25519 verify. go is the relay's result where Go's crypto/ed25519 differs from libsodium.",
     cases: listCases(),
+  },
+  "sealed.json": {
+    about: "A computer's sealed copies of a session's announcement and notice (docs/e2e.md, section 5): sealing, to exact bytes with the nonces given, and opening.",
+    cases: sealedCases(),
+  },
+  "names.json": {
+    about: "The devices' names, signed and sealed by the account's phone (docs/e2e.md, section 3): opening, and the phone's maker to exact bytes with the nonces given.",
+    cases: namesCases(),
   },
 };
 

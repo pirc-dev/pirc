@@ -5,6 +5,7 @@ import { fromBinary } from "@bufbuild/protobuf";
 import { ListBodySchema, type Device, type ListBody } from "@pirc/protocol/v1alpha2";
 import type sodiumType from "libsodium-wrappers-sumo";
 
+import { equal, hex, isBytes } from "./bytes.ts";
 import { framed } from "./framed.ts";
 
 type Sodium = typeof sodiumType;
@@ -52,23 +53,10 @@ export type ListResult =
   | { result: "unsupported"; reason: ListUnsupportedReason; counter: bigint; hash: Uint8Array }
   | { result: "refused"; reason: ListRefusedReason };
 
-function equal(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let d = 0;
-  for (let i = 0; i < a.length; i++) d |= a[i] ^ b[i];
-  return d === 0;
-}
-
-const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-
-/** A Uint8Array, a Buffer among them, from any realm. */
-function isBytes(x: unknown): x is Uint8Array {
-  return ArrayBuffer.isView(x) && Object.prototype.toString.call(x) === "[object Uint8Array]";
-}
-
 const isAccountId = (x: unknown): x is Uint8Array => isBytes(x) && x.length === ACCOUNT_ID_BYTES;
 
-function isDeviceKeys(x: unknown): x is DeviceKeys {
+/** A role and five byte arrays. */
+export function isDeviceKeys(x: unknown): x is DeviceKeys {
   if (typeof x !== "object" || x === null) return false;
   const d = x as Record<string, unknown>;
   return (

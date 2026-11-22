@@ -2,7 +2,7 @@
 // (gen.ts) and the runner (cases.test.ts).
 import type { ListBody } from "@pirc/protocol/v1alpha2";
 
-import type { DeviceKeys, ListResult } from "../index.ts";
+import type { AnnouncementText, DeviceKeys, DeviceName, ListResult, ListView, NamesResult, NoticeText, OpenResult, Sealed, Slot } from "../index.ts";
 
 export const CASES_DIR = new URL("../../cases/e2e/", import.meta.url);
 
@@ -116,4 +116,130 @@ export function expectOf(r: ListResult): Expect {
     case "refused":
       return { result: r.result, reason: r.reason };
   }
+}
+
+// ------------------------------------------------- sealed.json, names.json
+
+export interface ListViewJson {
+  counter: string;
+  devices: DeviceJson[];
+}
+
+export interface SlotJson {
+  accountId: string;
+  computerKey: string;
+  sessionId: string;
+  kind: "announcement" | "notice";
+}
+
+export interface CopyJson {
+  signingKey: string;
+  recipientKey: string;
+  sealed: string;
+}
+
+/** opened: the text each copy opens to; present exactly when there are copies. */
+export type SealExpect = { copies: CopyJson[]; skipped: string[]; opened?: Record<string, string> } | { throws: true };
+
+export type OpenExpect = { result: "accepted"; ordering: string; body: Record<string, string> } | { result: "refused"; reason: string };
+
+export type SealedCase =
+  | {
+      check: "open";
+      about: string;
+      needs: string[];
+      sealed: string;
+      slot: SlotJson;
+      recipientSecretKey: string;
+      list: ListViewJson;
+      highest?: string;
+      now: string;
+      expect: OpenExpect;
+    }
+  | {
+      check: "seal";
+      about: string;
+      needs: string[];
+      list: ListViewJson;
+      boxSecretKey: string;
+      slot: SlotJson;
+      ordering: string;
+      body: Record<string, string>;
+      nonces: string[];
+      /** Each copy's recipient's secret key, in the order of the copies. */
+      recipientSecretKeys: string[];
+      expect: SealExpect;
+    };
+
+export interface NameJson {
+  signingKey: string;
+  name: string;
+}
+
+export type NamesExpect =
+  | { result: "accepted"; ordering: string; listCounter: string; names: NameJson[]; dropped: NameJson[] }
+  | { result: "later" }
+  | { result: "refused"; reason: string };
+
+export type NamesCase =
+  | {
+      check: "open-names";
+      about: string;
+      needs: string[];
+      sealed: string;
+      accountId: string;
+      list: ListViewJson;
+      phoneKey: string;
+      recipientSecretKey: string;
+      highest?: string;
+      now: string;
+      expect: NamesExpect;
+    }
+  | {
+      check: "make-names";
+      about: string;
+      needs: string[];
+      accountId: string;
+      list: ListViewJson;
+      phoneSeed: string;
+      phoneBoxSecretKey: string;
+      ordering: string;
+      names: NameJson[];
+      nonces: string[];
+      expect: { copies: CopyJson[]; skipped: string[] };
+    };
+
+export function listViewJson(l: ListView): ListViewJson {
+  return { counter: l.counter.toString(), devices: l.devices.map(deviceJson) };
+}
+
+export function listView(l: ListViewJson): ListView {
+  return { counter: BigInt(l.counter), devices: l.devices.map(deviceKeys) };
+}
+
+export function slotJson(s: Slot): SlotJson {
+  return { accountId: hex(s.accountId), computerKey: hex(s.computerKey), sessionId: hex(s.sessionId), kind: s.kind };
+}
+
+export function slotOf(s: SlotJson): Slot {
+  return { accountId: unhex(s.accountId), computerKey: unhex(s.computerKey), sessionId: unhex(s.sessionId), kind: s.kind };
+}
+
+export function sealedJson(s: Sealed): { copies: CopyJson[]; skipped: string[] } {
+  return {
+    copies: s.copies.map((c) => ({ signingKey: hex(c.signingKey), recipientKey: hex(c.recipientKey), sealed: hex(c.sealed) })),
+    skipped: s.skipped.map(hex),
+  };
+}
+
+export function openExpectOf(r: OpenResult<AnnouncementText | NoticeText>): OpenExpect {
+  return r.result === "accepted" ? { result: r.result, ordering: r.ordering.toString(), body: { ...r.body } } : { result: r.result, reason: r.reason };
+}
+
+export function namesExpectOf(r: NamesResult): NamesExpect {
+  const names = (ns: DeviceName[]) => ns.map((n) => ({ signingKey: hex(n.signingKey), name: n.name }));
+  if (r.result === "accepted") {
+    return { result: r.result, ordering: r.ordering.toString(), listCounter: r.listCounter.toString(), names: names(r.names), dropped: names(r.dropped) };
+  }
+  return r.result === "later" ? { result: r.result } : { result: r.result, reason: r.reason };
 }

@@ -1,5 +1,6 @@
-// The account's device list (docs/e2e.md, sections 2 and 3), checked over
-// libsodium, with no I/O. libsodium starts asynchronously, so its checks
+// The account's shared pieces (docs/e2e.md, sections 2, 3 and 5) over
+// libsodium, with no I/O: the device list's check, sealing and opening a
+// session's announcement, and opening the devices' names. libsodium starts asynchronously, so its checks
 // are reached through load(), which resolves once it has started.
 //
 // framed has a module of its own, @pirc/e2e/framed, that loads no
@@ -7,6 +8,8 @@
 import sodium from "libsodium-wrappers-sumo";
 
 import { checkList, type ListInput, type ListResult } from "./list.ts";
+import { openNames, type NamesInput, type NamesResult } from "./names.ts";
+import { openAnnouncement, seal, type AnnouncementText, type OpenInput, type OpenResult, type SealInput, type Sealed } from "./sealed.ts";
 
 export { framed, framedNumber } from "./framed.ts";
 export {
@@ -22,10 +25,36 @@ export {
   type ListResult,
   type ListUnsupportedReason,
 } from "./list.ts";
+export { NAME_MAX_BYTES, NAMES_CONTEXT, NAMES_MAX_BYTES, type DeviceName, type NamesInput, type NamesRefusedReason, type NamesResult } from "./names.ts";
+export {
+  ANNOUNCEMENT_CONTEXT,
+  CAPS,
+  FUTURE_MS,
+  NOTICE_CONTEXT,
+  SEALED_MAX_BYTES,
+  SESSION_ID_MAX_BYTES,
+  type AnnouncementText,
+  type Kind,
+  type ListView,
+  type NoticeText,
+  type OpenInput,
+  type OpenResult,
+  type SealInput,
+  type Sealed,
+  type SealedCopy,
+  type SealedRefusedReason,
+  type Slot,
+} from "./sealed.ts";
 
 export interface E2e {
   /** A version of the device list, checked as docs/e2e.md section 3 says. */
   checkList(input: ListInput): ListResult;
+  /** A computer's copies of a session's announcement or notice, one per recipient, each with a random nonce. */
+  seal(input: SealInput): Sealed;
+  /** A copy of an announcement, opened with this client's box secret key. */
+  openAnnouncement(input: OpenInput): OpenResult<AnnouncementText>;
+  /** The devices' names, sealed by the account's phone, opened with this client's box secret key. */
+  openNames(input: NamesInput): NamesResult;
 }
 
 let loaded: Promise<E2e> | undefined;
@@ -36,7 +65,12 @@ let loaded: Promise<E2e> | undefined;
  */
 export function load(): Promise<E2e> {
   loaded ??= sodium.ready.then(
-    () => ({ checkList: (input: ListInput) => checkList(sodium, input) }),
+    () => ({
+      checkList: (input: ListInput) => checkList(sodium, input),
+      seal: (input: SealInput) => seal(sodium, input),
+      openAnnouncement: (input: OpenInput) => openAnnouncement(sodium, input),
+      openNames: (input: NamesInput) => openNames(sodium, input),
+    }),
     (e: unknown) => {
       loaded = undefined;
       throw e;
