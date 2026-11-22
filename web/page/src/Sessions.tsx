@@ -419,8 +419,8 @@ function Counts(p: { sessions: SessionView[]; news: Set<string> }) {
   );
 }
 
-// What a session has cost and a meter of its context, as dingger and pi's
-// footer show them: grey, the working colour above 70% and the asking
+// What a session has cost, its whole total as pi's footer shows it, and a
+// meter of its context: grey, the working colour above 70% and the asking
 // colour above 90%.
 function Usage(p: { usage: SessionUsageView }) {
   const u = p.usage;

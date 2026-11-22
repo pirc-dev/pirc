@@ -54,8 +54,8 @@ const font = 'Roboto';
 // Code and tool output: SF Mono, the web page's ui-monospace on Apple's,
 // from macOS, where the goldens are drawn.
 const mono = 'Mono';
-// Not in CI either: GitHub's Macs draw them differently (2026-11-11, macOS
-// 15 runners: about 3% of each image's pixels).
+// Not in CI either: GitHub's Macs draw them differently (on macOS 15
+// runners, about 3% of each image's pixels).
 const goldensSkip = 'skipped: golden images are drawn on macOS, outside CI';
 final drawsGoldens = Platform.isMacOS && Platform.environment['CI'] != 'true';
 

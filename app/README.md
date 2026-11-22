@@ -179,33 +179,22 @@ with the same key, then `bundletool install-apks`.
 
 ## Signing for a device
 
-Automatic signing, by Xcode with an App Store Connect API key, from a
-keychain kept for these builds alone, so that nothing is read from or
-written to the login keychain:
+Automatic signing, by Xcode with an App Store Connect API key, so that it
+needs no Apple ID signed in to Xcode: a development certificate for the
+team, with its key in a keychain codesign can reach, then for each build
+`flutter build ios --config-only` and, in `ios/`:
 
-- the keychain, made once, with a random password kept elsewhere:
-  `security create-keychain -p <password> pirc-build.keychain-db`, then
-  `security set-keychain-settings` (no auto-lock) and adding it to the
-  user's search list after the keychains already there
-  (`security list-keychains -d user -s <those> <it>`), leaving the
-  default keychain as it is;
-- the development certificate, made through the API from a key made
-  here (`openssl genrsa`, a CSR, `POST /v1/certificates`), not by Xcode,
-  which would keep its key in the default keychain; the key, the
-  certificate and Apple's WWDR G3 intermediate imported into the
-  keychain, with `security set-key-partition-list -S
-  apple-tool:,apple:,codesign:` so that codesign needs no prompt;
-- each build: unlock the keychain, `flutter build ios --config-only`,
-  then in `ios/`:
+    xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+      -configuration Debug -destination 'generic/platform=iOS' \
+      -allowProvisioningUpdates -authenticationKeyPath <key.p8> \
+      -authenticationKeyID <id> -authenticationKeyIssuerID <issuer> build
 
-      xcodebuild -workspace Runner.xcworkspace -scheme Runner \
-        -configuration Debug -destination 'generic/platform=iOS' \
-        -allowProvisioningUpdates -authenticationKeyPath <key.p8> \
-        -authenticationKeyID <id> -authenticationKeyIssuerID <issuer> \
-        OTHER_CODE_SIGN_FLAGS="--keychain <keychain>" build
-
-  Xcode makes the development profiles for `dev.pirc.app` and
-  `dev.pirc.app.notifications` itself, for the team's registered devices.
+Xcode makes the development profiles for `dev.pirc.app` and
+`dev.pirc.app.notifications` itself, for the team's registered devices.
+To sign from a keychain other than the default one, add
+`OTHER_CODE_SIGN_FLAGS="--keychain <keychain>"`, and allow codesign to use
+its key without a prompt (`security set-key-partition-list -S
+apple-tool:,apple:,codesign:`).
 
 ## Building it yourself, on iOS
 

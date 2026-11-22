@@ -513,8 +513,8 @@ class _RowState extends State<_Row> {
   }
 }
 
-// What a session has cost and a meter of its context, as dingger and pi's
-// footer show them (web/page/src/Sessions.tsx, Usage): grey, the working
+// What a session has cost, its whole total as pi's footer shows it, and a
+// meter of its context (web/page/src/Sessions.tsx, Usage): grey, the working
 // colour above 70% and the asking colour above 90%; to a screen reader, the
 // figures in words.
 class _Usage extends StatelessWidget {

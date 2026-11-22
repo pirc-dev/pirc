@@ -68,7 +68,7 @@ which relay woke which phone, and when, and nothing about your sessions
 
 ## Status
 
-Early, and in daily use. The protocol is `v1alpha1` and may still change;
+Early: the protocol is `v1alpha1` and may still change;
 each release, tagged `vX.Y.Z`, has the relay and the web app to download
 and the extension to install with pi. [`docs/roadmap.md`](docs/roadmap.md) says
 what comes next, and [`docs/design.md`](docs/design.md) what is decided

@@ -16,21 +16,13 @@
 #
 # The tag is signed, and a release is not built from one that does not
 # verify against allowed_signers, at HEAD, with ssh (SECURITY.md, "Checking
-# a release"). The signing key need not be on the machine that builds
-# the release, so the tag is made where the key is, and reaches PiRC's
-# repository only once this has passed:
+# a release"). Only the tag needs the signing key; the build does not, so
+# it can run in another clone that has the tag. Push the tag to the
+# repository once this has passed:
 #
-#   git tag -s vX.Y.Z -m "PiRC X.Y.Z"           where the key is
-#   git push release vX.Y.Z                     to the release checkout, not the repository
-#   sh/release.sh                               there, at the tag
-#   git push origin vX.Y.Z                      from there, once it passes
-#
-# "release" is a remote, named once where the key is, with the release
-# checkout's tags fetched to remote-tracking refs: a pre-push hook that
-# checks only what the remote lacks then finds the tags it already has.
-#
-#   git remote add release <release checkout>
-#   git fetch release 'refs/tags/*:refs/remotes/release/tags/*'   before each push
+#   git tag -s vX.Y.Z -m "PiRC X.Y.Z"
+#   sh/release.sh
+#   git push origin vX.Y.Z
 #
 # Needs a clean tree, Go, Node with corepack, pi, tmux and openssl: the
 # end-to-end tests run against what was built before the checksums are

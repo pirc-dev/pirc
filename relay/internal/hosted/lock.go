@@ -1,6 +1,6 @@
 package hosted
 
-// A lapse (docs/design.md, step 14, stage 4, decided 2026-11-18): an
+// A lapse (docs/design.md, step 14, stage 4): an
 // account whose every subscription has lapsed, past the stores' own grace
 // and billing retry, is locked. Its hosts and read-only keys are refused
 // at login; a client logs in and may only renew, with a subscription the

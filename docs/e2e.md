@@ -1,12 +1,10 @@
 # End-to-end encryption
 
-Status: **Decided** (2026-11-21), replacing the design decided on 2026-11-18. That design was
-our own protocol for a list of devices and the keys that follow it. Every review of the code
-built on it found holes, most of them in state that several pi processes on one computer had to
-share. This one is built from standard parts that a reviewer can name, reviewed four times by
-Claude Fable on 2026-11-21 and accepted by the owner the same day. Why the earlier design and
-the alternatives were set aside is in section 10. The order of the build is in `design.md`,
-step 14.
+Status: **Decided**, replacing an earlier design that was our own protocol for a list of
+devices and the keys that follow it, and whose state, shared by several pi processes on one
+computer, proved hard to get right. This one is built from standard parts that a reviewer can
+name. Why the earlier design and the alternatives were set aside is in section 10. The order of
+the build is in `design.md`, step 14.
 
 The aim: a relay that routes every session but can read none of them, cannot add a device to an
 account, and cannot let one computer read another's sessions. A browser is the exception: it
@@ -73,15 +71,14 @@ a fresh random nonce each time. Script injected into the page can use the first 
 runs, but can copy the box key once it is open, and with it read session names and notices for
 good.
 
-**Libraries.** libsodium everywhere, verified on 2026-11-21 to give the same bytes on every
-platform (`pirc-e2e-spikes/sodium/RESULTS.md`):
+**Libraries.** libsodium everywhere, verified to give the same bytes on every platform:
 
 - Node and browsers: `libsodium-wrappers-sumo`, the "sumo" build, since the standard one has no
   SHA-512 or HMAC-SHA-512;
 - the app: Dart's `sodium` package (verified publisher), pinned to an exact version. It builds
   libsodium from its source at the app's build, and the build checks that source against the
   published release. SHA-512, HMAC-SHA-512 and ChaCha20-Poly1305 IETF are reached through its raw
-  bindings, since its higher-level API lacks them (**Decided**, 2026-11-21); its author is asked
+  bindings, since its higher-level API lacks them (**Decided**); its author is asked
   to export the HMAC state the raw bindings need;
 - the iOS notification extension: `swift-sodium`, pinned to a commit, since its last tagged
   release carries an older libsodium; the extension calls libsodium's C functions;
@@ -131,7 +128,7 @@ this account, with a higher counter than its own. The signature is checked every
 is read, from the relay or from disk, and a list is refused by its size before it is parsed. One
 signer and one counter means no forks, withdrawals or races.
 
-**Caps.** **Decided** (2026-11-21): at most **10 clients**, the account's phone among them, and
+**Caps.** **Decided**: at most **10 clients**, the account's phone among them, and
 **50 computers**, in at most 16 KB, so that a list always fits in one Noise message. Every
 verifier refuses a larger one, and a test checks the largest allowed list against the cap. A
 computer seals each announcement once per client (section 5), and streams to each client
@@ -141,7 +138,7 @@ watching, so ten keeps that small.
 next counter is saved before signing. So neither a restored backup nor a crash can sign two
 versions with one counter; a crash only wastes a number.
 
-**Only the account's phone adds or removes devices.** **Decided** (2026-11-21), as WhatsApp's
+**Only the account's phone adds or removes devices.** **Decided**, as WhatsApp's
 linked devices do. If it is lost, nothing can be added or removed: the person runs `/pirc leave`
 on each computer and makes a new account. Sessions on the computers are not lost.
 
@@ -161,9 +158,9 @@ on a computer that has joined, and they are what makes it a computer of an encry
 file. A process that receives a newer list writes it to a temporary file, flushes it to disk,
 links it to a name made of its counter, then flushes the folder. Linking is atomic and fails if
 the name exists, so processes can neither undo nor tear each other's writes, and no lock is
-needed. Node's flush on macOS is Apple's full flush (`F_FULLFSYNC`); tested on macOS and Linux
-on 2026-11-21. If that name exists with different bytes, the phone signed two versions with one
-counter: the computer stops and says so. A process uses the highest version; it reads again when
+needed. Node's flush on macOS is Apple's full flush (`F_FULLFSYNC`); tested on macOS and Linux.
+If that name exists with different bytes, the phone signed two versions with one counter: the
+computer stops and says so. A process uses the highest version; it reads again when
 the relay says a new one exists, before taking any channel, and every few minutes, and closes the
 channels of a client no longer listed.
 
@@ -311,7 +308,7 @@ whatever any attestation said.
 `design.md` (section 12, on Play Billing) says: that the app sends PiRC nothing about the
 subscription, and that no server of PiRC's asks the stores' APIs.
 
-**The hosted web client's page.** **Decided** (2026-11-17, `design.md` step 14): served as fixed
+**The hosted web client's page.** **Decided** (`design.md` step 14): served as fixed
 files from Cloudflare Pages, apart from the relay, so that getting into the relay does not give
 anyone the page. What an account with a browser trusts is then Cloudflare Pages and the
 publisher's deploy of the page, besides its own devices. Safari deletes a site's storage after
@@ -418,13 +415,13 @@ its own, is not covered.
 
 ## 10. Rejected, and why
 
-- **The design decided on 2026-11-18**: a list any client could sign, kept as a chain with forks
+- **The earlier design**: a list any client could sign, kept as a chain with forks
   and withdrawals; daily sending keys per process, wrapped for each client in bundles; weekly
   pre-keys; a shared label key; HPKE built by hand in four languages; per-platform checks before
   Ed25519; signed requests with counters and time windows; joining by a typed code with CPace.
   Each part was argued for, but together they were a protocol of our own that an expert would
-  have to study whole, and the state several pi processes shared broke in review twice. Pairwise
-  channels were rejected then for sending each broadcast once per client and keeping a ratchet's
+  have to study whole, and the state several pi processes shared was where its flaws kept
+  appearing. Pairwise channels were rejected then for sending each broadcast once per client and keeping a ratchet's
   state in every process; with at most ten clients the first is small, and Noise keeps no state
   between connections, so neither holds.
 - **MLS** (RFC 9420), one group for the account: its shared group secret lets every computer read

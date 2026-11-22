@@ -159,6 +159,6 @@ gateway against stubs of Apple's and Google's endpoints. It checks:
 - which refusals count as a token gone;
 - the handles and the limits.
 
-The publisher's gateway, `push.pirc.dev`, has woken apps for real through
-both Apple's and Google's servers; `app/README.md` says how to watch it
-with a simulator or an emulator.
+The publisher's gateway, `push.pirc.dev`, wakes apps through both Apple's
+and Google's servers; `app/README.md` says how to watch it with a
+simulator or an emulator.

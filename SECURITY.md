@@ -61,6 +61,5 @@ npm view pirc-extension@X.Y.Z dist.integrity
 echo "sha512-$(openssl dgst -sha512 -binary pirc-extension-X.Y.Z.tar.gz | base64)"
 ```
 
-Every version after 0.3.8, which the publisher uploaded by hand, is
-published by a GitHub Action in this repository (`.github/workflows/npm.yml`)
+Every version after 0.3.8 is published by a GitHub Action in this repository (`.github/workflows/npm.yml`)
 and carries npm's provenance, which `npm audit signatures` checks.

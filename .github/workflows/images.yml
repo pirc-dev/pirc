@@ -4,8 +4,8 @@
 # linux/amd64 and linux/arm64, so that what they run is the download, byte
 # for byte. They go to ghcr.io/pirc-dev with the release's version, and
 # latest when it is GitHub's latest release, with provenance attested. The
-# release itself is not changed. Packages pushed so start private: each is
-# made public by hand once, after its first release.
+# release itself is not changed. A package pushed so starts private, and
+# is made public in its settings.
 name: images
 
 on:

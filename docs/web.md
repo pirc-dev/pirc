@@ -1,16 +1,13 @@
 # PiRC's web app
 
-PiRC's first own client: a web app for a phone or a laptop, decided
-2026-10-25 (design section 12, step 12), and built since. This document
-records what was decided and why, and is its specification; installing it
-is in `docs/self-hosting.md`.
+PiRC's web client, for a phone or a laptop (design section 12, step 12).
+This document is its specification: what it does and why. Installing it is
+in `docs/self-hosting.md`.
 
 ## 1. Shape
 
 Two parts in `web/`, released with the relay (`pirc-web-X.Y.Z.tar.gz`) or
-built from any commit with `sh/build.sh web`, and deployed on their own; a
-deployment can follow the repository's main branch (docs/design.md,
-section 12, step 9):
+built from any commit with `sh/build.sh web`, and deployed on their own:
 
 - **The server**, a backend for the browser (BFF): a Node service that holds
   one connection to the relay as an ordinary client, with its own key. It
@@ -25,13 +22,12 @@ relay key and no protocol code, and the relay stays free of browser
 concerns (origins, static files).
 
 **For self-hosting only.** The server reads every payload in plaintext, as
-the relay could in the first version (design section 5.1). With end-to-end
+a self-hosted relay can (design section 5.1). With end-to-end
 encryption, which arrives with the hosted relay, the server would be an end
 and see everything, so a hosted relay gets a client designed for that
 instead.
 
-**Licence**: AGPL-3.0 (`web/LICENSE`), the copyright Justino Ltd's, since
-2026-11-07.
+**Licence**: AGPL-3.0 (`web/LICENSE`), the copyright Justino Ltd's.
 
 ## 2. Access
 
@@ -39,9 +35,9 @@ Whoever is signed in has full access: every host and session, which in
 practice is a shell on every host (design section 6). One relay is one
 account, so there are no users or permissions; they come with the hosted
 relay. The server manages the relay's devices through its own relay
-connection: approving or rejecting hosts that ask to join (since
-2026-10-29), listing hosts and clients, renaming and removing them, and
-issuing tokens for new ones (since 2026-10-31, design section 5.3). A
+connection: approving or rejecting hosts that ask to join, listing hosts
+and clients, renaming and removing them, and issuing tokens for new ones
+(design section 5.3). A
 token passes through the server to the page and is kept by neither; the
 server's log names only its role and label. It will not remove its own
 key, which every browser shares.
@@ -107,8 +103,8 @@ from a public CA for a name on the private network is the easier route.
 
 ## 3. Browser and server
 
-Decided 2026-10-25, after a survey of comparable apps (chat front ends,
-agent and coding-agent remote UIs, terminal and notebook UIs):
+Modelled on comparable apps (chat front ends, agent and coding-agent
+remote UIs, terminal and notebook UIs):
 
 - **Commands** are HTTP requests: `POST` for a prompt, stop and the
   actions; each answers `{ok, result}` or `{ok, code, message}`, with
@@ -118,8 +114,8 @@ agent and coding-agent remote UIs, terminal and notebook UIs):
   answered as it is taken, before its messages arrive. The commands, their
   bodies and their results are listed once, in `web/core/api.ts`, which
   the server's routes and the page's calls are both built from; a reply of
-  another kind than the command's is answered `PI_FAILED`. (2026-10-28)
-- **A request ID from the page** (2026-10-28): the page makes one for each
+  another kind than the command's is answered `PI_FAILED`.
+- **A request ID from the page**: the page makes one for each
   message it sends (a UUID) and sends it again with a Retry, and the
   server passes it on as the request's ID, making one itself only when
   the page gives none. A retry of a prompt pi already has is then not run
@@ -142,19 +138,20 @@ agent and coding-agent remote UIs, terminal and notebook UIs):
 - Messages are defined once, in TypeScript shared by the server and the
   page.
 - Served over HTTP/2: browsers allow only 6 streams per name over HTTP/1.1.
-  A proxy in front must not buffer the stream. The stream is written by
-  hand: Hono's own helper sets a header HTTP/2 forbids, which killed the
-  server; the end-to-end test runs over TLS and HTTP/2 for that reason.
+  A proxy in front must not buffer the stream. The stream is written
+  directly, not with Hono's own helper, which sets a header HTTP/2 forbids
+  and so brings the server down; the end-to-end test runs over TLS and
+  HTTP/2 for that reason.
 - **Bounds**: the server keeps the last 5000 events, or 16 MiB, for pages
   catching up; a page that stops reading (a phone gone off the network
   without closing) has its stream ended after 2000 unread events, and
   catches up when back. A chat keeps its latest 1000 items on the server.
   A compaction's command waits at most 15 minutes.
-- **A chat's latest items first** (2026-11-17): a page is sent a chat's
+- **A chat's latest items first**: a page is sent a chat's
   latest 100 items, in its snapshot and in a reset on the stream, and asks
   for those before them, 100 at a time (`/api/chat/<id>/older`), as its
   reader nears the top; what was on screen stays where it was. A long
-  chat's 1000 items were 1.3 MB of JSON, and seconds of drawing on a
+  chat's 1000 items can be 1.3 MB of JSON, and seconds of drawing on a
   phone. A change to an item the page has not loaded is marked `old`, and
   the page leaves it for when it loads that item; an answer made before
   such a change is asked for again, and one that comes after the chat was
@@ -163,10 +160,9 @@ agent and coding-agent remote UIs, terminal and notebook UIs):
   load says why, with a button to try again. The snapshot and older items
   are compressed (gzip or brotli, as the browser takes); the event stream
   is not, which would hold events back.
-- **New versions** (decided 2026-10-27): a page left open keeps running
-  the version it loaded, and nothing reloads a page already open, so a
-  deploy reached nobody who kept the app open. The page now asks for its
-  own HTML (`/`, never cached) when shown again, when its stream opens, and
+- **New versions**: a page left open keeps running the version it
+  loaded, and nothing else reloads a page already open, so a deploy would
+  reach nobody who kept the app open. So the page asks for its own HTML (`/`, never cached) when shown again, when its stream opens, and
   every 15 minutes on screen, at most once a minute; when the built files
   it names differ from its own, it reloads. It waits while anything would
   be lost: a draft, a message not yet settled (a refused one until it is
@@ -203,7 +199,7 @@ the expected state of sessions and history out) and its pure functions'
 results. `cases/README.md` describes them.
 
 Reason: the mobile app talks to the relay itself (design section 12, step
-13). It is Flutter (decided 2026-11-01), so its Dart version is written
+13). It is Flutter, so its Dart version is written
 to pass the same cases, and they behave the same. They are at the root,
 not in `web/`, since they belong to neither client.
 
@@ -215,17 +211,14 @@ not in `web/`, since they belong to neither client.
   using Radix's unstyled parts only where accessibility is hard to get right
   (menus, dialogs).
 - **Four looks, chosen in the app: "Native" (the default), "Quiet",
-  "Triage" and "Cockpit"** (Quiet and Triage 2026-10-26, Native and
-  Cockpit 2026-10-27). All four came from four directions drawn on
-  2026-10-26. Quiet is
+  "Triage" and "Cockpit"**, each from a mock-up of its own. Quiet is
   type and hairlines, colour kept for status: the agent's replies in
   Literata, a serif drawn for long reading on screens; the interface in
   Atkinson Hyperlegible Next; code, paths and tool calls in JetBrains Mono.
   Triage is cards and soft status tiles on a grey page, one blue accent
-  for what can be done, set in Geist and Geist Mono. Each was live alone
-  for a while; the owner liked both. Triage's inbox of cards on top
-  ("Waiting for you") did not prove useful and is gone: both looks list
-  sessions by host and group. Native makes the app feel shipped with the
+  for what can be done, set in Geist and Geist Mono. Triage's mock-up had
+  an inbox of cards on top ("Waiting for you"), which did not prove useful
+  and is left out: every look lists sessions by host and group. Native makes the app feel shipped with the
   phone: the system's grouped grey with white cards, a round tinted badge
   for each status where a messaging app puts a face, its blue, and the
   system's own font (San Francisco on Apple's, Roboto on Android), so it
@@ -246,10 +239,9 @@ not in `web/`, since they belong to neither client.
   `cockpit:` to one look, after `cards:`. A component differs by look
   only where its markup must: the mark on the sign-in screens, and
   Native's round send arrow.
-  Reason: two separate sets of components would build every feature and
-  fix twice, and the two designs, built side by side for one day, had
-  already each missed fixes the other had. The price: each change to the
-  page is dressed and looked at in both.
+  Reason: separate sets of components would build every feature and fix
+  more than once, and each set would miss fixes the others had. The price:
+  each change to the page is dressed and looked at in every look.
 - **How far Triage is dressed.** Every screen wears it: the list's rows
   and groups on cards, status tiles, the chat's blue bubbles and tool
   cards, the sheets' rows on cards, the model picker, sign-in with the
@@ -259,8 +251,8 @@ not in `web/`, since they belong to neither client.
   picker stays full screen on a phone rather than a tall sheet. Left out:
   the glyph beside each sheet row. Reason: a second layout per screen is
   where two looks would start to drift into two apps.
-- **Native and Cockpit, reconciled with their mock-ups** (2026-10-27), as
-  Triage was, on the same rule: one layout and one behaviour for every
+- **Native and Cockpit, against their mock-ups**, as Triage, on the same
+  rule: one layout and one behaviour for every
   look. Every screen wears each, including what the mock-ups did not
   draw (forking from a message, Clone, the window headings). Taken: the
   palettes, fonts and shapes above; Native's badges, pills for a group's
@@ -278,14 +270,13 @@ not in `web/`, since they belong to neither client.
   the coloured icon beside each sheet row; Cockpit's three equal composer buttons (the composer is the
   shared one, with Queue/Steer and Stop apart). Not possible yet: a
   thinking block's time (pi does not send it), and previews of the latest
-  message, which the list no longer shows. A tool's time and syntax
-  colours in code came later (2026-10-30, section 6), and so did, from
-  the roadmap, Cockpit's keys and Native's folding title, both below.
+  message, which the list does not show. A tool's time and syntax colours
+  in code are taken (section 6), as are Cockpit's keys and Native's
+  folding title, both below.
 - **The choice is kept in the browser**, per device, as which hosts are
   open is; it is set in Settings (below).
-  Native is the default and first in the picker (2026-11-19, the
-  owner's choice), as the phone apps' look; Quiet was, as the look that
-  was live. A browser that chose a look keeps it.
+  Native is the default and first in the picker, as the phone apps' look.
+  A browser that chose a look keeps it.
 - **The session's actions are a sheet** from the bottom: model, thinking
   level as one row of seven ("min" and "med" shortened, so that it fits a
   phone), cost and context (what it has cost and how full the context is,
@@ -294,42 +285,36 @@ not in `web/`, since they belong to neither client.
   rather than in the browser's dialogs. Sheets, the model picker and a
   table full screen are each a step in the history, so going back closes
   the top one.
-- **Context and cost in the chat's header** (`42% · $0.31`, 2026-10-30),
+- **Context and cost in the chat's header** (`42% · $0.31`),
   at the end of the title's line, which gives way to it. The page asks pi
   for them when the chat opens, after each reply and when the model
   changes. Reason: how full the context is decides when to
-  compact or start afresh, and was three taps away. The sheet's row still
+  compact or start afresh, and would otherwise be three taps away. The sheet's row still
   gives the details.
-- **Cost and context in the session list** (2026-11-13), as dingger
-  shows them: each row has what the session has cost (`$1.84`, its whole
+- **Cost and context in the session list**: each row has what the session has cost (`$1.84`, its whole
   total, as pi's footer) and a small meter of its context, grey, in the
   working colour above 70% and the asking colour above 90%, as in pi,
   before the time; the figures in its title. They come in the session's
   announcement (session.proto, from extension 0.3.3), which the extension
   sends again after each of pi's messages; a row from an older extension has
   neither. Reason: which sessions are filling up or dear is a reason to
-  open one, and was only inside it.
-- **The composer, while pi works** (from Triage, 2026-10-26): Stop on a
-  line of its own, by how long the turn has run, and away from the send
-  button; a small Steer/Queue switch on that line (2026-11-03), what each
-  does in its tooltip; and one send button that says which. Steer is the
-  default (since 2026-11-13; Queue before), and Cmd/Ctrl+Enter
-  sends as the button would, so it steers unless Queue is chosen, while
-  Alt+Enter queues, as in pi; the
-  choice holds for the turn, and each turn starts on Steer. Reason: Stop next to Steer was one
-  slip from the wrong one. Queue was the default while a steer was taken
-  to cut into pi's work, but in pi neither does: a steer is read after
-  the step pi is on (the reply and its tool calls), a queued message once
-  the whole task is done, and only Stop interrupts. Steer is what Enter
-  does in pi's own terminal, and the tooltips now say that ("after the
-  step it is on", "when the whole task is done") rather than "interrupt
-  now". The price of the switch is a line of
-  height on a phone. Before, Queue,
-  Steer and Stop sat in one row and Cmd/Ctrl+Enter steered. Until
-  2026-11-03 the switch had a line of its own, each side with a line
-  under it ("after this turn", "interrupt now"), which took too much
-  room; now it shares Stop's line, safe beside it since choosing sends
-  nothing, and on a phone's width that line drops the word "Working",
+  open one, and would otherwise show only inside it.
+- **The composer, while pi works** (from Triage): Stop on a line of its
+  own, by how long the turn has run, and away from the send button; a
+  small Steer/Queue switch on that line, what each does in its tooltip;
+  and one send button that says which. Steer is the default, and
+  Cmd/Ctrl+Enter sends as the button would, so it steers unless Queue is
+  chosen, while Alt+Enter queues, as in pi; the choice holds for the
+  turn, and each turn starts on Steer. Reasons: Stop
+  next to Steer would be one slip from the wrong one. Neither Steer nor
+  Queue cuts into pi's work: a steer is read after the step pi is on (the
+  reply and its tool calls), a queued message once the whole task is
+  done, and only Stop interrupts; so Steer, what Enter does in pi's own
+  terminal, is the default, and the tooltips say when each is read
+  ("after the step it is on", "when the whole task is done"). The switch
+  shares Stop's line, safe beside it since choosing sends nothing, as a
+  line of its own would take too much room; the price is a line of height
+  on a phone, and on a phone's width that line drops the word "Working",
   its sign and the time saying as much.
 - **Enter sends on a computer** and Shift+Enter makes a new line; on a
   touch screen Enter is a new line and the button sends. Cmd/Ctrl+Enter
@@ -349,8 +334,7 @@ not in `web/`, since they belong to neither client.
   every width, so that turning a tablet or resizing a window keeps the
   chat's draft and pending messages and the list's search. Beside the
   list the chat has no back button, and its actions sit by its title.
-- **Headers fold on scroll** (2026-10-30, from the Quiet and Native
-  mock-ups). The list's header scrolls away; once it has passed, a bar
+- **Headers fold on scroll** (from the Quiet and Native mock-ups). The list's header scrolls away; once it has passed, a bar
   of one line holds the list's title and its counts at the top, with the
   search held under it, and tapping the bar goes back to the top. The bar
   takes no room of its own, so nothing moves when it shows. On a phone
@@ -364,7 +348,7 @@ not in `web/`, since they belong to neither client.
   centred. Not on a laptop's chat, where the header is already two
   lines. Reason: a phone's height is the chat's, and folding only while
   reading back keeps the details where the reader writes.
-- **Keys on a computer** (2026-10-30, from the Cockpit mock-up): j and k
+- **Keys on a computer** (from the Cockpit mock-up): j and k
   move through the rows of the list and Enter opens one; n opens the next
   session waiting for the reader (those asking a question, then those
   finished since last open, each in the list's order, round again); Esc
@@ -385,10 +369,9 @@ not in `web/`, since they belong to neither client.
   the thumb's reach; but at the top it is in one place at every width,
   where lists usually keep it, and with no inbox it is the first thing on
   the home screen. A result marks what matched in its title and in where
-  it runs, underlined in bold, as the model picker does (since
-  2026-10-30); a match only in its folder, model or latest message marks
+  it runs, underlined in bold, as the model picker does; a match only in its folder, model or latest message marks
   nothing, as those are not shown.
-- **Settings is a screen of its own** (decided 2026-10-31), at
+- **Settings is a screen of its own**, at
   `/settings`, opened by a button at the right of the session list's
   title (or ?): on a phone it takes the screen as a chat does; on a
   laptop it is where a chat would be, the list beside it, and the button
@@ -396,24 +379,23 @@ not in `web/`, since they belong to neither client.
   opened from. First "This browser": notifications (a switch, with a
   line saying why when it cannot be used, and a test), the look (one
   segmented control) and, on a computer, the keys (a switch, and the
-  keys listed). Then "Hosts" and "Clients" (since 2026-10-31, design
-  section 5.3; one "Devices" section until 2026-11-03): every host and
+  keys listed). Then "Hosts" and "Clients" (design section 5.3): every host and
   every client registered with the relay, a dot for online, this app's
   own server first among the clients as "This web app", every browser
   signing in through it, and "Notifications on" for an app the relay
-  wakes through the push gateway (2026-11-04); one tapped opens a sheet to rename it, its
+  wakes through the push gateway; one tapped opens a sheet to rename it, its
   whole key shown, and below, to remove it, after a confirmation saying
   what that does (not offered for the app's own server). Under each
   section, "Add a host" or "Add an app": a name, then a one-time token
   shown once, as the `/pirc enrol` line to copy for a host, or as a QR
   code and `pirc://join` link for the app. The word "device" is not
-  used (2026-11-03). Not connected to the relay, each section says so
+  used. Not connected to the relay, each section says so
   instead of a list that
-  could be stale. Reasons: the three
-  were a footer under the last session, out of sight on a long list and
-  unlike the rest of the page; a sheet was enough for three switches but
-  sits far from the button on a laptop and would not hold what is coming,
-  sign-in settings such as how long a sign-in lasts. Not taken: a card
+  could be stale. Reasons: a footer under the last session would be out
+  of sight on a long list and unlike the rest of the page; a sheet would
+  be enough for a few switches but sits far from the button on a laptop
+  and would not hold what is to come, sign-in settings such as how long a
+  sign-in lasts. Not taken: a card
   on the list asking a phone to turn notifications on.
 - **Fonts are part of the page**, from Fontsource's packages (SIL Open
   Font License 1.1), not loaded from Google: the CSP allows the page's own
@@ -422,10 +404,9 @@ not in `web/`, since they belong to neither client.
   with it: a browser fetches a font's file when it first sets text in it,
   so a look not chosen downloads nothing. Native names the system's
   fonts, which need no file.
-- **The icon** was generated on 2026-10-25 with Google's Gemini image
-  model (gemini-nano-banana-2.1, through OpenRouter), from a brief for a
-  terminal prompt sending a signal, then cropped and set on one colour;
-  the master is web/page/logo.png.
+- **The icon** is a terminal prompt sending a signal, set on one colour;
+  the master is `web/page/logo.png`, from which `sh/app-icons.sh` makes
+  the mobile app's.
 - **What hosts send is shown as text**: markdown is rendered without raw
   HTML, under a CSP with no inline script, and its links open in a new
   tab, so that a host's reply cannot take the app somewhere else.
@@ -451,21 +432,22 @@ not in `web/`, since they belong to neither client.
   session or herdr workspace; a group's lists its sessions alone. Each has
   its own counts and searches only what it shows; back goes up a level, and
   a chat goes back to the list it was opened from.
-- **The most recent session comes first** (decided 2026-10-27), as in
+- **The most recent session comes first**, as in
   Claude's apps, whatever its status: under a host, in a tmux session or
   herdr workspace, among sessions in neither, and in search results' ties.
   A working session's time is the message that started its turn, so that
   its replies do not move it; the others' is their latest message, so a
   turn that ends moves its session to the top. Hosts, and the groups in
-  a host, keep their order. Replaced: grouping by window in the
-  terminal's order, which named only the first of a window's sessions,
-  and dingger's order (done, then working, then idle), which put the
+  a host, keep their order. Rejected: grouping by window in the
+  terminal's order, which names only the first of a window's sessions,
+  and ordering by status (done, then working, then idle), which puts the
   status before the time.
-- **Statuses in herdr's words and symbols**, as dingger shows them:
-  `◐` working (amber), `✓` done, finished since last open (teal), `○` idle
-  (green). The colors are darkened in light mode, where herdr's light
-  palette is too faint on white. herdr's `×` blocked (red) marks a
-  session asking a question (since 2026-10-30), before the others.
+- **Statuses in herdr's words and symbols**: `◐` working (amber), `✓`
+  done, finished since last open (teal), `○` idle (green). The colors are
+  darkened in light mode, where herdr's light palette is too faint on
+  white. A session asking a question, herdr's blocked, is marked `?` in
+  the accent colour, as something waiting for the reader rather than an
+  error, before the others.
 - **Tables scroll sideways on a narrow screen** rather than squeezing
   their columns until words break. Each column keeps a readable width,
   the first stays in view while the rest scroll under it, and the edge
@@ -476,14 +458,14 @@ not in `web/`, since they belong to neither client.
   only while the reader is there; scrolled up, a button goes back to it,
   and says "New messages" when something came meanwhile.
 
-Reasons: the author's usual stack, with the most ready-made parts for
+Reasons: a widely used stack, with the most ready-made parts for
 chat-style rendering (markdown, code highlighting, long lists). React's cost
 with token-by-token streaming is known and handled by keeping finished
 messages from re-rendering.
 
-## 6. First version, then notifications
+## 6. What it does, and notifications
 
-**First version:**
+**At its core:**
 - the hosts and their sessions, live, with which are working;
 - a session's history, then its live stream: markdown, code, tool calls
   (collapsed) and thinking;
@@ -494,29 +476,28 @@ messages from re-rendering.
 - the passkey sign-in;
 - installable as an app, with a manifest and a service worker.
 
-**Then, notifications** by web push, when a session finishes its turn
-(done 2026-10-30). The server keeps the push keys (VAPID) and the browsers'
-subscriptions and sends through the browser vendors' push services, which
-see only encrypted content; the server's machine needs to reach them
-(outbound HTTPS). On iOS, push works only for an app added to the home
-screen (iOS 16.4 and later).
+**Notifications** by web push, when a session finishes its turn. The
+server keeps the push keys (VAPID) and the browsers' subscriptions and
+sends through the browser vendors' push services, which see only
+encrypted content; the server's machine needs to reach them (outbound
+HTTPS). On iOS, push works only for an app added to the home screen (iOS
+16.4 and later).
 
-- **Which turns** (decided 2026-10-30): every turn that ends, wherever its
-  prompt came from (the terminal or a client), so that a task started at
-  the desk tells the phone it is done. Not a turn stopped on purpose (an
-  abort), nor a session that ends while working. Not when a page is
-  showing that chat, on any device: a page holds an event stream for the
-  chat it shows, and closes its stream while hidden, so an open stream
-  means the chat is on a screen. Later, perhaps: quiet while pi's tmux
-  window is on screen with recent typing, which needs the extension to say
-  so.
-- **What it says** (decided 2026-10-30): the session's title and host, and
-  the first 120 characters of pi's reply, or "Failed:" and the error. It
-  shows on the lock screen even when the sign-in has lapsed; the phone's
-  own setting to hide previews when locked is the way to keep it off
-  there. One per session: a later one replaces the earlier (the
-  notification's tag and the push's topic), and a push service keeps one
-  for a phone that is off for a day at most. Tapping it opens the chat.
+- **Which turns**: every turn that ends, wherever its prompt came from
+  (the terminal or a client), so that a task started at the desk tells
+  the phone it is done. Not a turn stopped on purpose (an abort), nor a
+  session that ends while working. Not when a page is showing that chat,
+  on any device: a page holds an event stream for the chat it shows, and
+  closes its stream while hidden, so an open stream means the chat is on
+  a screen. Later, perhaps: quiet while pi's tmux window is on screen with
+  recent typing, which needs the extension to say so.
+- **What it says**: the session's title and host, and the first 120
+  characters of pi's reply, or "Failed:" and the error. It shows on the
+  lock screen even when the sign-in has lapsed; the phone's own setting to
+  hide previews when locked is the way to keep it off there. One per
+  session: a later one replaces the earlier (the notification's tag and
+  the push's topic), and a push service keeps one for a phone that is off
+  for a day at most. Tapping it opens the chat.
 - **In each browser**: turned on in Settings (section 5), which
   asks the browser's permission, subscribes it and sends a test
   notification; turned off there. A subscription belongs to the passkey
@@ -524,64 +505,65 @@ screen (iOS 16.4 and later).
   notifications; one a push service says has ended is forgotten. They are
   kept in `push.json` in the data directory, with the server's push key:
   losing it means turning notifications on again on each device.
-- **Questions too** (decided 2026-10-30): a question pi asks for an
-  extension (design.md, section 8) notifies as a finished turn does, its
-  body "Asks:" and the question, unless a page shows the chat; one asked
-  before the server first saw the session does not.
-- **Moving for the mobile app** (decided 2026-10-31): which turns and
-  questions notify, and the reply's first 120 characters, move into the
-  extension, which puts the latest notice in the session's announcement;
-  the server, like the app, writes the notification from it with code in
-  `web/core`, and alone keeps quiet while one of its pages shows the chat
-  (design.md, section 12, step 13). Browsers keep web push from the
-  server as now. Done 2026-11-03: the server notifies from the host's
-  notice, a new number being news (a session first seen is not; one
-  back after its host dropped is not first seen, so a notice raised
-  while it was away notifies), its
-  text cut by the host to 120 code points; a session from a host whose
-  extension predates notices, which never carries one, notifies by the
-  rules above, worked out here from the chat.
+- **Questions too**: a question pi asks for an extension (design.md,
+  section 8) notifies as a finished turn does, its body "Asks:" and the
+  question, unless a page shows the chat; one asked before the server
+  first saw the session does not.
+- **From the host's notice**, shared with the mobile app: which turns and
+  questions notify, and the reply's first 120 characters, are worked out
+  by the extension, which puts the latest notice in the session's
+  announcement; the server, like the app, writes the notification from it
+  with code in `web/core`, and alone keeps quiet while one of its pages
+  shows the chat (design.md, section 12, step 13). Browsers get web push
+  from the server. A new number is news (a session first seen is not; one
+  back after its host dropped is not first seen, so a notice raised while
+  it was away notifies), its text cut by the host to 120 code points; a
+  session from a host whose extension predates notices, which never
+  carries one, notifies by the rules above, worked out here from the chat.
 - **Written here, not a library**: the encryption (RFC 8291) and the
   push key's token (RFC 8292) are about a hundred lines on Node's crypto,
   tested against the RFC's example.
 
-**After that, each with its own change below the web app:** fork and
-clone (done 2026-10-27: tap one of your messages to fork from there; Clone
-is in the session's actions), resume and past sessions (done 2026-10-27:
-Resume in the session's actions lists this folder's saved sessions, with a
-switch to every folder's), reload (done 2026-10-27: Reload in the
-session's actions), pi's session tree (done 2026-10-28: tap one of your
-messages to go back to before it, with or without a summary of what came
-after; Branches in the session's actions switches to another branch),
-approving hosts in the app (done 2026-10-29: a machine asking to join
-shows above the session list, approved or rejected in a sheet after
-comparing its key), starting and stopping agents (done 2026-10-29: + on a
-tmux session or herdr workspace, or New agent in a session's actions,
-opens a pi beside it in a folder chosen or typed, its window named after
-the folder unless a name is typed, then its chat; Stop pi
-in the actions), pi's questions (done 2026-10-30: a dialog an extension
-shows in pi's terminal shows above the composer too, answered there or in
-the terminal; × marks a session that asks, in the list and the chat;
-redesigned 2026-11-17, `design.md` section 8: the question takes the
-composer's place while it waits, under "pi asks", its text kept as
-written, indented and bracketed blocks as code and "Name: value" lines as
-a label and value; a yes or no and a select's options go with an optional
-note for pi, Dismiss closes the question and stops pi, an input's text is
-the answer, and one only pi's terminal can answer says so, with where pi
-runs and Stop; the tool call it holds up says "Waiting for you"; ? in the
-accent colour marks a session that asks, not ×, and the list's counts
-count each session once, asking before working before done, so that they
-add up),
-better tool cards (done 2026-10-30: a tool's time, counting while it runs
-and shown from a second up; a command's exit status beside it when it
-failed; an edit's diff in place of its arguments), code (done 2026-10-30:
-highlighted, with Copy on each block and on each finished reply, below),
-drafts (done 2026-10-30: what is being written in a chat is kept in the
-browser, per device as read marks are, for a week and for the hundred
-chats written in most recently; sending clears it), and images in prompts
-(done 2026-10-30, below).
+**Beyond that, each with its own change below the web app:**
 
-**Code in replies** (decided 2026-10-30): highlighted by highlight.js's
+- **Fork and clone**: tap one of your messages to fork from there; Clone
+  is in the session's actions.
+- **Resume and past sessions**: Resume in the session's actions lists
+  this folder's saved sessions, with a switch to every folder's.
+- **Reload**: Reload in the session's actions.
+- **pi's session tree**: tap one of your messages to go back to before
+  it, with or without a summary of what came after; Branches in the
+  session's actions switches to another branch.
+- **Approving hosts in the app**: a machine asking to join shows above
+  the session list, approved or rejected in a sheet after comparing its
+  key.
+- **Starting and stopping agents**: + on a tmux session or herdr
+  workspace, or New agent in a session's actions, opens a pi beside it in
+  a folder chosen or typed, its window named after the folder unless a
+  name is typed, then its chat; Stop pi in the actions.
+- **pi's questions** (`design.md` section 8): a dialog an extension shows
+  in pi's terminal shows in the app too, answered there or in the
+  terminal. The question takes the composer's place while it waits, under
+  "pi asks", its text kept as written, indented and bracketed blocks as
+  code and "Name: value" lines as a label and value; a yes or no and a
+  select's options go with an optional note for pi, Dismiss closes the
+  question and stops pi, an input's text is the answer, and one only pi's
+  terminal can answer says so, with where pi runs and Stop; the tool call
+  it holds up says "Waiting for you". `?` in the accent colour marks a
+  session that asks, in the list and the chat, and the list's counts
+  count each session once, asking before working before done, so that
+  they add up.
+- **Tool cards**: a tool's time, counting while it runs and shown from a
+  second up; a command's exit status beside it when it failed; an edit's
+  diff in place of its arguments.
+- **Code**: highlighted, with Copy on each block and on each finished
+  reply (below).
+- **Drafts**: what is being written in a chat is kept in the browser, per
+  device as read marks are, for a week and for the hundred chats written
+  in most recently; sending clears it.
+- **Images in prompts** (below).
+
+**Code in replies**: highlighted by highlight.js's
 grammars through `rehype-highlight`, beside react-markdown, only where the
 reply names the language (guessing it is slow and often wrong). It is a
 third of the page's size again, so it is fetched the first time a code
@@ -595,9 +577,9 @@ beside its language when the reply names one after the opening fence
 (```` ```ts src/a.ts ````, `title="…"`, `file=` or `filename=`, or
 ```` ```ts:src/a.ts ````), or names only a file, whose extension is then
 the language; a long path loses its start, so that the file's name shows
-(added 2026-10-30, as the Quiet mock-up drew it).
+(as the Quiet mock-up drew it).
 
-**Images in prompts** (decided 2026-10-30): up to four in a message,
+**Images in prompts**: up to four in a message,
 chosen with the button beside the box, pasted, or dropped anywhere on the
 page. The page shrinks each to fit 2000 by 2000 pixels (pi's own limit,
 so pi does not shrink it again) and sends it as a JPEG, or as a PNG where
@@ -605,10 +587,9 @@ that is under 1.5 MB (most screenshots); a small PNG, GIF or WebP that
 fits already goes as it is. Each is at most 2 MiB, so a prompt with four
 stays well within one relay frame; the server refuses more, larger, or
 another type (SVG, which a browser would run as a page, included). They
-travel inline in the prompt, as the Remote Pi app's did through the
-adapter (retired 2026-11-07), so the extension needed no change.
-Reason: a phone photo is 4 to 12 MB, which over mobile data took seconds
-and needed every limit raised, and pi would have shrunk it anyway;
+travel inline in the prompt, so the extension needs no change for them.
+Reason: a phone photo is 4 to 12 MB, which takes seconds over mobile data
+and would need every limit raised, and pi would shrink it anyway;
 shrinking in the browser also turns HEIC into something pi reads.
 Images are not kept with a draft.
 

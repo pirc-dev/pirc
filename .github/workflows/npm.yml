@@ -6,8 +6,8 @@
 # (SECURITY.md, "Checking a release"). npm trusts this workflow, in the
 # npm environment, to publish the package (trusted publishing), so no
 # token is kept anywhere, and adds its provenance. The release itself is
-# not changed. The package's first version was published by hand, since
-# npm sets up a trusted publisher only for a package that exists.
+# not changed. npm sets up a trusted publisher only for a package that
+# exists, so a new package's first version is published with a token.
 name: npm
 
 on:

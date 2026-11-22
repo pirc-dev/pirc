@@ -35,7 +35,7 @@ class PrivateFiles {
 Future<ChatCache?> keptChats(PrivateFiles files) async {
   try {
     final private = await files.folder();
-    // Where the chats were kept before 2026-11-04, unprotected: a cache,
+    // Where earlier versions kept the chats, unprotected: a cache,
     // so gone rather than moved; tried again at the next start if not.
     try {
       final old = Directory('${(await getApplicationSupportDirectory()).path}/chats');

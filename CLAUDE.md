@@ -16,11 +16,20 @@ it when a decision is made or changed.
   installation. Configuration comes from outside. The publisher's own
   identifiers are the product's, not an installation's, and may appear,
   such as the Apple developer team, the Firebase project and its app
-  config, `pirc.dev`, `push.pirc.dev` and the company's contact address. Test fixtures use neutral names, not
-  the owner's machines.
+  config, `pirc.dev`, `push.pirc.dev`, the company's contact address and
+  the release-signing identity. Nothing else about the owner or the
+  publisher as a person: no record of who decided what or when, no dated
+  history, no review logs, nothing about the publisher's own machines,
+  usage, deployment or release arrangements, and no private repositories
+  or tools. The docs state the product as it is; its history lives
+  outside the repository, in git and elsewhere. Test fixtures use neutral
+  names.
 - **Decisions are recorded.** A choice that changes scope, protocol, identity,
   trust or stack goes into `docs/design.md` with its reason, in the same
-  change. Open questions stay marked as open until they are decided.
+  change, stated as the product now is: without dates or who made it. A
+  changed decision replaces the old text; an alternative set aside may
+  stay as rejected, with its reason. Open questions stay marked as open
+  until they are decided.
 - **The protocol is defined once.** Message types live in one schema, and each
   language's types are generated from it; never hand-write a second copy.
 - **Reuse is deliberate.** Code adapted from another project is recorded under

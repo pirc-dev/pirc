@@ -9,9 +9,9 @@
 # and the commit is tagged vX.Y.Z. Snapshot builds are refused.
 #
 # A build: <package-dir> is what `sh/build.sh extension` wrote, from any
-# commit; it is committed on the default branch, untagged, which is what an
-# install without a tag follows. Nothing is committed when the package is
-# the same as what is there.
+# commit; it is committed on the default branch, untagged, for installs
+# that follow the branch rather than a release. Nothing is committed when
+# the package is the same as what is there.
 #
 # <checkout> is a clone of the extension's repository, clean and on its
 # default branch. Its contents are replaced by the package, committed and

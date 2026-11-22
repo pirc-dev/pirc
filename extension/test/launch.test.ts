@@ -50,8 +50,8 @@ test("herdr: a tab in pi's workspace, not focused, labelled, running the command
   assert.equal(herdrLauncher({ HERDR_SOCKET_PATH: "/s", HERDR_PANE_ID: "p" }), undefined);
 });
 
-// herdr answers one request per connection; both of the launch's requests
-// went on one before, and the second failed with "write EPIPE" (2026-11-21).
+// herdr answers one request per connection: the launch's two requests
+// must each open their own, or the second fails with "write EPIPE".
 test("herdr: the launch over a socket that answers once per connection", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pirc-herdr-"));
   const path = join(dir, "herdr.sock");

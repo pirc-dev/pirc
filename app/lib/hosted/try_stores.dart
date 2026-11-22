@@ -21,7 +21,8 @@ import '../ui/look.dart';
 
 const hostedBuild = bool.fromEnvironment('PIRC_HOSTED');
 
-// The test relay of stage 4, until the relay's own domain (stage 6).
+// The hosted relay's test address, used until the relay has its own
+// domain (docs/design.md, step 14, stage 6).
 const tryRelay = 'wss://hosted-test.pirc.dev';
 
 // What the login signs, and what the attestation binds

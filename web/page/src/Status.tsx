@@ -1,6 +1,6 @@
 // A session's status: asking, working, done or idle.
 
-// herdr's statuses, as dingger shows them: blocked (pi asks a question),
+// herdr's statuses, in its words: blocked (pi asks a question),
 // working, done (finished since last opened here) and idle; here a
 // question is in the accent colour, as something waiting for the person,
 // not an error. Shown as characters in their colour, as in a terminal; in
