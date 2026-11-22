@@ -13,6 +13,8 @@ changes the cases, and every client is made to pass them again.
 - `e2e/`: the hosted account's shared pieces (`docs/e2e.md`). These files
   are what any implementation of its checks must pass; TypeScript's runs
   them in `sh/check.sh`. See "End to end" below.
+- `noise/`: published Noise test vectors, copied unchanged (see "Noise"
+  below).
 - `notices/`: notifications, in the same form as `functions/`: which
   sessions have a notice not yet shown, and the title and body written
   from it (`web/core/notices.ts`). The iOS notification extension's Swift
@@ -114,7 +116,8 @@ phone's list maker to exact bytes, and RFC 8032's test 1 for the raw
 Ed25519 verify; `e2e/sealed.json` a computer's sealing of a session's
 announcement and notice, to exact bytes with the nonces given, and their
 opening (section 5); `e2e/names.json` opening the devices' names, and the
-phone's names maker to exact bytes (section 3). They are written from fixed seeds by
+phone's names maker to exact bytes (section 3); `e2e/channel.json` Noise
+for a channel and a join (sections 4 and 6; see "Noise" below). They are written from fixed seeds by
 `e2e/test/gen.ts` alone, never by hand, and `sh/check.sh` fails if they
 differ from what it writes; the runners' checks of each file's shape are
 a second guard. To write them:
@@ -138,10 +141,62 @@ gives; `go` is the relay's result
 where Go's `crypto/ed25519` accepts a signature libsodium refuses. The
 TypeScript runner is `e2e/test/cases.test.ts`; the relay's Go
 runner, of `framed.json` and `list.json`, is
-`relay/internal/hosted/list_test.go`; the app's Dart runner, of all
-four but the sealing in `sealed.json`, is `app/test/e2e_cases_test.dart`, and
+`relay/internal/hosted/list_test.go`; the app's Dart runner, of
+`framed.json`, `list.json`, `sealed.json` but its sealing, and
+`names.json`, is `app/test/e2e_cases_test.dart`, and
 `app/integration_test/e2e_cases_test.dart` runs it on a phone or
 simulator; the iOS notification extension's Swift runner, of `framed.json`,
 `list.json` but the maker, and the notices' opening in `sealed.json`, is
 `app/ios/PircNotices/Tests/PircNoticesTests/E2eCasesTests.swift`, run by
 `sh/notices.sh`.
+
+## Noise
+
+`noise/` holds published test vectors for the two Noise suites PiRC uses
+(`docs/e2e.md`, sections 4 and 6), as their projects publish them, one
+file per project: `cacophony.json` has `Noise_IK_25519_ChaChaPoly_SHA512`
+and `Noise_XXpsk3_25519_ChaChaPoly_SHA512`, with their handshake hashes;
+`snow.json` has `Noise_IK_25519_ChaChaPoly_SHA512`, without one. A file is
+`{"about", "source", "commit", "licence", "vectors": [...]}`, the source
+a link to the file at that commit; snow's MIT licence is
+`noise/snow.LICENSE`. The vectors' handshake messages carry payloads,
+which PiRC's never do, so a runner gives them to the Noise core directly,
+past the check of a handshake message's fixed length. Every message
+alternates between the two sides, the initiator's first, the handshake's
+then the transport's.
+
+`e2e/channel.json` holds what PiRC builds on Noise. A case's `check` is
+`prologue` (IK's prologue from an account ID, to its `bytes`), `IK` or
+`XXpsk3`. An IK or XXpsk3 case has `parties`, each with its `role`
+(`initiator` or `responder`), its X25519 `staticKey` and `ephemeralKey`
+(secret keys), and, for IK, an `accountId` from which the prologue is
+built as the public API builds it, or a `prologue` of the test's own; an
+IK initiator also has the computer's `responderKey`, and an XXpsk3 party
+its `prologue` and `psk`. Its `steps` run in order, each a call of one
+party:
+
+```
+{"party", "call": "write", "bytes"}            a handshake message, to exact bytes
+{"party", "call": "read", "bytes"}             a handshake message read
+{"party", "call": "send", "plaintext", "bytes"}   a transport message
+{"party", "call": "receive", "bytes", "plaintext"}
+```
+
+In place of the result, `"fails": <reason>` (`length`, `dh`, `decrypt` or
+`dead`) or, for a send, `"throws": true`, a caller's mistake. The write or
+read that ends a party's handshake has `done`: the `handshakeHash`, the
+other side's `remoteStatic`, and whether it is `confirmed`: an IK
+responder's is not until a message from the initiator decrypts, nor an
+XXpsk3 initiator's until one from the responder does (only that shows the
+responder holds the PSK), and a receive that succeeds confirms it. Only
+the IK responder may not send before. After a failure or a throw, every
+later call of that party is in the file, giving `dead`. A party's steps
+need nothing of the other's, so an implementation of one side runs
+them alone. A case `needs` `ik-responder` when it has an IK responder,
+`own-prologue` when an IK party has a prologue of its own, and `xxpsk3`
+for XXpsk3.
+
+The TypeScript runner is `e2e/test/noise.test.ts`, and
+`e2e/test/noise-webcrypto.test.ts` runs both files again with every
+static key in Node's WebCrypto (`e2e/test/webcrypto.ts`, which a browser
+can run too).

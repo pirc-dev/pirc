@@ -23,6 +23,23 @@ and in docs/design.md, section 11, with the upstream commit it came from.
 
 Nothing at present.
 
+Test vectors from other projects
+--------------------------------
+
+cases/noise/ holds Noise test vectors copied unchanged, each file naming
+its source, commit and licence:
+
+  - cacophony.json: from cacophony
+    (https://github.com/haskell-cryptography/cacophony),
+    vectors/cacophony.txt at 8ee9d41e34a1a596cfa3ab12aa4069ff87dc1247,
+    the IK and XXpsk3 vectors for 25519, ChaChaPoly and SHA512. Released
+    into the public domain (the Unlicense).
+  - snow.json: from snow (https://github.com/mcginty/snow),
+    tests/vectors/snow.txt at 8ac60f51cfe3e010c84f0a454cc575ad9204fa12
+    (version 0.10.0), the IK vector for 25519, ChaChaPoly and SHA512.
+    Copyright (c) 2021 Jake McGinty. MIT OR Apache-2.0, taken under MIT:
+    cases/noise/snow.LICENSE.
+
 Third-party code in PiRC's releases
 -----------------------------------
 

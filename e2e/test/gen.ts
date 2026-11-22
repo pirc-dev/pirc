@@ -1,6 +1,6 @@
-// Writes cases/e2e/framed.json, list.json, sealed.json and names.json from
-// fixed seeds. With --check it writes nothing, and fails if a file would
-// change.
+// Writes cases/e2e/framed.json, list.json, sealed.json, names.json and
+// channel.json from fixed seeds. With --check it writes nothing, and fails
+// if a file would change.
 //
 //   node --experimental-transform-types --no-warnings e2e/test/gen.ts [--check]
 //
@@ -8,11 +8,18 @@
 // fails if the package's code gives anything else; what it writes beyond
 // that (counters, hashes, the parsed list) is what the code gives. framed's
 // expected bytes are also written out by hand below, and RFC 8032's test 1
-// holds the raw Ed25519 calls to a published answer.
+// holds the raw Ed25519 calls to a published answer. For channel.json, the
+// published Noise vectors in cases/noise/ must pass before anything is
+// written, IK's prologue is typed out by hand, the messages' lengths are
+// checked against the fixed ones, and each case is run again from its
+// JSON alone by the runner's code.
 //
 // The list maker, the names maker, the raw signing and the sealing with
 // given nonces here are test-only: no device makes lists or names in
 // TypeScript, and the package seals only with random nonces.
+// Likewise the Noise handshakes here with given ephemeral keys, with
+// payloads, or with a static key whose public key is low-order: they
+// craft what an honest party never sends.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnnouncementSchema, DeviceSchema, ListBodySchema, NamesSchema, NoticeSchema } from "@pirc/protocol/v1alpha2";
 import sodium from "libsodium-wrappers-sumo";
@@ -42,6 +49,8 @@ import {
   type Sealed,
   type Slot,
 } from "../index.ts";
+import { channelPrologue, CHANNEL_CONTEXT, load as loadNoise } from "../noise.ts";
+import { Handshake, IK, MAX_MESSAGE, MAX_PLAINTEXT, XXPSK3, type Reason, type StaticKey, type Transport } from "../noise-core.ts";
 import { openSealed, sealWithNonces } from "../sealed.ts";
 import {
   CASES_DIR,
@@ -62,6 +71,7 @@ import {
   type SealedCase,
   type SealExpect,
 } from "./cases.ts";
+import { partyHandshake, runChannel, runVector, type ChannelCase, type ChannelFile, type DoneJson, type PartyJson, type StepJson, type VectorFile } from "./channel.ts";
 
 await sodium.ready;
 const e2e = await load();
@@ -1085,9 +1095,694 @@ function namesCases(): NamesCase[] {
   return namesOut;
 }
 
+// ------------------------------------------------------------ channel.json
+
+const noise = await loadNoise();
+
+// The published vectors hold the core to answers it did not write; they
+// pass here before anything is recorded.
+for (const name of ["cacophony.json", "snow.json"]) {
+  const file = JSON.parse(readFileSync(new URL(`../../cases/noise/${name}`, import.meta.url), "utf8")) as VectorFile;
+  for (const v of file.vectors) {
+    const problems = await runVector(sodium, v, async (s) => noise.staticKey(s));
+    must(problems.length === 0, `${name}, ${v.protocol_name}: ${problems.join("; ")}`);
+  }
+}
+
+type Outcome = "ok" | Reason | "throws";
+
+/**
+ * One channel case, recorded by running each step on the core: a write's
+ * bytes, a send's bytes and a handshake's end are what the core gives,
+ * and every step's result must be the one stated. After a failure, every
+ * call of that party is recorded giving dead.
+ */
+class Recorder {
+  readonly steps: StepJson[] = [];
+  private readonly hs = new Map<string, Handshake>();
+  private readonly ts = new Map<string, Transport>();
+
+  private constructor(
+    readonly check: "IK" | "XXpsk3",
+    readonly about: string,
+    readonly parties: Record<string, PartyJson>,
+  ) {}
+
+  static async make(check: "IK" | "XXpsk3", about: string, parties: Record<string, PartyJson>): Promise<Recorder> {
+    const r = new Recorder(check, about, parties);
+    for (const [name, p] of Object.entries(parties)) r.hs.set(name, await partyHandshake(sodium, check, p, async (s) => noise.staticKey(s)));
+    return r;
+  }
+
+  private outcome(party: string, got: Outcome, want: Outcome, call: string): void {
+    must(got === want, `${this.about}: ${party} ${call}: wanted ${want}, got ${got}`);
+  }
+
+  private done(party: string, t: Transport | undefined): { done?: DoneJson } {
+    if (!t) return {};
+    this.ts.set(party, t);
+    return { done: { handshakeHash: hex(t.handshakeHash), remoteStatic: hex(t.remoteStatic!), confirmed: t.confirmed } };
+  }
+
+  async write(party: string, want: Outcome = "ok"): Promise<Uint8Array> {
+    const r = await this.hs.get(party)!.writeMessage();
+    this.outcome(party, r.ok ? "ok" : r.reason, want, "write");
+    if (!r.ok) {
+      this.steps.push({ party, call: "write", fails: r.reason });
+      await this.dead(party);
+      return EMPTY;
+    }
+    this.steps.push({ party, call: "write", bytes: hex(r.message), ...this.done(party, r.transport) });
+    return r.message;
+  }
+
+  async read(party: string, bytes: Uint8Array, want: Outcome = "ok"): Promise<void> {
+    const r = await this.hs.get(party)!.readMessage(bytes);
+    this.outcome(party, r.ok ? "ok" : r.reason, want, "read");
+    if (!r.ok) {
+      this.steps.push({ party, call: "read", bytes: hex(bytes), fails: r.reason });
+      await this.dead(party);
+      return;
+    }
+    this.steps.push({ party, call: "read", bytes: hex(bytes), ...this.done(party, r.transport) });
+  }
+
+  async send(party: string, plaintext: Uint8Array, want: Outcome = "ok"): Promise<Uint8Array> {
+    let r: ReturnType<Transport["send"]> | undefined;
+    try {
+      r = this.ts.get(party)!.send(plaintext);
+    } catch {
+      r = undefined;
+    }
+    this.outcome(party, r === undefined ? "throws" : r.ok ? "ok" : r.reason, want, "send");
+    if (r === undefined || !r.ok) {
+      this.steps.push(r === undefined ? { party, call: "send", plaintext: hex(plaintext), throws: true } : { party, call: "send", plaintext: hex(plaintext), fails: r.reason });
+      await this.dead(party);
+      return EMPTY;
+    }
+    this.steps.push({ party, call: "send", plaintext: hex(plaintext), bytes: hex(r.message) });
+    return r.message;
+  }
+
+  async receive(party: string, bytes: Uint8Array, want: Outcome = "ok"): Promise<void> {
+    const t = this.ts.get(party)!;
+    const r = t.receive(bytes);
+    this.outcome(party, r.ok ? "ok" : r.reason, want, "receive");
+    if (!r.ok) {
+      this.steps.push({ party, call: "receive", bytes: hex(bytes), fails: r.reason });
+      await this.dead(party);
+      return;
+    }
+    must(t.confirmed, `${this.about}: confirmed once a message decrypted`);
+    this.steps.push({ party, call: "receive", bytes: hex(bytes), plaintext: hex(r.plaintext) });
+  }
+
+  /** Every call of a dead party, recorded giving dead: both of a handshake's, or of a transport's. */
+  private async dead(party: string): Promise<void> {
+    const t = this.ts.get(party);
+    if (t) {
+      for (const r of [t.send(Uint8Array.of(1)), t.receive(new Uint8Array(17))]) must(!r.ok && r.reason === "dead", `${this.about}: ${party} dead`);
+      this.steps.push({ party, call: "send", plaintext: "01", fails: "dead" }, { party, call: "receive", bytes: "00".repeat(17), fails: "dead" });
+    } else {
+      const h = this.hs.get(party)!;
+      for (const r of [await h.writeMessage(), await h.readMessage(new Uint8Array(48))]) must(!r.ok && r.reason === "dead", `${this.about}: ${party} dead`);
+      this.steps.push({ party, call: "write", fails: "dead" }, { party, call: "read", bytes: "00".repeat(48), fails: "dead" });
+    }
+  }
+
+  transport(party: string): Transport {
+    return this.ts.get(party)!;
+  }
+
+  async case(): Promise<ChannelCase> {
+    const roles = Object.values(this.parties);
+    const needs = [
+      ...(this.check === "IK" && roles.some((p) => p.role === "responder") ? ["ik-responder"] : []),
+      ...(this.check === "IK" && roles.some((p) => p.prologue !== undefined) ? ["own-prologue"] : []),
+      ...(this.check === "XXpsk3" ? ["xxpsk3"] : []),
+    ];
+    const c: ChannelCase = { check: this.check, about: this.about, needs, parties: this.parties, steps: this.steps };
+    // The runner, from the file alone, agrees with what was recorded.
+    const problems = await runChannel(sodium, c, async (s) => noise.staticKey(s));
+    must(problems.length === 0, `${this.about}: the runner: ${problems.join("; ")}`);
+    return c;
+  }
+}
+
+const x25519 = (name: string): Uint8Array => seed(`${name} x25519`);
+const x25519Public = (secret: Uint8Array): Uint8Array => sodium.crypto_scalarmult_base(secret);
+const flip = (b: Uint8Array, at: number, bit = 0x01): Uint8Array => {
+  const out = b.slice();
+  out[at < 0 ? out.length + at : at] ^= bit;
+  return out;
+};
+
+// The seven low-order encodings libsodium refuses (u = 0, 1, the two of
+// order 8, p - 1, p and p + 1), then the same with the top bit set.
+const LOW_ORDER = [
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0100000000000000000000000000000000000000000000000000000000000000",
+  "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+  "5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+].map(unhex);
+const LOW_ORDER_TOP = LOW_ORDER.map((k) => flip(k, 31, 0x80));
+const LOW_NAMES = ["u = 0", "u = 1", "order 8 (e0eb...)", "order 8 (5f9c...)", "u = p - 1", "u = p", "u = p + 1"];
+const lowOrder = (): [string, Uint8Array][] => [
+  ...LOW_ORDER.map((k, i) => [LOW_NAMES[i], k] as [string, Uint8Array]),
+  ...LOW_ORDER_TOP.map((k, i) => [`${LOW_NAMES[i]}, top bit set`, k] as [string, Uint8Array]),
+];
+for (const [name, k] of lowOrder()) {
+  let threw = false;
+  try {
+    sodium.crypto_scalarmult(x25519("probe"), k);
+  } catch {
+    threw = true;
+  }
+  must(threw, `libsodium refuses the low-order key ${name}`);
+}
+
+const CLIENT_S = x25519("client channel");
+const COMPUTER_S = x25519("computer channel");
+const OTHER_COMPUTER_S = x25519("other computer channel");
+const ACCOUNT = seed("channel account");
+const OTHER_ACCOUNT = seed("other channel account");
+
+const ikInitiator = (over: Partial<PartyJson> & { ephemeral?: string } = {}): PartyJson => {
+  const { ephemeral, ...rest } = over;
+  return {
+    role: "initiator",
+    staticKey: hex(CLIENT_S),
+    ephemeralKey: hex(x25519(ephemeral ?? "client ephemeral")),
+    responderKey: hex(x25519Public(COMPUTER_S)),
+    accountId: hex(ACCOUNT),
+    ...rest,
+  };
+};
+const ikResponder = (over: Partial<PartyJson> & { ephemeral?: string } = {}): PartyJson => {
+  const { ephemeral, ...rest } = over;
+  return { role: "responder", staticKey: hex(COMPUTER_S), ephemeralKey: hex(x25519(ephemeral ?? "computer ephemeral")), accountId: hex(ACCOUNT), ...rest };
+};
+/** A party with a prologue of the test's own in place of the account's. */
+const ownPrologue = (p: PartyJson, prologue: Uint8Array): PartyJson => {
+  const out: PartyJson = { ...p, prologue: hex(prologue) };
+  delete out.accountId;
+  return out;
+};
+
+/** The core's handshake for a party, with payloads, or another static key: for crafting what an honest party never sends. */
+function crafted(check: "IK" | "XXpsk3", p: PartyJson, staticKey?: StaticKey): Handshake {
+  return new Handshake(sodium, {
+    pattern: check === "IK" ? IK : XXPSK3,
+    initiator: p.role === "initiator",
+    staticKey: staticKey ?? noise.staticKey(unhex(p.staticKey)),
+    ...(p.responderKey !== undefined ? { remoteStatic: unhex(p.responderKey) } : {}),
+    prologue: p.accountId !== undefined ? channelPrologue(unhex(p.accountId)) : unhex(p.prologue!),
+    ...(p.psk !== undefined ? { psk: unhex(p.psk) } : {}),
+    ephemeral: unhex(p.ephemeralKey),
+    payloads: true,
+  });
+}
+/** A static key whose public key is the one given, and whose DH gives fixed bytes. */
+const fakeStatic = (publicKey: Uint8Array): StaticKey => ({ publicKey, dh: async () => seed("fake dh") });
+
+async function ok<T extends { ok: boolean }>(p: Promise<T> | T, what: string): Promise<Extract<T, { ok: true }>> {
+  const r = await p;
+  must(r.ok, `crafting: ${what}`);
+  return r as Extract<T, { ok: true }>;
+}
+
+async function channelCases(): Promise<ChannelCase[]> {
+  const out: ChannelCase[] = [];
+  const add = async (r: Recorder) => out.push(await r.case());
+
+  // The prologue, against its bytes typed out: the context's ASCII, 00,
+  // then each part's length: the version 1, the account ID, the client's
+  // role 2, the computer's role 1, each number 8 bytes big-endian.
+  for (const [about, id] of [
+    ["the prologue", ACCOUNT],
+    ["the prologue of another account", OTHER_ACCOUNT],
+  ] as const) {
+    const byHand = "706972632d6532652d7632206368616e6e656c" + "00" + "080000000000000001" + "20" + hex(id) + "080000000000000002" + "080000000000000001";
+    must(hex(channelPrologue(id)) === byHand, `prologue by hand: ${about}`);
+    out.push({ check: "prologue", about, needs: [], accountId: hex(id), bytes: byHand });
+  }
+
+  const ik = (about: string, parties: Record<string, PartyJson> = { initiator: ikInitiator(), responder: ikResponder() }) => Recorder.make("IK", about, parties);
+  /** IK to its end, as an honest pair runs it. */
+  const handshake = async (r: Recorder, i = "initiator", s = "responder") => {
+    const m1 = await r.write(i);
+    await r.read(s, m1);
+    const m2 = await r.write(s);
+    await r.read(i, m2);
+    return { m1, m2 };
+  };
+
+  // IK: a channel, to exact bytes.
+  {
+    const r = await ik("IK: both messages, then 0, 1 and 65,519 bytes each way, the initiator first");
+    const { m1, m2 } = await handshake(r);
+    must(m1.length === 96 && m2.length === 48, "IK's messages are 96 and 48 bytes");
+    must(!r.transport("responder").confirmed, "the responder unconfirmed before the initiator's first message");
+    must(equal(r.transport("initiator").handshakeHash, r.transport("responder").handshakeHash), "both sides' handshake hash");
+    for (const n of [0, 1, MAX_PLAINTEXT]) {
+      const a = fill(n, n + 1);
+      await r.receive("responder", await r.send("initiator", a));
+      const b = fill(n, n + 2);
+      await r.receive("initiator", await r.send("responder", b));
+    }
+    must(r.steps.filter((s) => s.call === "send" && "bytes" in s).every((s) => (s as { bytes: string }).bytes.length / 2 === (s as { plaintext: string }).plaintext.length / 2 + 16), "a transport message is its plaintext and 16 bytes");
+    await add(r);
+  }
+  {
+    const r = await ik("IK: the responder sending before the initiator's first message: throws, and the transport is dead");
+    await handshake(r);
+    await r.send("responder", utf8("early"), "throws");
+    await add(r);
+  }
+
+  // length.
+  {
+    const r = await ik("IK: message 1 cut to 95 bytes");
+    const m1 = await r.write("initiator");
+    await r.read("responder", m1.slice(0, 95), "length");
+    await add(r);
+  }
+  {
+    const r = await ik("IK: message 1 empty");
+    await r.write("initiator");
+    await r.read("responder", EMPTY, "length");
+    await add(r);
+  }
+  {
+    const r = await ik("IK: message 1 of 95 bytes whose e is low-order: length, before any DH", { responder: ikResponder() });
+    await r.read("responder", concat(LOW_ORDER[0], fill(63, 9)), "length");
+    await add(r);
+  }
+  {
+    const parties = { initiator: ikInitiator(), responder: ikResponder() };
+    const c = crafted("IK", parties.initiator);
+    const m1 = (await ok(c.writeMessage(utf8("x")), "IK message 1 with a payload")).message;
+    must(m1.length === 97, "IK message 1 with a payload of 1 byte");
+    const r = await ik("IK: message 1 with a payload of 1 byte, authentically encrypted", { responder: parties.responder });
+    await r.read("responder", m1, "length");
+    await add(r);
+    const low = concat(LOW_ORDER[2], m1.subarray(32));
+    const r2 = await ik("IK: message 1 of 97 bytes whose e is low-order: length, before any DH", { responder: parties.responder });
+    await r2.read("responder", low, "length");
+    await add(r2);
+  }
+  {
+    const r = await ik("IK: message 2 cut to 47 bytes");
+    const m1 = await r.write("initiator");
+    await r.read("responder", m1);
+    const m2 = await r.write("responder");
+    await r.read("initiator", m2.slice(0, 47), "length");
+    await add(r);
+  }
+  {
+    const parties = { initiator: ikInitiator(), responder: ikResponder() };
+    const ci = crafted("IK", parties.initiator);
+    const cr = crafted("IK", parties.responder);
+    const m1 = (await ok(ci.writeMessage(), "IK message 1")).message;
+    await ok(cr.readMessage(m1), "IK message 1 read");
+    const m2 = (await ok(cr.writeMessage(utf8("x")), "IK message 2 with a payload")).message;
+    must(m2.length === 49, "IK message 2 with a payload of 1 byte");
+    const r = await ik("IK: message 2 with a payload of 1 byte, authentically encrypted", { initiator: parties.initiator });
+    must(equal(await r.write("initiator"), m1), "the same message 1");
+    await r.read("initiator", m2, "length");
+    await add(r);
+    const r2 = await ik("IK: message 2 of 49 bytes whose e is low-order: length, before any DH", { initiator: parties.initiator });
+    await r2.write("initiator");
+    await r2.read("initiator", concat(LOW_ORDER[3], m2.subarray(32)), "length");
+    await add(r2);
+  }
+  {
+    const xx = crafted("XXpsk3", { role: "initiator", staticKey: hex(CLIENT_S), ephemeralKey: hex(x25519("client ephemeral")), prologue: hex(channelPrologue(ACCOUNT)), psk: hex(seed("join psk")) });
+    const m = (await ok(xx.writeMessage(), "XXpsk3 message 1")).message;
+    must(m.length === 48, "XXpsk3's message 1 is 48 bytes");
+    const r = await ik("IK: XXpsk3's message 1, 48 bytes, given to an IK responder");
+    await r.read("responder", m, "length");
+    await add(r);
+  }
+  {
+    // A transport message of the right channel, but where message 2 is due.
+    const ref = await ik("reference");
+    await handshake(ref);
+    await ref.receive("responder", await ref.send("initiator", EMPTY));
+    for (const n of [0, 1]) {
+      const t = await ref.send("responder", fill(n, 3));
+      const r = await ik(`IK: a transport message of ${16 + n} bytes given as message 2`, { initiator: ikInitiator() });
+      await r.write("initiator");
+      await r.read("initiator", t, "length");
+      await add(r);
+    }
+  }
+  for (const [n, who] of [
+    [15, "responder"],
+    [0, "responder"],
+    [MAX_MESSAGE + 1, "responder"],
+    [15, "initiator"],
+    [MAX_MESSAGE + 1, "initiator"],
+  ] as const) {
+    const r = await ik(`IK: a transport message of ${n} bytes, at the ${who}`);
+    await handshake(r);
+    if (who === "initiator") await r.receive("responder", await r.send("initiator", utf8("hello")));
+    await r.receive(who, new Uint8Array(n), "length");
+    await add(r);
+  }
+
+  // decrypt.
+  for (const [about, at] of [
+    ["IK: message 1 with a bit flipped in its e", 0],
+    ["IK: message 1 with a bit flipped in its encrypted static", 40],
+    ["IK: message 1 with a bit flipped in the static's tag", 70],
+    ["IK: message 1 with a bit flipped in its tag", -1],
+  ] as const) {
+    const r = await ik(about);
+    const m1 = await r.write("initiator");
+    await r.read("responder", flip(m1, at), "decrypt");
+    await add(r);
+  }
+  for (const [about, at] of [
+    ["IK: message 2 with a bit flipped in its e", 0],
+    ["IK: message 2 with a bit flipped in its tag", -1],
+  ] as const) {
+    const r = await ik(about);
+    const m1 = await r.write("initiator");
+    await r.read("responder", m1);
+    const m2 = await r.write("responder");
+    await r.read("initiator", flip(m2, at), "decrypt");
+    await add(r);
+  }
+  const otherPrologue = (about: string, prologue: Uint8Array) => ({ about, prologue });
+  for (const { about, prologue } of [
+    otherPrologue("another account's", channelPrologue(OTHER_ACCOUNT)),
+    otherPrologue("the roles swapped", framed(CHANNEL_CONTEXT, framedNumber(1n), ACCOUNT, framedNumber(1n), framedNumber(2n))),
+    otherPrologue("version 2", framed(CHANNEL_CONTEXT, framedNumber(2n), ACCOUNT, framedNumber(2n), framedNumber(1n))),
+    otherPrologue("another context", framed("pirc-e2e-v2 join", framedNumber(1n), ACCOUNT, framedNumber(2n), framedNumber(1n))),
+    otherPrologue("none", EMPTY),
+  ]) {
+    const r = await ik(`IK: the initiator with ${about} prologue`, { initiator: ownPrologue(ikInitiator(), prologue), responder: ikResponder() });
+    await r.read("responder", await r.write("initiator"), "decrypt");
+    await add(r);
+  }
+  {
+    const r = await ik("IK: the initiator holding another computer's key", { initiator: ikInitiator({ responderKey: hex(x25519Public(OTHER_COMPUTER_S)) }), responder: ikResponder() });
+    await r.read("responder", await r.write("initiator"), "decrypt");
+    await add(r);
+  }
+  {
+    // The responder answering another handshake of the same client.
+    const ci = crafted("IK", ikInitiator({ ephemeral: "client ephemeral, another handshake" }));
+    const cr = crafted("IK", ikResponder());
+    await ok(cr.readMessage((await ok(ci.writeMessage(), "another message 1")).message), "another message 1 read");
+    const m2 = (await ok(cr.writeMessage(), "another message 2")).message;
+    const r = await ik("IK: message 2 from another handshake", { initiator: ikInitiator() });
+    await r.write("initiator");
+    await r.read("initiator", m2, "decrypt");
+    await add(r);
+  }
+  /**
+   * The transport's failures at each side, for a pattern: the handshake run
+   * by open, and another channel of the same pair by other. Before the
+   * initiator receives, the responder receives a first message, which an IK
+   * responder needs before it may send.
+   */
+  const transportFailures = async (label: string, make: (about: string) => Promise<Recorder>, open: (r: Recorder) => Promise<unknown>, other: () => Promise<Recorder>) => {
+    for (const who of ["responder", "initiator"] as const) {
+      const from = who === "responder" ? "initiator" : "responder";
+      const opened = async (about: string) => {
+        const r = await make(`${label}: ${about}, at the ${who}`);
+        await open(r);
+        if (who === "initiator") await r.receive("responder", await r.send("initiator", utf8("first")));
+        return r;
+      };
+      {
+        const r = await opened("a transport message with a bit flipped");
+        await r.receive(who, flip(await r.send(from, utf8("hello")), 3), "decrypt");
+        await add(r);
+      }
+      {
+        const r = await opened("a transport message with a bit flipped in its tag");
+        await r.receive(who, flip(await r.send(from, utf8("hello")), -1), "decrypt");
+        await add(r);
+      }
+      {
+        const r = await opened("a transport message replayed");
+        const m = await r.send(from, utf8("hello"));
+        await r.receive(who, m);
+        await r.receive(who, m, "decrypt");
+        await add(r);
+      }
+      {
+        const r = await opened("two transport messages reordered");
+        const a = await r.send(from, utf8("one"));
+        const b = await r.send(from, utf8("two"));
+        must(a.length === b.length, "reordered messages of one length");
+        await r.receive(who, b, "decrypt");
+        await add(r);
+      }
+      {
+        const r = await opened("a transport message after a dropped one");
+        const a = await r.send(from, utf8("one"));
+        await r.send(from, utf8("two"));
+        const c = await r.send(from, utf8("three"));
+        await r.receive(who, a);
+        await r.receive(who, c, "decrypt");
+        await add(r);
+      }
+      {
+        // The same pair, another handshake: another channel's message at the same counter.
+        const o = await other();
+        await open(o);
+        if (who === "initiator") await o.receive("responder", await o.send("initiator", utf8("first")));
+        const r = await opened("a transport message from another channel");
+        await r.receive(who, await o.send(from, utf8("hello")), "decrypt");
+        await add(r);
+      }
+      {
+        const r = await opened("its own transport message reflected back");
+        if (who === "responder") await r.receive("responder", await r.send("initiator", utf8("first")));
+        await r.receive(who, await r.send(who, utf8("hello")), "decrypt");
+        await add(r);
+      }
+    }
+  };
+  await transportFailures("IK", (about) => ik(about), handshake, () =>
+    ik("another channel", { initiator: ikInitiator({ ephemeral: "client ephemeral, another channel" }), responder: ikResponder({ ephemeral: "computer ephemeral, another channel" }) }),
+  );
+  {
+    const r = await ik("IK: a plaintext of 65,520 bytes: throws, and the transport is dead");
+    await handshake(r);
+    await r.send("initiator", fill(MAX_PLAINTEXT + 1, 4), "throws");
+    await add(r);
+  }
+
+  // dh: the initiator's static key never meets a low-order point first.
+  for (const [name, k] of lowOrder()) {
+    const r = await ik(`IK: the initiator given a low-order computer key (${name}): es, at the write`, { initiator: ikInitiator({ responderKey: hex(k) }) });
+    await r.write("initiator", "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const r = await ik(`IK: message 1 with a low-order e (${name}): es, at the responder`, { responder: ikResponder() });
+    await r.read("responder", concat(k, fill(64, 5)), "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    // Written by a static key whose public key is low-order, its DH faked.
+    const c = crafted("IK", ikInitiator(), fakeStatic(k));
+    const m1 = (await ok(c.writeMessage(), "message 1 with a low-order static")).message;
+    const r = await ik(`IK: message 1 with a validly encrypted low-order s (${name}): ss, at the responder`, { responder: ikResponder() });
+    await r.read("responder", m1, "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const r = await ik(`IK: message 2 with a low-order e (${name}): ee, at the initiator`, { initiator: ikInitiator() });
+    await r.write("initiator");
+    await r.read("initiator", concat(k, fill(16, 6)), "dh");
+    await add(r);
+  }
+
+  // Message 1 replayed to a fresh responder.
+  {
+    const r = await ik("IK: message 1 replayed to a fresh responder: accepted, unconfirmed, another message 2, and the initiator's first transport message fails there", {
+      initiator: ikInitiator(),
+      responder: ikResponder(),
+      replayed: ikResponder({ ephemeral: "computer ephemeral, replayed" }),
+    });
+    const { m1, m2 } = await handshake(r);
+    const t = await r.send("initiator", utf8("my list"));
+    await r.receive("responder", t);
+    await r.read("replayed", m1);
+    const again = await r.write("replayed");
+    must(!equal(again, m2), "the replayed responder's message 2 differs");
+    must(!r.transport("replayed").confirmed, "the replayed responder unconfirmed");
+    await r.receive("replayed", t, "decrypt");
+    await add(r);
+  }
+
+  // XXpsk3.
+  const PSK = seed("join psk");
+  const XX_PROLOGUE = utf8("a join's prologue, as part of a test");
+  const xxParty = (role: "initiator" | "responder", over: Partial<PartyJson> & { ephemeral?: string } = {}): PartyJson => {
+    const { ephemeral, ...rest } = over;
+    return {
+      role,
+      staticKey: hex(role === "initiator" ? x25519("phone channel") : x25519("new device channel")),
+      ephemeralKey: hex(x25519(ephemeral ?? `${role} join ephemeral`)),
+      prologue: hex(XX_PROLOGUE),
+      psk: hex(PSK),
+      ...rest,
+    };
+  };
+  const xx = (about: string, parties: Record<string, PartyJson> = { initiator: xxParty("initiator"), responder: xxParty("responder") }) => Recorder.make("XXpsk3", about, parties);
+  {
+    const r = await xx("XXpsk3: three messages, then a transport message each way, the initiator unconfirmed until it receives one");
+    const m1 = await r.write("initiator");
+    await r.read("responder", m1);
+    const m2 = await r.write("responder");
+    await r.read("initiator", m2);
+    const m3 = await r.write("initiator");
+    await r.read("responder", m3);
+    must(m1.length === 48 && m2.length === 96 && m3.length === 64, "XXpsk3's messages are 48, 96 and 64 bytes");
+    must(equal(r.transport("initiator").handshakeHash, r.transport("responder").handshakeHash), "both sides' handshake hash");
+    must(!r.transport("initiator").confirmed && r.transport("responder").confirmed, "the XXpsk3 initiator unconfirmed until the responder's message, the responder confirmed");
+    // The initiator may send unconfirmed; the first message it receives confirms it.
+    await r.receive("responder", await r.send("initiator", utf8("my keys")));
+    must(!r.transport("initiator").confirmed, "the XXpsk3 initiator unconfirmed after sending");
+    await r.receive("initiator", await r.send("responder", utf8("mine")));
+    must(r.transport("initiator").confirmed, "the XXpsk3 initiator confirmed by the responder's message");
+    await add(r);
+  }
+  {
+    const r = await xx("XXpsk3: the initiator with another PSK: decrypt at the responder, on message 3's payload tag", { initiator: xxParty("initiator", { psk: hex(seed("another psk")) }), responder: xxParty("responder") });
+    await r.read("responder", await r.write("initiator"));
+    await r.read("initiator", await r.write("responder"));
+    await r.read("responder", await r.write("initiator"), "decrypt");
+    await add(r);
+  }
+  {
+    const r = await xx("XXpsk3: the initiator with another prologue: decrypt at message 1's tag", { initiator: xxParty("initiator", { prologue: hex(utf8("another prologue")) }), responder: xxParty("responder") });
+    await r.read("responder", await r.write("initiator"), "decrypt");
+    await add(r);
+  }
+  for (const [about, msg, at] of [
+    ["XXpsk3: message 1 with a bit flipped in its e", 1, 0],
+    ["XXpsk3: message 1 with a bit flipped in its tag", 1, -1],
+    ["XXpsk3: message 2 with a bit flipped in its e", 2, 0],
+    ["XXpsk3: message 2 with a bit flipped in its encrypted static", 2, 40],
+    ["XXpsk3: message 2 with a bit flipped in its tag", 2, -1],
+    ["XXpsk3: message 3 with a bit flipped in its encrypted static", 3, 5],
+    ["XXpsk3: message 3 with a bit flipped in its tag", 3, -1],
+  ] as const) {
+    const r = await xx(about);
+    const sides = ["initiator", "responder"];
+    for (let i = 1; i <= msg; i++) {
+      const w = sides[(i + 1) % 2];
+      const m = await r.write(w);
+      await r.read(sides[i % 2], i === msg ? flip(m, at) : m, i === msg ? "decrypt" : "ok");
+    }
+    await add(r);
+  }
+  for (const [n, cut, payload] of [
+    [1, 47, false],
+    [2, 95, false],
+    [3, 63, false],
+    [1, 49, true],
+    [2, 97, true],
+    [3, 65, true],
+  ] as const) {
+    // Messages written by the core with payloads, one byte of them where so.
+    const ci = crafted("XXpsk3", xxParty("initiator"));
+    const cr = crafted("XXpsk3", xxParty("responder"));
+    const p = (i: number) => (payload && i === n ? utf8("x") : EMPTY);
+    const m1 = (await ok(ci.writeMessage(p(1)), "XX 1")).message;
+    await ok(cr.readMessage(m1), "XX 1 read");
+    const m2 = (await ok(cr.writeMessage(p(2)), "XX 2")).message;
+    await ok(ci.readMessage(m2), "XX 2 read");
+    const m3 = (await ok(ci.writeMessage(p(3)), "XX 3")).message;
+    const m = [m1, m2, m3][n - 1];
+    const given = payload ? m : m.slice(0, cut);
+    must(given.length === cut, `XX message ${n} of ${cut} bytes`);
+    const reader = n === 2 ? "initiator" : "responder";
+    const r = await xx(payload ? `XXpsk3: message ${n} with a payload of 1 byte, authentically encrypted` : `XXpsk3: message ${n} cut to ${cut} bytes`, { [reader]: xxParty(reader) });
+    if (n >= 2) {
+      if (reader === "initiator") await r.write("initiator");
+      else {
+        await r.read("responder", m1);
+        await r.write("responder");
+      }
+    }
+    await r.read(reader, given, "length");
+    await add(r);
+  }
+  {
+    const r = await xx("XXpsk3: message 2 of 97 bytes whose e is low-order: length, before any DH", { initiator: xxParty("initiator") });
+    await r.write("initiator");
+    await r.read("initiator", concat(LOW_ORDER[1], fill(65, 7)), "length");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const r = await xx(`XXpsk3: message 1 with a low-order e (${name}): ee, at the responder's write`, { responder: xxParty("responder") });
+    // A handshake's own e is never low-order, so this message 1 is built
+    // from the symmetric state by hand: e, then the tag of an empty payload.
+    const forged = new Handshake(sodium, { pattern: XXPSK3, initiator: true, staticKey: noise.staticKey(x25519("phone channel")), prologue: XX_PROLOGUE, psk: PSK, payloads: false });
+    const s = forged.symmetric;
+    s.mixHash(k);
+    s.mixKey(k);
+    const m1 = concat(k, s.encryptAndHash(EMPTY));
+    must(m1.length === 48, "forged XX 1's length");
+    await r.read("responder", m1);
+    await r.write("responder", "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const r = await xx(`XXpsk3: message 2 with a low-order e (${name}): ee, at the initiator`, { initiator: xxParty("initiator") });
+    await r.write("initiator");
+    await r.read("initiator", concat(k, fill(64, 8)), "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const cr = crafted("XXpsk3", xxParty("responder"), fakeStatic(k));
+    const r = await xx(`XXpsk3: message 2 with a validly encrypted low-order s (${name}): es, at the initiator`, { initiator: xxParty("initiator") });
+    const m1 = await r.write("initiator");
+    await ok(cr.readMessage(m1), "XX 1 read");
+    await r.read("initiator", (await ok(cr.writeMessage(), "XX 2 with a low-order static")).message, "dh");
+    await add(r);
+  }
+  for (const [name, k] of lowOrder()) {
+    const ci = crafted("XXpsk3", xxParty("initiator"), fakeStatic(k));
+    const r = await xx(`XXpsk3: message 3 with a validly encrypted low-order s (${name}): se, at the responder`, { responder: xxParty("responder") });
+    const m1 = (await ok(ci.writeMessage(), "XX 1")).message;
+    await r.read("responder", m1);
+    await ok(ci.readMessage(await r.write("responder")), "XX 2 read");
+    await r.read("responder", (await ok(ci.writeMessage(), "XX 3 with a low-order static")).message, "dh");
+    await add(r);
+  }
+  const xxHandshake = async (r: Recorder) => {
+    await r.read("responder", await r.write("initiator"));
+    await r.read("initiator", await r.write("responder"));
+    await r.read("responder", await r.write("initiator"));
+  };
+  await transportFailures("XXpsk3", (about) => xx(about), xxHandshake, () =>
+    xx("another channel", { initiator: xxParty("initiator", { ephemeral: "initiator join ephemeral, another channel" }), responder: xxParty("responder", { ephemeral: "responder join ephemeral, another channel" }) }),
+  );
+  {
+    const r = await xx("XXpsk3: a plaintext of 65,520 bytes: throws, and the transport is dead");
+    await xxHandshake(r);
+    await r.send("initiator", fill(MAX_PLAINTEXT + 1, 4), "throws");
+    await add(r);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------- writing
 
-const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile<SealedCase> | CaseFile<NamesCase>> = {
+const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile<SealedCase> | CaseFile<NamesCase> | ChannelFile> = {
   "framed.json": {
     about: "framed(context, parts...) and the 8-byte number in a part (docs/e2e.md, section 2). A case with throws is refused: the context, or the number, is the caller's mistake.",
     cases: framedCases(),
@@ -1103,6 +1798,10 @@ const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile
   "names.json": {
     about: "The devices' names, signed and sealed by the account's phone (docs/e2e.md, section 3): opening, and the phone's maker to exact bytes with the nonces given.",
     cases: namesCases(),
+  },
+  "channel.json": {
+    about: "Noise for a channel and a join (docs/e2e.md, sections 4 and 6): IK's prologue, to its bytes; IK and XXpsk3 run step by step between parties with fixed keys, each write and send to exact bytes, each failure with its reason, and every call of a party giving dead after it.",
+    cases: await channelCases(),
   },
 };
 

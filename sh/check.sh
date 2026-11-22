@@ -55,6 +55,9 @@ step "cases/e2e: regenerating them changes no file"
 node --experimental-transform-types --no-warnings e2e/test/gen.ts --check
 
 step "e2e, relay client, extension and web app: unit tests"
+# e2e's include Noise against cases/noise/ and cases/e2e/channel.json, and
+# the same files with every static key in Node's WebCrypto
+# (e2e/test/noise-webcrypto.test.ts).
 node --experimental-transform-types --no-warnings --test e2e/test/*.test.ts relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
 
 step "mobile app: generate, analyze, test"

@@ -173,7 +173,7 @@ long as no honest client connects to it; that display is the only defence (secti
 ## 4. Live use: a channel per client and pi process
 
 A client that opens a session starts **Noise `IK`** with that pi process, knowing the computer's
-channel key from the list. The prologue is framed(`pirc-e2e-v2 channel`, protocol version,
+channel key from the list. The prologue is framed(`pirc-e2e-v2 channel`, the channel's version, 1,
 account ID, the client's role, the computer's role), and both handshake messages carry nothing,
 because IK's first message can be replayed, and the client is not proved to hold its key until
 its first message on the channel.

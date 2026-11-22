@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./framed": "./framed.ts"
+    "./framed": "./framed.ts",
+    "./noise": "./noise.ts"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",

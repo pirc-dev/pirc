@@ -1,0 +1,38 @@
+{
+ "about": "Noise test vectors from snow, the Rust library, unchanged: the one for IK with 25519, ChaChaPoly and SHA512. It has no handshake hash.",
+ "source": "https://github.com/mcginty/snow/blob/8ac60f51cfe3e010c84f0a454cc575ad9204fa12/tests/vectors/snow.txt",
+ "commit": "8ac60f51cfe3e010c84f0a454cc575ad9204fa12",
+ "licence": "MIT OR Apache-2.0, taken under MIT: Copyright (c) 2021 Jake McGinty; the licence is in snow.LICENSE",
+ "vectors": [
+  {
+   "protocol_name": "Noise_IK_25519_ChaChaPoly_SHA512",
+   "init_prologue": "5468657265206973206e6f20726967687420616e642077726f6e672e2054686572652773206f6e6c792066756e20616e6420626f72696e672e",
+   "init_psks": [],
+   "init_static": "b8ded47b51e4d7a6ff0aeb3f936e84a45d3c48639968cf0b4e4561fed72c00f6",
+   "init_ephemeral": "0da1261c830e8dbb210bfdb7a1febbff613b9a72531bbf930daa3d29b114e891",
+   "init_remote_static": "962479947fb7792f2d4733cca01a9e683e0d00128965c0cb33af43d1de3c1233",
+   "resp_prologue": "5468657265206973206e6f20726967687420616e642077726f6e672e2054686572652773206f6e6c792066756e20616e6420626f72696e672e",
+   "resp_psks": [],
+   "resp_static": "051fe965fe53e57406c473d4f95c3d14f31829df2997d190b9b530c2d541ed6c",
+   "resp_ephemeral": "be1a57f2c3494789781fa1ede53586e8a657eb939f5ca2bf07b36b3af30d14f9",
+   "messages": [
+    {
+     "payload": "654149b8b2f91ab883e6f774883f9123c587d5090d8b7c0ef7208e1a0acde44a",
+     "ciphertext": "851fd77a38491aa864effe48149164478a76e5ecdbb099ce2899897cee95bf3fec7fbec7b08bc779c29c11b47ff8d7a171dc21a1c8f3d6c992e522734805734cdaa3a19c5faa9e57aa47bdd685a78564355d50cc615926a48319d5caaa5b307d58ab0fbb50e2eb6252aa0af05b39f4dd3c14844af97ab0f9a5e02d0e2846f867"
+    },
+    {
+     "payload": "3d6b5ce2dc325078efd799a7a71c53f7646b6fabc9ecec4b2c06c50095b7e980",
+     "ciphertext": "f5ab40b2908fdc71f26f4a9981ee7b4a5d28ee977293f8daf0bf600f9863c62ed14783c3986794ea4ce666c2e77ffbefea04b835ceaf0a33052be14b317f56a3f9217c0239a4715d19d6457fb2c18e4d"
+    },
+    {
+     "payload": "911067024930dc843765d3ac9c4b38c28cd2acd63aaa3af2ffb02adf7b0a57b9",
+     "ciphertext": "ee45e88e4d378824d1225a6808b6d220902ffb9ffb6bf6520c1dc6f98b778d1dba02a8169141350f715bf6cfc2231fef"
+    },
+    {
+     "payload": "594a27e4ec14792008cc455c3f316d496f38b42df4b5164f79f50acdffdf8fec",
+     "ciphertext": "08ae5565aa4a5773eff24d47cea3b6deb840a3b0762454bc12a0f8f4f719512ccc3874e8cf64075e07381a9da39055a0"
+    }
+   ]
+  }
+ ]
+}

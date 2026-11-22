@@ -1111,6 +1111,17 @@ draft-21 vectors) went with the hosted relay's first cryptography
 (step 14, stage 5); the app uses `cryptography` 2.9.0 as published on
 pub.dev.
 
+Copied unchanged, as test data: the Noise test vectors in `cases/noise/`,
+which hold PiRC's Noise to answers it did not write (`docs/e2e.md`,
+section 4). From cacophony
+(github.com/haskell-cryptography/cacophony, `vectors/cacophony.txt` at
+8ee9d41), IK and XXpsk3 with 25519, ChaChaPoly and SHA512, under the
+Unlicense (public domain); from snow (github.com/mcginty/snow,
+`tests/vectors/snow.txt` at 8ac60f5, version 0.10.0), IK with the same,
+under MIT or Apache-2.0, taken under MIT, its notice kept in
+`cases/noise/snow.LICENSE`. Each file names its source, commit and
+licence, and `NOTICE` lists them.
+
 ## 12. Plan
 
 Each step ends with something that can be seen working. Steps 1 to 13 are
