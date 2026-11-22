@@ -15,6 +15,7 @@ import 'package:sodium/sodium.ffi.dart' show LibSodiumFFI;
 import 'package:sodium/sodium_sumo.dart';
 
 import '../gen/pirc/v1alpha2/account.pb.dart';
+import 'bytes.dart';
 import 'framed.dart';
 
 const listContext = 'pirc-e2e-v2 list';
@@ -50,17 +51,6 @@ class ListCallError extends ArgumentError {
   ListCallError(String super.message);
 }
 
-bool _equal(List<int> a, List<int> b) {
-  if (a.length != b.length) return false;
-  var d = 0;
-  for (var i = 0; i < a.length; i++) {
-    d |= a[i] ^ b[i];
-  }
-  return d == 0;
-}
-
-String _hex(List<int> b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
-
 /// A device with only its fields that hold something set, and no unknown field.
 Device _canonical(Device d) {
   List<int>? key(List<int> k) => k.isEmpty ? null : k;
@@ -76,17 +66,20 @@ Device _canonical(Device d) {
 
 bool _sameDevice(Device d, Device self) =>
     d.role == self.role &&
-    _equal(d.signingKey, self.signingKey) &&
-    _equal(d.channelKey, self.channelKey) &&
-    _equal(d.boxKey, self.boxKey) &&
-    _equal(d.readOnlyKey, self.readOnlyKey) &&
-    _equal(d.notificationKey, self.notificationKey);
+    bytesEqual(d.signingKey, self.signingKey) &&
+    bytesEqual(d.channelKey, self.channelKey) &&
+    bytesEqual(d.boxKey, self.boxKey) &&
+    bytesEqual(d.readOnlyKey, self.readOnlyKey) &&
+    bytesEqual(d.notificationKey, self.notificationKey);
 
 /// The checks over libsodium. Make one with [E2e.load].
 class E2e {
   E2e._(this._sodium);
 
   final SodiumSumo _sodium;
+
+  /// The libsodium these checks run over, for the other checks of lib/e2e.
+  SodiumSumo get sodium => _sodium;
   final LibSodiumFFI _ffi = const LibSodiumFFI();
 
   static Future<E2e>? _loaded;
@@ -179,10 +172,10 @@ class E2e {
 
     // 4. The mode and the body agree.
     if (mode == ListMode.first) {
-      if (counter != Int64.ONE || list.accountId.isNotEmpty || list.previousHash.isNotEmpty || (accountId != null && !_equal(hash, accountId))) {
+      if (counter != Int64.ONE || list.accountId.isNotEmpty || list.previousHash.isNotEmpty || (accountId != null && !bytesEqual(hash, accountId))) {
         return ListResult._refused('mode');
       }
-    } else if (counter < 2 || !_equal(list.accountId, accountId!) || list.previousHash.length != _keyBytes) {
+    } else if (counter < 2 || !bytesEqual(list.accountId, accountId!) || list.previousHash.length != _keyBytes) {
       return ListResult._refused('mode');
     }
 
@@ -216,7 +209,7 @@ class E2e {
     for (final d in devices) {
       for (final k in [d.signingKey, d.channelKey, d.boxKey, d.readOnlyKey, d.notificationKey]) {
         if (k.isEmpty) continue;
-        if (!seen.add(_hex(k))) return unsupported('duplicate-key');
+        if (!seen.add(hexOf(k))) return unsupported('duplicate-key');
       }
     }
 
@@ -228,7 +221,7 @@ class E2e {
     }
 
     // 12. The pinned phone, as a client with its phone keys.
-    final phone = devices.where((d) => _equal(d.signingKey, phoneKey)).firstOrNull;
+    final phone = devices.where((d) => bytesEqual(d.signingKey, phoneKey)).firstOrNull;
     if (phone == null || phone.role != roleClient || phone.readOnlyKey.length != _keyBytes) return unsupported('phone');
 
     // 13. At a join, the joining device exactly as it is.

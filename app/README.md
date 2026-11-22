@@ -68,7 +68,7 @@ extension's Swift types first, since git ignores them:
 
 `integration_test` runs the key stores and the prefs on a phone or
 simulator: `flutter test integration_test -d <device>`. `e2e_cases_test.dart`
-runs `cases/e2e/framed.json` and `list.json` there against libsodium as the
+runs `cases/e2e/`'s four files there (all but the sealing in `sealed.json`) against libsodium as the
 app ships it; a device cannot read the tree, so it fetches them from a
 server on this machine's loopback, which must be running first:
 

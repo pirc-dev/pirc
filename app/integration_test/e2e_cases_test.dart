@@ -1,6 +1,6 @@
-// cases/e2e/framed.json and list.json against the app's Dart (lib/e2e), on
-// a phone or simulator, where sodium is the native library the app ships.
-// A device cannot read the tree, so the test fetches the two files from
+// cases/e2e/ framed.json, list.json, sealed.json and names.json against the
+// app's Dart (lib/e2e), on a phone or simulator, where sodium is the native
+// library the app ships. A device cannot read the tree, so the test fetches the files from
 // serve_e2e_cases.dart, run on the same machine (it says how):
 //   dart run integration_test/serve_e2e_cases.dart &
 //   flutter test integration_test/e2e_cases_test.dart -d <device>
@@ -32,19 +32,29 @@ Future<String> fetch(String name) async {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('framed.json and list.json', (_) async {
+  testWidgets('framed.json, list.json, sealed.json and names.json', (_) async {
     final framedJson = await fetch('framed.json');
     final listJson = await fetch('list.json');
+    final sealedJson = await fetch('sealed.json');
+    final namesJson = await fetch('names.json');
     final e2e = await E2e.load();
     final sodium = await SodiumSumoInit.init();
     final framed = runFramed(framedJson);
     final list = runList(listJson, e2e, sodium);
-    final failures = [for (final o in [...framed, ...list.outcomes]) if (o.failure != null) '${o.about}: ${o.failure}'];
+    final sealed = runSealed(sealedJson, e2e);
+    final names = runNames(namesJson, e2e, sodium);
+    final failures = [for (final o in [...framed, ...list.outcomes, ...sealed.outcomes, ...names.outcomes]) if (o.failure != null) '${o.about}: ${o.failure}'];
     // ignore: avoid_print
-    print('E2E_CASES libsodium ${sodium.version}: ${framed.length} framed, ${list.outcomes.length} list, ${list.left} left out, ${failures.length} failed');
+    print('E2E_CASES libsodium ${sodium.version}: ${framed.length} framed, ${list.outcomes.length} list, ${sealed.outcomes.length} sealed, ${names.outcomes.length} names, ${failures.length} failed');
     expect(failures, isEmpty);
     expect(framed.length, ((jsonDecode(framedJson) as Map)['cases'] as List).length);
     expect(list.outcomes.length, ((jsonDecode(listJson) as Map)['cases'] as List).length);
     expect(list.left, 0);
+    // Only the sealing, a computer's, is left out of sealed.json.
+    final sealedCases = ((jsonDecode(sealedJson) as Map)['cases'] as List).cast<Map>();
+    expect(sealed.outcomes.length, sealedCases.where((c) => c['check'] == 'open').length);
+    expect(sealed.left, sealedCases.where((c) => c['check'] == 'seal').length);
+    expect(names.outcomes.length, ((jsonDecode(namesJson) as Map)['cases'] as List).length);
+    expect(names.left, 0);
   });
 }

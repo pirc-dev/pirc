@@ -1,7 +1,8 @@
 // The shared cases of cases/e2e/ (cases/README.md) that the app's Dart
-// runs: framed.json and list.json. Shared by the unit test, which reads
+// runs: framed.json, list.json, and the opening and names of sealed.json
+// and names.json. Shared by the unit test, which reads
 // the files from the tree, and the integration test, which runs them on a
-// phone or simulator from the app's bundled copy. Each file's shape is
+// phone or simulator from copies it fetches (integration_test/serve_e2e_cases.dart). Each file's shape is
 // checked as strictly as the TypeScript and Go runners check it.
 import 'dart:convert';
 import 'dart:typed_data';
@@ -9,13 +10,17 @@ import 'dart:typed_data';
 import 'package:fixnum/fixnum.dart';
 import 'package:sodium/sodium_sumo.dart';
 
+import 'package:pirc/e2e/bytes.dart';
 import 'package:pirc/e2e/framed.dart';
 import 'package:pirc/e2e/list.dart';
+import 'package:pirc/e2e/names.dart';
+import 'package:pirc/e2e/sealed.dart';
 import 'package:pirc/gen/pirc/v1alpha2/account.pb.dart';
 
 /// The parts the app has: it checks lists in both modes, at a join, and
-/// makes them.
-const has = {'first-mode', 'self', 'make-list'};
+/// makes them; opens announcements, notices and names, and makes names. It
+/// does not seal: a computer does, in TypeScript.
+const has = {'first-mode', 'self', 'make-list', 'announcement', 'notice', 'names', 'make-names'};
 
 typedef Json = Map<String, Object?>;
 
@@ -41,16 +46,21 @@ const _keyTypes = {
   'check': 'string', 'about': 'string', 'context': 'string', 'value': 'string', 'bytes': 'string', //
   'phoneKey': 'string', 'mode': 'string', 'highest': 'string', 'accountId': 'string', 'seed': 'string',
   'counter': 'string', 'previousBody': 'string', 'key': 'string', 'message': 'string', 'signature': 'string',
-  'needs': 'array', 'parts': 'array', 'devices': 'array',
-  'expect': 'object', 'go': 'object', 'self': 'object',
+  'sealed': 'string', 'recipientSecretKey': 'string', 'now': 'string', 'boxSecretKey': 'string', 'ordering': 'string',
+  'phoneSeed': 'string', 'phoneBoxSecretKey': 'string',
+  'needs': 'array', 'parts': 'array', 'devices': 'array', 'nonces': 'array', 'recipientSecretKeys': 'array', 'names': 'array',
+  'expect': 'object', 'go': 'object', 'self': 'object', 'slot': 'object', 'list': 'object', 'body': 'object',
   'valid': 'bool', 'throws': 'bool',
 };
 
 class _Shape {
-  const _Shape(this.required, {this.optional = const [], this.oneOf = const []});
+  const _Shape(this.required, {this.optional = const [], this.oneOf = const [], this.expectKeys = _expectKeys});
   final List<String> required;
   final List<String> optional;
   final List<String> oneOf;
+
+  /// The keys expect (and go) may hold; a result, or the throws that stands in for it, or for copies.
+  final Set<String> expectKeys;
 }
 
 const _shapes = {
@@ -59,8 +69,17 @@ const _shapes = {
   'list': _Shape(['check', 'about', 'needs', 'bytes', 'phoneKey', 'mode', 'highest', 'expect'], optional: ['accountId', 'self', 'go']),
   'make-list': _Shape(['check', 'about', 'needs', 'seed', 'accountId', 'counter', 'previousBody', 'devices', 'bytes']),
   'verify': _Shape(['check', 'about', 'needs', 'key', 'message', 'signature', 'valid']),
+  'open': _Shape(['check', 'about', 'needs', 'sealed', 'slot', 'recipientSecretKey', 'list', 'now', 'expect'],
+      optional: ['highest'], expectKeys: {'result', 'reason', 'ordering', 'body'}),
+  'seal': _Shape(['check', 'about', 'needs', 'list', 'boxSecretKey', 'slot', 'ordering', 'body', 'nonces', 'recipientSecretKeys', 'expect'],
+      expectKeys: {'copies', 'skipped', 'opened', 'throws'}),
+  'open-names': _Shape(['check', 'about', 'needs', 'sealed', 'accountId', 'list', 'phoneKey', 'recipientSecretKey', 'now', 'expect'],
+      optional: ['highest'], expectKeys: {'result', 'reason', 'ordering', 'listCounter', 'names', 'dropped'}),
+  'make-names': _Shape(['check', 'about', 'needs', 'accountId', 'list', 'phoneSeed', 'phoneBoxSecretKey', 'ordering', 'names', 'nonces', 'expect'],
+      expectKeys: {'copies', 'skipped'}),
 };
 const _expectKeys = {'result', 'reason', 'counter', 'hash', 'list', 'throws'};
+const _slotKeys = {'accountId', 'computerKey', 'sessionId', 'kind'};
 const _deviceKeys = {'role', 'signingKey', 'channelKey', 'boxKey', 'readOnlyKey', 'notificationKey'};
 const _listKeys = {'accountId', 'counter', 'previousHash', 'devices'};
 
@@ -69,12 +88,19 @@ final Map<String, bool Function(Json)> _evidence = {
   'first-mode': (c) => c['mode'] == 'first',
   'self': (c) => c.containsKey('self'),
   'make-list': (c) => c['check'] == 'make-list',
+  'seal': (c) => c['check'] == 'seal',
+  'announcement': (c) => c['check'] == 'open' && (c['slot'] as Map?)?['kind'] == 'announcement',
+  'notice': (c) => c['check'] == 'open' && (c['slot'] as Map?)?['kind'] == 'notice',
+  'names': (c) => c['check'] == 'open-names',
+  'make-names': (c) => c['check'] == 'make-names',
 };
 
 /// The checks each file holds.
 const _checks = {
   'framed.json': {'framed', 'number'},
   'list.json': {'list', 'make-list', 'verify'},
+  'sealed.json': {'open', 'seal'},
+  'names.json': {'open-names', 'make-names'},
 };
 
 /// Why a file is not the shape this runner reads, or null.
@@ -113,9 +139,10 @@ String? _shapeError(String name, Json file) {
       if (e == null) continue;
       e as Map<String, Object?>;
       for (final ek in e.keys) {
-        if (!_expectKeys.contains(ek)) return '$where: unknown key $k.$ek';
+        if (!shape.expectKeys.contains(ek)) return '$where: unknown key $k.$ek';
       }
-      if (e.containsKey('result') == e.containsKey('throws')) return '$where: $k has not exactly one of result and throws';
+      final standsFor = shape.expectKeys.contains('result') ? 'result' : 'copies';
+      if (e.containsKey(standsFor) == e.containsKey('throws')) return '$where: $k has not exactly one of $standsFor and throws';
       final l = e['list'];
       if (l != null) {
         if (l is! Map || !(l.keys.toSet().containsAll(_listKeys) && l.length == _listKeys.length)) return '$where: $k.list\'s keys';
@@ -126,6 +153,18 @@ String? _shapeError(String name, Json file) {
     }
     for (final d in [if (c['self'] != null) c['self'], ...(c['devices'] as List? ?? const [])]) {
       if (d is! Map || !(d.keys.toSet().containsAll(_deviceKeys) && d.length == _deviceKeys.length)) return '$where: a device\'s keys';
+    }
+    final slot = c['slot'];
+    if (slot != null && (slot is! Map || slot.length != _slotKeys.length || !slot.keys.toSet().containsAll(_slotKeys))) return '$where: the slot\'s keys';
+    final view = c['list'];
+    if (view != null) {
+      if (view is! Map || view.length != 2 || !view.keys.toSet().containsAll(['counter', 'devices'])) return '$where: the list\'s keys';
+      for (final d in view['devices'] as List) {
+        if (d is! Map || !(d.keys.toSet().containsAll(_deviceKeys) && d.length == _deviceKeys.length)) return '$where: a list device\'s keys';
+      }
+    }
+    for (final n in c['names'] as List? ?? const []) {
+      if (n is! Map || n.length != 2 || !n.keys.toSet().containsAll(['signingKey', 'name'])) return '$where: a name\'s keys';
     }
   }
   return null;
@@ -283,6 +322,144 @@ List<Outcome> runFramed(String text) {
         }
       default:
         failure = 'unknown check ${c['check']}';
+    }
+    out.add((about: about, failure: failure));
+  }
+  return (outcomes: out, left: left);
+}
+
+ListBody _listBody(Object? j) {
+  final l = j as Json;
+  return ListBody(counter: _u64(l['counter']), devices: [for (final d in l['devices'] as List) _device(d)]);
+}
+
+Slot _slot(Object? j) {
+  final s = j as Json;
+  return Slot(accountId: _unhex(s['accountId']), computerKey: _unhex(s['computerKey']), sessionId: _unhex(s['sessionId']));
+}
+
+/// A value with every map's keys in order, so that two compare equal when
+/// they hold the same, as the other runners' deep equality does.
+Object? _sorted(Object? v) => switch (v) {
+      Map() => {for (final k in (v.keys.toList()..sort())) k: _sorted(v[k])},
+      List() => [for (final x in v) _sorted(x)],
+      _ => v,
+    };
+
+String? _differs(Json got, Object? want) {
+  final g = jsonEncode(_sorted(got));
+  return g == jsonEncode(_sorted(want)) ? null : 'gave $g';
+}
+
+Json _textJson(Object body) => switch (body) {
+      AnnouncementText b => {'sessionName': b.sessionName, 'folder': b.folder, 'model': b.model, 'computerName': b.computerName, 'notice': b.notice},
+      NoticeText b => {'sessionName': b.sessionName, 'computerName': b.computerName, 'notice': b.notice},
+      _ => throw ArgumentError('not a body'),
+    };
+
+/// An opened announcement or notice as the files write it.
+Json openExpectOf(OpenResult<Object> r) => r.result == 'accepted'
+    ? {'result': r.result, 'ordering': r.ordering!.toStringUnsigned(), 'body': _textJson(r.body!)}
+    : {'result': r.result, 'reason': r.reason};
+
+/// Opened names as the files write them.
+Json namesExpectOf(NamesResult r) {
+  List<Json> named(List<DeviceName> ns) => [for (final n in ns) {'signingKey': hexOf(n.signingKey), 'name': n.name}];
+  return switch (r.result) {
+    'accepted' => {
+        'result': r.result,
+        'ordering': r.ordering!.toStringUnsigned(),
+        'listCounter': r.listCounter!.toStringUnsigned(),
+        'names': named(r.names),
+        'dropped': named(r.dropped),
+      },
+    'later' => {'result': r.result},
+    _ => {'result': r.result, 'reason': r.reason},
+  };
+}
+
+/// Every case of sealed.json the app can run, and how many it left out:
+/// the copies it opens, announcements and notices; sealing is a computer's.
+({List<Outcome> outcomes, int left}) runSealed(String text, E2e e2e) {
+  final file = jsonDecode(text) as Json;
+  final shape = _shapeError('sealed.json', file);
+  if (shape != null) return (outcomes: [(about: 'the file', failure: shape)], left: 0);
+  final out = <Outcome>[];
+  var left = 0;
+  for (final c in (file['cases'] as List).cast<Json>()) {
+    if (!_runnable(c)) {
+      left++;
+      continue;
+    }
+    final slot = c['slot'] as Json;
+    final list = _listBody(c['list']);
+    final highest = c.containsKey('highest') ? _u64(c['highest']) : null;
+    final args = (
+      sealed: _unhex(c['sealed']),
+      slot: _slot(slot),
+      recipientSecretKey: _unhex(c['recipientSecretKey']),
+      list: list,
+      highest: highest,
+      now: _u64(c['now']),
+    );
+    final OpenResult<Object> got = switch (slot['kind']) {
+      'announcement' => e2e.openAnnouncement(
+          sealed: args.sealed, slot: args.slot, recipientSecretKey: args.recipientSecretKey, list: args.list, highest: args.highest, now: args.now),
+      'notice' => e2e.openNotice(
+          sealed: args.sealed, slot: args.slot, recipientSecretKey: args.recipientSecretKey, list: args.list, highest: args.highest, now: args.now),
+      _ => OpenResult.refused('unknown kind ${slot['kind']}'),
+    };
+    out.add((about: c['about'] as String, failure: _differs(openExpectOf(got), c['expect'])));
+  }
+  return (outcomes: out, left: left);
+}
+
+/// Every case of names.json the app can run: all of them. Opening, and
+/// making to exact bytes.
+({List<Outcome> outcomes, int left}) runNames(String text, E2e e2e, SodiumSumo sodium) {
+  final file = jsonDecode(text) as Json;
+  final shape = _shapeError('names.json', file);
+  if (shape != null) return (outcomes: [(about: 'the file', failure: shape)], left: 0);
+  final out = <Outcome>[];
+  var left = 0;
+  for (final c in (file['cases'] as List).cast<Json>()) {
+    final about = c['about'] as String;
+    if (!_runnable(c)) {
+      left++;
+      continue;
+    }
+    String? failure;
+    if (c['check'] == 'open-names') {
+      final got = e2e.openNames(
+        sealed: _unhex(c['sealed']),
+        accountId: _unhex(c['accountId']),
+        list: _listBody(c['list']),
+        phoneKey: _unhex(c['phoneKey']),
+        recipientSecretKey: _unhex(c['recipientSecretKey']),
+        highest: c.containsKey('highest') ? _u64(c['highest']) : null,
+        now: _u64(c['now']),
+      );
+      failure = _differs(namesExpectOf(got), c['expect']);
+    } else {
+      final nonces = [for (final n in c['nonces'] as List) _unhex(n)];
+      final box = sodium.secureCopy(_unhex(c['phoneBoxSecretKey']));
+      try {
+        final made = e2e.makeNamesWithNonces(
+          accountId: _unhex(c['accountId']),
+          list: _listBody(c['list']),
+          phone: sodium.crypto.sign.seedKeyPair(sodium.secureCopy(_unhex(c['phoneSeed']))),
+          phoneBoxSecretKey: box,
+          ordering: _u64(c['ordering']),
+          names: [for (final n in c['names'] as List) DeviceName(_unhex((n as Json)['signingKey']), n['name'] as String)],
+          nonceFor: (i) => nonces[i],
+        );
+        failure = _differs({
+          'copies': [for (final x in made.copies) {'signingKey': hexOf(x.signingKey), 'recipientKey': hexOf(x.recipientKey), 'sealed': hexOf(x.sealed)}],
+          'skipped': [for (final k in made.skipped) hexOf(k)],
+        }, c['expect']);
+      } finally {
+        box.dispose();
+      }
     }
     out.add((about: about, failure: failure));
   }

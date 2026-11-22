@@ -138,7 +138,7 @@ gives; `go` is the relay's result
 where Go's `crypto/ed25519` accepts a signature libsodium refuses. The
 TypeScript runner is `e2e/test/cases.test.ts`; the relay's Go
 runner, of `framed.json` and `list.json`, is
-`relay/internal/hosted/list_test.go`; the app's Dart runner, of the
-same two, is `app/test/e2e_cases_test.dart`, and
+`relay/internal/hosted/list_test.go`; the app's Dart runner, of all
+four but the sealing in `sealed.json`, is `app/test/e2e_cases_test.dart`, and
 `app/integration_test/e2e_cases_test.dart` runs it on a phone or
 simulator.
