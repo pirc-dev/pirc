@@ -494,9 +494,11 @@ function listCases(): ListCase[] {
   {
     const v = (accountId: Uint8Array, previousHash: Uint8Array) => signList(body({ accountId, counter: 2n, previousHash, devices: [P, C1, W1] }), idA, pSecret);
     check("previous_hash of 31 bytes", later(v(idA, sha256(v1).slice(0, 31))), refused("mode"));
+    check("previous_hash of 33 bytes", later(v(idA, concat(sha256(v1), Uint8Array.of(0)))), refused("mode"));
     check("previous_hash empty in version 2", later(v(idA, EMPTY)), refused("mode"));
     check("account_id empty in version 2", later(v(EMPTY, sha256(v1))), refused("mode"));
     check("account_id of 31 bytes, its first 31", later(v(idA.slice(0, 31), sha256(v1))), refused("mode"));
+    check("account_id of 33 bytes, its first 32 the account's", later(v(concat(idA, Uint8Array.of(0)), sha256(v1))), refused("mode"));
   }
 
   // Old.
@@ -505,12 +507,16 @@ function listCases(): ListCase[] {
   check("counter equal, another body (another hash)", later(laterA([P, C1, C2]).bytes, 2n), old);
   check("version 1 with 1 held", { bytes: list1, mode: "first", highest: 1n }, old);
   check("old, with a key twice too: still old", later(laterA([P, C1, C1]).bytes, 2n), old);
+  check("old, with role 3 too: still old", later(laterA([P, { ...C1, role: 3 }]).bytes, 2n), old);
+  check("old, with a key of 31 bytes too: still old", later(laterA([P, { ...C1, boxKey: C1.boxKey.slice(0, 31) }]).bytes, 2n), old);
+  check("old, with a client with one phone key too: still old", later(laterA([P, { ...Q, notificationKey: EMPTY }]).bytes, 2n), old);
 
   // Unsupported.
   {
     const fields = bodyFields({ accountId: idA, counter: 2n, previousHash: sha256(v1), devices: [P, C1] });
     fields.splice(2, 0, { no: 9, varint: 7n });
     check("an unknown field in the body", later(signList(encode(fields), idA, pSecret)), unsupported("unknown-field"));
+    check("old, with an unknown field in the body too: still old", later(signList(encode(fields), idA, pSecret), 2n), old);
     const inDevice = bodyFields({ accountId: idA, counter: 2n, previousHash: sha256(v1), devices: [P, C1] }, new Map([[1, [{ no: 7, bytes: utf8("x") }]]]));
     check("an unknown field in a device", later(signList(encode(inDevice), idA, pSecret)), unsupported("unknown-field"));
     const appended = concat(laterA([P, C1]).body, encode([{ no: 9, varint: 1n }]));

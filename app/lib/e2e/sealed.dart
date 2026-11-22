@@ -7,9 +7,10 @@
 // (fields in order, each with its declared wire type, varints and lengths
 // in their shortest form) the two agree on every input. A body only a
 // listed computer could seal in another encoding (a known field with
-// another wire type, deeply nested unknown groups) can read differently in
-// different languages: protobuf-es reads a known field as its declared
-// type, Dart's protobuf keeps it as an unknown field. That is by design: the
+// another wire type, a length or varint wider than a maker writes, a field
+// running past the end of its message, deeply nested unknown groups) can
+// read differently in different languages, each protobuf library reading
+// such bytes its own way. That is by design: the
 // checks defend against everyone but a listed computer, which seals each
 // recipient's copy itself. No input bytes make opening throw; only a
 // caller's mistake does.

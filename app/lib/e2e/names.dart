@@ -6,10 +6,11 @@
 // e2e/names.ts, and on a body as the phone's maker writes it (fields in
 // order, each with its declared wire type, varints and lengths in their
 // shortest form) the two agree on every input. A body only the phone could
-// sign in another encoding (a known field with another wire type, deeply
-// nested unknown groups) can read differently in different languages:
-// protobuf-es reads a known field as its declared type, Dart's protobuf
-// keeps it as an unknown field. That is by design: the checks defend against
+// sign in another encoding (a known field with another wire type, a length
+// or varint wider than a maker writes, a field running past the end of its
+// message, deeply nested unknown groups) can read differently in different
+// languages, each protobuf library reading such bytes its own way. That is
+// by design: the checks defend against
 // everyone but the phone, which is trusted. No input bytes make opening
 // throw; only a caller's mistake does.
 import 'dart:typed_data';

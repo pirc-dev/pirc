@@ -79,3 +79,11 @@ licences in full in a file each Android release build writes from its own
 dependencies (app/android/app/build.gradle.kts, the texts in
 app/android/notices/), shipped in the app as pirc/android_notices.json
 and shown on the same Licences page.
+
+The iOS notification extension (app/ios/PircNotices) builds in two Swift
+packages: SwiftProtobuf 1.39.0, Copyright Apple Inc. and the project
+authors, Apache-2.0 with its Runtime Library Exception, under which the
+binary needs no attribution; and swift-sodium at fbe072d, Copyright (c)
+2014-2026 Frank Denis, ISC, with the libsodium 1.0.22 it carries, under
+the same licence from the same author, whose text the app's Licences page
+shows with the Dart sodium package's.

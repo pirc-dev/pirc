@@ -22,8 +22,11 @@ text a little differently from one release to the next.
 `ios/PircNotices` is the iOS notification extension's core, a Swift
 package with no Flutter in it: it reads the session list with the
 read-only key and writes the notifications (`docs/design.md`, section 12,
-step 13). Its protocol types are generated with swift-protobuf, and git
-ignores them too.
+step 13). Over libsodium (swift-sodium's C module, pinned by commit), it
+also checks a version of the account's device list and opens a session's
+sealed notice (`docs/e2e.md`, sections 3 and 5), against the shared cases
+of `cases/e2e/`. Its protocol types are generated with swift-protobuf, and
+git ignores them too.
 
     sh/notices.sh      generate and swift test, as sh/check.sh does
 

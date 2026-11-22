@@ -141,4 +141,7 @@ runner, of `framed.json` and `list.json`, is
 `relay/internal/hosted/list_test.go`; the app's Dart runner, of all
 four but the sealing in `sealed.json`, is `app/test/e2e_cases_test.dart`, and
 `app/integration_test/e2e_cases_test.dart` runs it on a phone or
-simulator.
+simulator; the iOS notification extension's Swift runner, of `framed.json`,
+`list.json` but the maker, and the notices' opening in `sealed.json`, is
+`app/ios/PircNotices/Tests/PircNoticesTests/E2eCasesTests.swift`, run by
+`sh/notices.sh`.
