@@ -6,6 +6,15 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## 0.3.14 (2026-11-22)
+
+- A phone leaving a relay always gets the relay's answer. The relay
+  could close its connection as removed a moment before answering, so
+  the app saw an error although it had left.
+- The extension's npm description now says what it is: remote control
+  for pi from an iPhone, an Android phone or a browser. pi's package
+  gallery finds it when searching for remote control.
+
 ## 0.3.13 (2026-11-21)
 
 - New agent works when pi runs in herdr. It failed every time with
