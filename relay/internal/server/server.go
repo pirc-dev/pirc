@@ -232,7 +232,7 @@ func (s *Server) reloadRegistry(force bool) error {
 	s.reg, s.regStamp = d, st
 	var revoked []*conn
 	for c := range s.conns {
-		if !d.Admits(c.key, c.role, c.readOnly) {
+		if !c.leaving && !d.Admits(c.key, c.role, c.readOnly) {
 			revoked = append(revoked, c)
 		}
 	}

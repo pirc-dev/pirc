@@ -28,7 +28,10 @@ type conn struct {
 	// Logged in with a client's read-only key: owner is the client's own.
 	readOnly bool
 	owner    []byte
-	send     chan []byte
+	// Taking its own key out (Server.leave): a reread of the registry
+	// leaves it to close as having left. Under Server.mu.
+	leaving bool
+	send    chan []byte
 	// Bytes in send, and the most allowed.
 	queued    atomic.Int64
 	maxQueued int64
