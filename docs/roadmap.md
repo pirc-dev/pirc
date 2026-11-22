@@ -49,3 +49,12 @@ Nothing at present.
    device-signed registration.
 2. **Open** (step 15): licence, public repository, pirc.dev, store
    listings, for self-hosters first, ahead of the hosted relay.
+3. **A daemon on the host, optional**: installed on request, so that a
+   client can start a new session on a host while no pi, and so no
+   extension, is running there. Today a new pi can only be opened beside a
+   running one, through its terminal (`design.md`, section 4), and
+   `design.md` lists a daemon as out of scope (section 1) and says "There
+   is no daemon" (section 4); taking this up means deciding those two
+   statements first: what the daemon is allowed to start, how it joins the
+   relay under the host key, and how it is installed, started at login and
+   removed on Linux and macOS.
