@@ -3,7 +3,7 @@
 // TestFramed.
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pirc/hosted/try_stores.dart';
+import 'package:pirc/e2e/framed.dart';
 
 void main() {
   test('framed: the context, a NUL, each part after its LEB128 length', () {

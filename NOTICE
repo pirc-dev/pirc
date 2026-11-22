@@ -66,7 +66,9 @@ Geist, Geist Mono and IBM Plex Sans, are under the SIL Open Font License
 1.1 and are listed there with it.
 
 The mobile app (app/): its Dart and Flutter packages, among them image,
-re_highlight, mobile_scanner, qr and cryptography, and Flutter's engine
+re_highlight, mobile_scanner, qr, cryptography and sodium (whose licence
+file carries that of libsodium, which it builds into the app), and
+Flutter's engine
 and framework, each with its licence in full, are listed in the NOTICES file that
 Flutter's build writes from the packages themselves and ships inside every
 build of the app (flutter_assets/NOTICES.Z, read by the framework's

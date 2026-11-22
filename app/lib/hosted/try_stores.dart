@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../core/protocol.dart' show hex;
+import '../e2e/framed.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import '../relay/keys.dart';
 import '../ui/look.dart';
@@ -32,22 +33,6 @@ const _attest = MethodChannel('dev.pirc.app/attest');
 const _store = MethodChannel('dev.pirc.app/store');
 
 Uint8List _utf8(String s) => Uint8List.fromList(convert.utf8.encode(s));
-
-// The context's ASCII, a NUL byte, then each part prefixed by its length
-// as an unsigned LEB128 (relay.proto, Auth).
-@visibleForTesting
-Uint8List framed(String context, List<List<int>> parts) {
-  final out = <int>[..._utf8(context), 0];
-  for (final p in parts) {
-    var n = p.length;
-    do {
-      out.add(n < 128 ? n : (n & 0x7f) | 0x80);
-      n >>= 7;
-    } while (n > 0);
-    out.addAll(p);
-  }
-  return Uint8List.fromList(out);
-}
 
 // One sign-up, step by step into log; the relay's answer last.
 Future<void> trySignUp(String origin, void Function(String) log) async {

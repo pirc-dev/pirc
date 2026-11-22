@@ -64,8 +64,16 @@ extension's Swift types first, since git ignores them:
     flutter build apk --debug              JAVA_HOME at Android Studio's jbr
 
 `integration_test` runs the key stores and the prefs on a phone or
-simulator: `flutter test integration_test -d <device>`. `flutter test`
-uninstalls the app after each run; `prefs_test.dart` says how to check
+simulator: `flutter test integration_test -d <device>`. `e2e_cases_test.dart`
+runs `cases/e2e/framed.json` and `list.json` there against libsodium as the
+app ships it; a device cannot read the tree, so it fetches them from a
+server on this machine's loopback, which must be running first:
+
+    dart run integration_test/serve_e2e_cases.dart &
+    adb reverse tcp:47815 tcp:47815        on an Android emulator only
+    flutter test integration_test/e2e_cases_test.dart -d <device>
+
+`flutter test` uninstalls the app after each run; `prefs_test.dart` says how to check
 that the relay outlives a restart. `scan_test.dart` reads a join code
 from a picture of it, as the camera would; on Android:
 
