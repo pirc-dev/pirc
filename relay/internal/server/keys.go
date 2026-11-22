@@ -166,7 +166,17 @@ func (s *Server) leave(c *conn, r *pb.LeaveRelay) *frameError {
 		return invalid("a request ID is needed, of at most 128 bytes")
 	}
 	key := registry.EncodeKey(c.key)
+	// Marked first: a reread between the removal and the answer would
+	// otherwise close it as revoked, before it is told it left.
+	s.mu.Lock()
+	c.leaving = true
+	s.mu.Unlock()
 	k, err := s.cfg.Registry.Remove(key)
+	if err != nil {
+		s.mu.Lock()
+		c.leaving = false
+		s.mu.Unlock()
+	}
 	switch {
 	case errors.Is(err, registry.ErrNotFound):
 		return &frameError{code: pb.ErrorCode_ERROR_CODE_INVALID, msg: err.Error(), requestID: requestID}
