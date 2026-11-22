@@ -4,7 +4,8 @@ package hosted
 // account whose every subscription has lapsed, past the stores' own grace
 // and billing retry, is locked. Its hosts and read-only keys are refused
 // at login; a client logs in and may only renew, with a subscription the
-// store proves, or delete the account. A renewal unlocks it at once. An
+// store proves, publish a newer list, or delete the account (the
+// account's phone only). A renewal unlocks it at once. An
 // account locked for LockedFor (60 days) is deleted, with its attestation
 // and store IDs.
 
@@ -22,17 +23,11 @@ const errLocked = "the account is locked: its subscription has ended"
 
 // admitLockedAccountLocked logs a client in to a locked account: Welcome,
 // saying so, and nothing else. Under s.mu.
-func (s *Server) admitLockedAccountLocked(c *conn, a *account, subs []*pb.AccountSubscription) {
+func (s *Server) admitLockedAccountLocked(c *conn, a *account, w *pb.Welcome) {
 	c.acct, c.role, c.locked = a, pb.DeviceRole_DEVICE_ROLE_CLIENT, true
 	s.conns[c] = struct{}{}
 	a.conns[c] = struct{}{}
-	c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{
-		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
-		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
-		Role:            pb.DeviceRole_DEVICE_ROLE_CLIENT,
-		Locked:          true,
-		Subscriptions:   subs,
-	}}})
+	c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: w}})
 	s.log.Info("logged in to a locked account", "account", shortKey(a.id), "key", shortKey(c.key))
 }
 
@@ -158,8 +153,7 @@ func (s *Server) deleteExpired() {
 			continue
 		}
 		if a := s.accounts[string(id)]; a != nil {
-			a.deleted = true
-			delete(s.accounts, string(id))
+			s.forgetDeletedLocked(a)
 			for o := range a.conns {
 				o.close(websocket.StatusPolicyViolation, "account deleted")
 			}

@@ -1,6 +1,7 @@
 // The stores' checks tried on a real phone (docs/design.md, step 14, stage
-// 4): a sign-up on a hosted relay, with a new key made here and dropped
-// after, the phone's attestation for that login (App Attest, or Play
+// 4): a sign-up on a hosted relay, with new keys made here and dropped
+// after, signing the list's version 1 (lib/e2e/list.dart), the phone's
+// attestation for that login (App Attest, or Play
 // Integrity) and its subscription as the store proves it (Apple's signed
 // transaction, or Google's purchase token); the relay's answer shown as
 // it came. Only in a build with --dart-define=PIRC_HOSTED=true, never in
@@ -9,14 +10,17 @@ import 'dart:async';
 import 'dart:convert' as convert;
 import 'dart:io';
 
+import 'package:fixnum/fixnum.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:sodium/sodium_sumo.dart' show KeyPair;
 
 import '../core/protocol.dart' show hex;
 import '../e2e/framed.dart';
+import '../e2e/list.dart';
+import '../gen/pirc/v1alpha2/account.pb.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart';
-import '../relay/keys.dart';
 import '../ui/look.dart';
 
 const hostedBuild = bool.fromEnvironment('PIRC_HOSTED');
@@ -37,7 +41,39 @@ Uint8List _utf8(String s) => Uint8List.fromList(convert.utf8.encode(s));
 
 // One sign-up, step by step into log; the relay's answer last.
 Future<void> trySignUp(String origin, void Function(String) log) async {
-  final signer = await DeviceKey.generate();
+  final e2e = await E2e.load();
+  final sodium = e2e.sodium;
+  // The phone's signing key, which logs in and signs version 1, and its
+  // other keys, all thrown away: only their public halves are listed.
+  final phone = sodium.crypto.sign.keyPair();
+  final readOnly = sodium.crypto.sign.keyPair();
+  final boxes = [for (var i = 0; i < 3; i++) sodium.crypto.box.keyPair()];
+  try {
+    await _signUp(origin, log, e2e, phone, readOnly, boxes);
+  } finally {
+    for (final k in [phone, readOnly, ...boxes]) {
+      k.secretKey.dispose();
+    }
+  }
+}
+
+Future<void> _signUp(String origin, void Function(String) log, E2e e2e, KeyPair phone, KeyPair readOnly, List<KeyPair> boxes) async {
+  final sodium = e2e.sodium;
+  final list = e2e.makeList(
+    phone: phone,
+    devices: [
+      Device(
+        role: roleClient,
+        signingKey: phone.publicKey,
+        channelKey: boxes[0].publicKey,
+        boxKey: boxes[1].publicKey,
+        readOnlyKey: readOnly.publicKey,
+        notificationKey: boxes[2].publicKey,
+      ),
+    ],
+    counter: Int64.ONE,
+  );
+  log('version 1 of the list: ${list.length} bytes');
 
   log('connecting to $origin');
   final ws = await WebSocket.connect('$origin/v1alpha2').timeout(const Duration(seconds: 15));
@@ -50,11 +86,11 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
   }
 
   try {
-    ws.add(Frame(hello: Hello(protocolVersion: ProtocolVersion.PROTOCOL_VERSION_V1ALPHA2, publicKey: signer.publicKey)).writeToBuffer());
+    ws.add(Frame(hello: Hello(protocolVersion: ProtocolVersion.PROTOCOL_VERSION_V1ALPHA2, publicKey: phone.publicKey)).writeToBuffer());
     final challenge = await next();
     if (!challenge.hasChallenge()) throw StateError('expected Challenge, got ${challenge.whichBody()}');
     final nonce = challenge.challenge.nonce;
-    final sig = await signer.sign(framed(_authContext, [Uint8List(0), _utf8(origin), nonce]));
+    final sig = sodium.crypto.sign.detached(message: framed(_authContext, [Uint8List(0), _utf8(origin), nonce]), secretKey: phone.secretKey);
     ws.add(Frame(auth: Auth(signature: sig)).writeToBuffer());
     final welcome = await next();
     if (!welcome.hasWelcome()) {
@@ -62,7 +98,7 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
     }
     log('logged in without an account');
 
-    final data = framed(_attestContext, [_utf8(origin), nonce, signer.publicKey]);
+    final data = framed(_attestContext, [_utf8(origin), nonce, phone.publicKey]);
     final att = Attestation();
     final got = await _attest.invokeMapMethod<String, Object?>('attest', data);
     if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -80,7 +116,7 @@ Future<void> trySignUp(String origin, void Function(String) log) async {
       log('subscription proof: ${proof.length} characters');
     }
 
-    ws.add(Frame(signUp: SignUp(requestId: 'try', attestation: att)).writeToBuffer());
+    ws.add(Frame(signUp: SignUp(requestId: 'try', attestation: att, list: list)).writeToBuffer());
     for (;;) {
       final f = await next();
       if (f.hasSignedUp()) {
@@ -142,7 +178,7 @@ class _TryStoresScreenState extends State<TryStoresScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text("Signs up on a hosted relay with a new key, sending this phone's attestation and subscription. The key is dropped afterwards.", style: look.text()),
+            Text("Signs up on a hosted relay with new keys, sending a list of this phone alone, its attestation and its subscription. The keys are dropped afterwards.", style: look.text()),
             const SizedBox(height: 12),
             CupertinoTextField(controller: _origin, autocorrect: false, keyboardType: TextInputType.url),
             const SizedBox(height: 12),

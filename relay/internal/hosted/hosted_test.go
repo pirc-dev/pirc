@@ -33,10 +33,12 @@ type harness struct {
 	srv *Server
 	ts  *httptest.Server
 	cfg Config
+	// The accounts signed up, by ID, with their newest lists.
+	accts map[string]*testAccount
 }
 
 func newHarness(t *testing.T, tweak func(*Config)) *harness {
-	h := &harness{t: t, dir: t.TempDir()}
+	h := &harness{t: t, dir: t.TempDir(), accts: map[string]*testAccount{}}
 	h.start(tweak)
 	return h
 }
@@ -130,6 +132,13 @@ func (h *harness) dialRaw(path string) (*websocket.Conn, *http.Response, error) 
 // an Error.
 func (h *harness) loginAs(d dev, account []byte, signOrigin string, version pb.ProtocolVersion) (*client, *pb.Frame) {
 	h.t.Helper()
+	return h.loginHolding(d, account, signOrigin, version, 0)
+}
+
+// loginHolding logs in as loginAs does, saying in Hello that d holds the
+// list's version held.
+func (h *harness) loginHolding(d dev, account []byte, signOrigin string, version pb.ProtocolVersion, held uint64) (*client, *pb.Frame) {
+	h.t.Helper()
 	ws, _, err := h.dialRaw(Path)
 	if err != nil {
 		h.t.Fatal(err)
@@ -137,7 +146,7 @@ func (h *harness) loginAs(d dev, account []byte, signOrigin string, version pb.P
 	ws.SetReadLimit(64 << 20)
 	c := newClient(h.t, ws, d)
 	h.t.Cleanup(func() { ws.CloseNow() })
-	c.send(&pb.Frame{Body: &pb.Frame_Hello{Hello: &pb.Hello{ProtocolVersion: version, PublicKey: d.pub, AccountId: account}}})
+	c.send(&pb.Frame{Body: &pb.Frame_Hello{Hello: &pb.Hello{ProtocolVersion: version, PublicKey: d.pub, AccountId: account, ListCounter: held}}})
 	f := c.next()
 	ch := f.GetChallenge()
 	if ch == nil {
@@ -265,26 +274,112 @@ func (c *client) closedWith() websocket.StatusCode {
 
 var testAttestation = &pb.Attestation{Kind: &pb.Attestation_Test{Test: []byte("phone")}}
 
-// signUp makes an account with phone as its client, and returns its ID.
+// signUp makes an account whose version 1 lists phone, and returns its
+// ID.
 func (h *harness) signUp(phone dev) []byte {
 	h.t.Helper()
+	ta := newTestAccount(phone)
 	c, _ := h.login(phone, nil)
-	c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "s", Attestation: testAttestation}}})
+	c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "s", Attestation: testAttestation, List: ta.signed}}})
 	f := c.until("SignedUp", func(f *pb.Frame) bool { return f.GetSignedUp() != nil || f.GetError() != nil })
-	id := sha256.Sum256(phone.pub)
-	if !bytes.Equal(f.GetSignedUp().GetAccountId(), id[:]) {
+	if !bytes.Equal(f.GetSignedUp().GetAccountId(), ta.id) {
 		h.t.Fatalf("signing up: %v", f)
 	}
 	c.ws.Close(websocket.StatusNormalClosure, "")
-	return id[:]
+	h.accts[string(ta.id)] = ta
+	return ta.id
 }
 
-// add makes d a member of the account.
+// add puts d on the account's list with a role, publishing the version
+// from the account's phone.
 func (h *harness) add(account []byte, d dev, role pb.DeviceRole) {
 	h.t.Helper()
-	if err := h.cfg.Store.AddMember(account, d.pub, role); err != nil {
-		h.t.Fatal(err)
+	ta := h.accts[string(account)]
+	h.publish(account, ta.next(append(ta.devices, entry(d, listRole(role)))...))
+}
+
+// publish sends a version from the account's phone, and waits for Done.
+func (h *harness) publish(account, signed []byte) {
+	h.t.Helper()
+	c, _ := h.login(h.accts[string(account)].phone, account)
+	c.send(&pb.Frame{Body: &pb.Frame_PublishList{PublishList: &pb.PublishList{RequestId: "pl", List: signed}}})
+	c.done("pl")
+	c.ws.Close(websocket.StatusNormalClosure, "")
+}
+
+// testAccount is an account's newest list as the test made it: the
+// test-only list maker, Go's Ed25519 over framed and proto.Marshal.
+type testAccount struct {
+	phone   dev
+	id      []byte
+	devices []*pb.Device
+	counter uint64
+	body    []byte
+	signed  []byte
+}
+
+// derived is a key made from d's for a label: 32 bytes, distinct.
+func derived(d dev, label string) []byte {
+	s := sha256.Sum256(append([]byte(label+" "), d.pub...))
+	return s[:]
+}
+
+// readOnlyOf is the phone's read-only key, which logs in.
+func readOnlyOf(phone dev) dev {
+	priv := ed25519.NewKeyFromSeed(derived(phone, "read-only"))
+	return dev{pub: priv.Public().(ed25519.PublicKey), priv: priv}
+}
+
+func listRole(r pb.DeviceRole) uint32 {
+	if r == pb.DeviceRole_DEVICE_ROLE_HOST {
+		return RoleComputer
 	}
+	return RoleClient
+}
+
+// entry is d's list entry with a role: a computer's or a browser's.
+func entry(d dev, role uint32) *pb.Device {
+	return &pb.Device{Role: role, SigningKey: d.pub, ChannelKey: derived(d, "channel"), BoxKey: derived(d, "box")}
+}
+
+// phoneEntry is a phone's entry, with its read-only and notification
+// keys.
+func phoneEntry(phone dev) *pb.Device {
+	e := entry(phone, RoleClient)
+	e.ReadOnlyKey, e.NotificationKey = readOnlyOf(phone).pub, derived(phone, "notification")
+	return e
+}
+
+// makeList signs a body as the account's phone does.
+func makeList(phone dev, b *pb.ListBody) (signed, body []byte) {
+	body, err := proto.MarshalOptions{Deterministic: true}.Marshal(b)
+	if err != nil {
+		panic(err)
+	}
+	return append(ed25519.Sign(phone.priv, framed(ListContext, b.GetAccountId(), body)), body...), body
+}
+
+func newTestAccount(phone dev) *testAccount {
+	ta := &testAccount{phone: phone, devices: []*pb.Device{phoneEntry(phone)}, counter: 1}
+	ta.signed, ta.body = makeList(phone, &pb.ListBody{Counter: 1, Devices: ta.devices})
+	sum := sha256.Sum256(ta.body)
+	ta.id = sum[:]
+	return ta
+}
+
+// next makes the next version with these devices, and keeps it as the
+// newest.
+func (ta *testAccount) next(devices ...*pb.Device) []byte {
+	ta.signed, ta.body = ta.version(ta.counter+1, devices...)
+	ta.counter++
+	ta.devices = devices
+	return ta.signed
+}
+
+// version makes a version with a counter, without keeping it.
+func (ta *testAccount) version(counter uint64, devices ...*pb.Device) (signed, body []byte) {
+	prev := sha256.Sum256(ta.body)
+	return makeList(ta.phone, &pb.ListBody{AccountId: ta.id, Counter: counter, PreviousHash: prev[:], Devices: devices})
 }
 
 func code(e *pb1.Error) pb1.ErrorCode { return e.GetCode() }
@@ -337,13 +432,14 @@ func TestLogin(t *testing.T) {
 func TestSignUp(t *testing.T) {
 	h := newHarness(t, nil)
 	phone := newDev(1)
-	want := sha256.Sum256(phone.pub)
+	ta := newTestAccount(phone)
+	want := ta.id
 	c, w := h.login(phone, nil)
 	if w.Role != pb.DeviceRole_DEVICE_ROLE_UNSPECIFIED {
 		t.Errorf("welcome without an account: %v", w)
 	}
 	signUp := func(id string, a *pb.Attestation) {
-		c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: id, Attestation: a}}})
+		c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: id, Attestation: a, List: ta.signed}}})
 	}
 	// Without an attestation.
 	signUp("a", nil)
@@ -364,15 +460,18 @@ func TestSignUp(t *testing.T) {
 	if f := c.until("SignedUp", func(f *pb.Frame) bool { return f.GetSignedUp() != nil }); f.GetSignedUp().RequestId != "e" || !bytes.Equal(f.GetSignedUp().AccountId, want[:]) {
 		t.Errorf("again: %v", f)
 	}
-	// The phone is the account's one member, a client.
-	if ms, err := h.cfg.Store.Members(want[:]); err != nil || len(ms) != 1 || !bytes.Equal(ms[0].Key, phone.pub) || ms[0].Role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
-		t.Errorf("members %v %v", ms, err)
+	// The store has version 1, with the phone's key and its device row.
+	if l, ok, err := h.cfg.Store.List(want); err != nil || !ok || l.Counter != 1 || !bytes.Equal(l.PhoneKey, phone.pub) || !bytes.Equal(l.Signed, ta.signed) || !bytes.Equal(l.Hash, want) {
+		t.Errorf("list %v %v %v", l, ok, err)
+	}
+	if rows, err := h.cfg.Store.Devices(want); err != nil || len(rows) != 1 {
+		t.Errorf("device rows %v %v", rows, err)
 	}
 
 	// A relay without a verifier takes no sign-ups.
 	h2 := newHarness(t, func(c *Config) { c.Verifier = nil })
 	c2, _ := h2.login(phone, nil)
-	c2.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "f", Attestation: testAttestation}}})
+	c2.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "f", Attestation: testAttestation, List: ta.signed}}})
 	if e := c2.errorFor("f"); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
 		t.Errorf("no verifier: %v", e)
 	}
@@ -380,9 +479,9 @@ func TestSignUp(t *testing.T) {
 
 // account2 is an account with a phone, its read-only key and a host.
 func account2(h *harness) (id []byte, phone, read, host dev, p, r, hc *client) {
-	phone, read, host = newDev(1), newDev(2), newDev(3)
+	phone, host = newDev(1), newDev(3)
+	read = readOnlyOf(phone)
 	id = h.signUp(phone)
-	h.add(id, read, pb.DeviceRole_DEVICE_ROLE_READ_ONLY)
 	h.add(id, host, pb.DeviceRole_DEVICE_ROLE_HOST)
 	p, _ = h.login(phone, id)
 	r, _ = h.login(read, id)
@@ -581,10 +680,11 @@ func TestJoinExpires(t *testing.T) {
 
 func TestDevicesAndPush(t *testing.T) {
 	h := newHarness(t, nil)
-	_, phone, read, host, p, r, hc := account2(h)
+	id, phone, _, host, p, r, hc := account2(h)
 	p.send(&pb.Frame{Body: &pb.Frame_WatchDevices{WatchDevices: &pb.WatchDevices{}}})
 	ds := p.until("Devices", func(f *pb.Frame) bool { return f.GetDevices() != nil }).GetDevices()
-	if len(ds.Devices) != 3 {
+	// One per device of the list: the phone and the host.
+	if len(ds.Devices) != 2 || !bytes.Equal(ds.Devices[0].PublicKey, phone.pub) || !bytes.Equal(ds.Devices[1].PublicKey, host.pub) {
 		t.Fatalf("devices %v", ds)
 	}
 	for _, d := range ds.Devices {
@@ -608,26 +708,37 @@ func TestDevicesAndPush(t *testing.T) {
 		}
 		return false
 	})
-	p.until("push and the read-only key offline", func(f *pb.Frame) bool {
-		ok := f.GetDevices() != nil
+	p.until("push", func(f *pb.Frame) bool {
 		for _, d := range f.GetDevices().GetDevices() {
-			switch {
-			case bytes.Equal(d.PublicKey, phone.pub):
-				ok = ok && d.Push
-			case bytes.Equal(d.PublicKey, read.pub):
-				ok = ok && !d.Online
+			if bytes.Equal(d.PublicKey, phone.pub) {
+				return d.Push && d.Online
 			}
 		}
-		return ok
+		return false
 	})
+	// The read-only key is not a device of its own; its login is its
+	// phone's last seen.
+	rows, err := h.cfg.Store.Devices(id)
+	if err != nil || len(rows) != 2 || rows[string(phone.pub)].lastSeenMs == 0 {
+		t.Errorf("device rows %v %v", rows, err)
+	}
 }
 
 func TestDeleteAccount(t *testing.T) {
 	h := newHarness(t, nil)
 	id, phone, _, host, p, r, hc := account2(h)
-	r.send(&pb.Frame{Body: &pb.Frame_DeleteAccount{DeleteAccount: &pb.DeleteAccount{RequestId: "r"}}})
-	if e := r.errorFor("r"); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
-		t.Errorf("read-only key deleting: %v", e)
+	browser := newDev(4)
+	h.add(id, browser, pb.DeviceRole_DEVICE_ROLE_CLIENT)
+	b, _ := h.login(browser, id)
+	h.cfg.Store.db.Exec(`INSERT INTO names (account, recipient, sealed) VALUES (?, ?, x'00')`, id, derived(browser, "box"))
+	h.cfg.Store.db.Exec(`INSERT INTO removed (account, key) VALUES (?, x'01')`, id)
+	// Only the account's phone deletes it: not its read-only key, a host,
+	// or another client.
+	for _, c := range []*client{r, hc, b} {
+		c.send(&pb.Frame{Body: &pb.Frame_DeleteAccount{DeleteAccount: &pb.DeleteAccount{RequestId: "r"}}})
+		if e := c.errorFor("r"); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+			t.Errorf("%x deleting: %v", c.key.pub[:2], e)
+		}
 	}
 	p.send(&pb.Frame{Body: &pb.Frame_DeleteAccount{DeleteAccount: &pb.DeleteAccount{RequestId: "d"}}})
 	p.done("d")
@@ -642,7 +753,7 @@ func TestDeleteAccount(t *testing.T) {
 		}
 	}
 	// Nothing of it is left in the store.
-	for _, table := range []string{"accounts", "members", "devices", "attestations", "subscriptions"} {
+	for _, table := range storeTables(t, h.cfg.Store) {
 		var n int
 		if err := h.cfg.Store.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil || n != 0 {
 			t.Errorf("%s: %d rows, %v", table, n, err)

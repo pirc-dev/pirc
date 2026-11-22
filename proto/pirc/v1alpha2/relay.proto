@@ -20,7 +20,8 @@ enum ProtocolVersion {
 message Frame {
   oneof body {
     // Login, in order: Hello (peer), Challenge (relay), Auth (peer),
-    // Welcome (relay). Nothing else may be sent before Welcome.
+    // Welcome (relay). Nothing else may be sent before Welcome, but for
+    // the List a removed key is given before its refusal (List).
     Hello hello = 1;
     Challenge challenge = 2;
     Auth auth = 3;
@@ -42,6 +43,11 @@ message Frame {
     SessionEnded session_ended = 32;
     Devices devices = 33;
 
+    // The account's device list (docs/e2e.md, section 3). A client or
+    // host to relay: a newer version; relay to device: the newest.
+    PublishList publish_list = 60;
+    List list = 61;
+
     // Between a session and clients, through the relay.
     Routed routed = 40;
 
@@ -56,7 +62,8 @@ message Frame {
     JoinEnded join_ended = 84;
 
     // Accounts (docs/e2e.md, section 7). Client to relay, logged in
-    // without an account: making one. Client to relay: deleting its own.
+    // without an account: making one. The account's phone to relay:
+    // deleting it.
     SignUp sign_up = 90;
     SignedUp signed_up = 91;
     DeleteAccount delete_account = 92;
@@ -79,6 +86,9 @@ message Hello {
   // The account it logs in to, 32 bytes. Empty to log in without one:
   // to sign up, or to wait for a join as a new device.
   bytes account_id = 3;
+  // The highest version of the account's list the device holds, 0 for
+  // none: Welcome carries the relay's newest only when it is higher.
+  uint64 list_counter = 4;
 }
 
 message Challenge {
@@ -115,6 +125,14 @@ message Welcome {
   // purchase only when none will carry the account on (docs/design.md,
   // step 14, stage 5, decision D1). Empty to hosts and read-only keys.
   repeated AccountSubscription subscriptions = 6;
+  // The counter of the newest version of the account's list the relay
+  // holds; 0 when logged in without an account.
+  uint64 list_counter = 7;
+  // That version as signed (the signature, then the body), only when its
+  // counter is above Hello.list_counter. A device checks it as any
+  // version (docs/e2e.md, section 3); a device whose list is newer than
+  // list_counter publishes its own (PublishList).
+  bytes list = 8;
 }
 
 // A device's role in its account.
@@ -124,8 +142,8 @@ enum DeviceRole {
   DEVICE_ROLE_HOST = 1;
   // A phone, a browser or another app: a shell on every host.
   DEVICE_ROLE_CLIENT = 2;
-  // A phone's second key, readable while it is locked: announcements
-  // only.
+  // A phone's read-only key, readable while it is locked: the account's
+  // newest list and its notices only.
   DEVICE_ROLE_READ_ONLY = 3;
 }
 
@@ -205,8 +223,10 @@ message SessionEnded {
 // Client to relay: send me Devices now and whenever it changes.
 message WatchDevices {}
 
-// When the relay last saw each device of the account.
+// When the relay last saw each device of the account's newest list.
 message DeviceStatus {
+  // The device's signing key. A login by a phone's read-only key counts
+  // as that phone's for last_seen, not for online.
   bytes public_key = 1;
   bool online = 2;
   google.protobuf.Timestamp last_seen = 3;
@@ -214,6 +234,7 @@ message DeviceStatus {
   bool push = 4;
 }
 
+// One entry per device on the account's newest list, in its order.
 message Devices {
   repeated DeviceStatus devices = 1;
 }
@@ -269,24 +290,60 @@ message JoinEnded {
   string join_id = 1;
 }
 
-// Phone to relay, logged in without an account: make an account with
-// this key as its one client. Answered by SignedUp, or Error with the
-// request_id: PERMISSION_DENIED when sign-ups are closed and the invite
-// code is not good, or the attestation or subscription is refused. The
-// phone then logs in again, with the account's ID. A key that already
-// made an account is answered by SignedUp again, with that account's ID.
+// Phone to relay, logged in without an account: make an account whose
+// list is version 1, signed by this key, which must be its one device.
+// Answered by SignedUp, or Error with the request_id: INVALID for a list
+// the check refuses, VERSION_UNSUPPORTED for one it cannot take
+// (docs/e2e.md, section 3), PERMISSION_DENIED when sign-ups are closed
+// and the invite code is not good, or the attestation or subscription is
+// refused. The phone then logs in again, with the account's ID. A key
+// that already made an account is answered by SignedUp again, with that
+// account's ID, when it sends the same version 1, and CONFLICT when it
+// sends another.
 message SignUp {
   string request_id = 1;
   reserved 2;
   reserved "version";
   Attestation attestation = 3;
   string invite_code = 4;
+  // Version 1 of the account's list: the signature, then the body.
+  bytes list = 5;
 }
 
 message SignedUp {
   string request_id = 1;
-  // SHA-256 of the signing-up key.
+  // SHA-256 of version 1's body.
   bytes account_id = 2;
+}
+
+// A client or host to relay: a version of the account's list newer than
+// the relay's, signed by the account's phone, from any device that has
+// it; not from a read-only key. Taken also on a locked account. Answered
+// by Done once it is stored, or when it is the relay's newest already;
+// by Error with CONFLICT, then List with the relay's newest, when the
+// relay has a newer one or another with the same counter; with
+// VERSION_UNSUPPORTED when the check cannot take it, INVALID when it
+// refuses it, RATE_LIMITED past the versions taken an hour for the
+// account (only versions the check accepts count).
+//
+// Taking it, the relay sends List to every other connection of the
+// account, and closes with 1008 the connections of every device the new
+// version removes, once that List has been written to them. A device
+// stays only if the new version has a device with its signing key (or,
+// for a read-only key, its read-only key), the same role and the same
+// five keys; but the account's phone is on every version, and a change
+// to its other keys removes only its old read-only key's connections.
+message PublishList {
+  string request_id = 1;
+  bytes list = 2;
+}
+
+// Relay to device: the newest version of the account's list, as signed.
+// Also sent to a key the account's list once had, after its login's
+// signature checks, before the Error (UNAUTHENTICATED, "removed") that
+// ends it: so a device removed while offline learns of its removal.
+message List {
+  bytes list = 1;
 }
 
 // That a real app on a real phone asks (docs/e2e.md, section 7). It
@@ -327,9 +384,9 @@ message RenewSubscription {
   }
 }
 
-// Client to relay: delete this account and everything the relay holds
-// of it, and close every connection to it. Answered by Done before
-// the close.
+// The account's phone to relay: delete this account and everything the
+// relay holds of it, and close every connection to it. Answered by Done
+// before the close; from any other key, PERMISSION_DENIED.
 message DeleteAccount {
   string request_id = 1;
 }

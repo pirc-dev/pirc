@@ -1,7 +1,7 @@
 // Package hosted is the relay's hosted mode (docs/e2e.md; docs/design.md,
-// step 14): many accounts, each with its members, the device keys the
-// relay admits and the role of each. Signing up makes an account with the
-// signing-up phone as its one client.
+// step 14): many accounts, each with its newest device list, signed by
+// the account's phone, which decides the keys the relay admits and the
+// role of each. Signing up makes an account with the phone's version 1.
 // It speaks v1alpha2 only; a relay started in this mode serves no
 // v1alpha1 at all, and the self-hosted mode (package server) knows nothing
 // of it.
@@ -11,6 +11,7 @@
 package hosted
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -110,9 +111,15 @@ type Config struct {
 	MaxLookupsPerAccount int
 	MaxLookupsPerAddr    int
 	MaxWaitsPerAddr      int
-	TrustedProxies       []netip.Prefix
-	Logger               *slog.Logger
-	Now                  func() time.Time
+	// List versions taken per hour, per account.
+	MaxListPublishesPerAccount int
+	// Connections logged in at once, per key and per account; more are
+	// refused.
+	MaxConnsPerKey     int
+	MaxConnsPerAccount int
+	TrustedProxies     []netip.Prefix
+	Logger             *slog.Logger
+	Now                func() time.Time
 }
 
 func (c *Config) defaults() error {
@@ -152,6 +159,9 @@ func (c *Config) defaults() error {
 	seti(&c.MaxLookupsPerAccount, 20)
 	seti(&c.MaxLookupsPerAddr, 20)
 	seti(&c.MaxWaitsPerAddr, 4)
+	seti(&c.MaxListPublishesPerAccount, 30)
+	seti(&c.MaxConnsPerKey, 64)
+	seti(&c.MaxConnsPerAccount, 512)
 	if c.Logger == nil {
 		c.Logger = slog.Default()
 	}
@@ -178,6 +188,9 @@ type Server struct {
 	// Every logged-in connection.
 	conns map[*conn]struct{}
 	joins joins
+	// List versions taken this hour, by account.
+	listPublishes     map[string]*counter
+	lastPublishesTrim time.Time
 }
 
 func New(cfg Config) (*Server, error) {
@@ -192,6 +205,7 @@ func New(cfg Config) (*Server, error) {
 		accounts:      map[string]*account{},
 		conns:         map[*conn]struct{}{},
 		joins:         newJoins(),
+		listPublishes: map[string]*counter{},
 	}, nil
 }
 
@@ -294,10 +308,10 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 func shortKey(k []byte) string { return fmt.Sprintf("%x", k[:min(len(k), 6)]) }
 
 // account is an account with at least one connection, as the relay has it
-// in memory: its connections and live sessions. Its members are read from
-// the store.
+// in memory: its newest list, connections and live sessions.
 type account struct {
 	id    []byte
+	list  *accountList
 	conns map[*conn]struct{}
 	// Live sessions.
 	sessions    map[sessionID]*session
@@ -316,7 +330,8 @@ func (c *conn) accountName() string {
 }
 
 // loadLocked is the account with that ID, read from the store if no
-// connection has it in memory; nil when there is none. Under s.mu.
+// connection has it in memory; nil when there is none. A list in the
+// store that its check does not accept is an error. Under s.mu.
 func (s *Server) loadLocked(id []byte) (*account, error) {
 	if a := s.accounts[string(id)]; a != nil {
 		return a, nil
@@ -325,8 +340,14 @@ func (s *Server) loadLocked(id []byte) (*account, error) {
 	if err != nil || !ok {
 		return nil, err
 	}
+	l, err := s.readList(id)
+	if err != nil {
+		s.log.Error("cannot read an account's list", "account", shortKey(id), "err", err)
+		return nil, err
+	}
 	a := &account{
 		id:          id,
+		list:        l,
 		conns:       map[*conn]struct{}{},
 		sessions:    map[sessionID]*session{},
 		subscribers: map[*conn]struct{}{},
@@ -368,10 +389,9 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	if len(id) != 0 && len(id) != 32 {
 		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INVALID, "account ID must be 32 bytes")
 	}
-	// Membership is decided only after the challenge: an account's ID is
-	// its first key's SHA-256, so an answer before it would tell anyone
-	// holding a public key whether that key has an account.
-	errNotMember := "key not a member of the account"
+	// Membership is decided only after the challenge, so that an answer
+	// before it tells nobody holding a public key whether that key is on
+	// an account's list.
 
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
@@ -391,9 +411,34 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	}
 
 	// Admit under the lock that deleting the account takes: an account
-	// deleted during the challenge has no members left.
+	// deleted during the challenge has no list left.
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	removedList, ferr := s.admitByListLocked(c, pub, id, nonce, hello.GetListCounter())
+	s.mu.Unlock()
+	if removedList != nil {
+		// A key a version removed: the newest list, written before the
+		// refusal, so that a device removed while offline learns of it.
+		if b, err := proto.Marshal(&pb.Frame{Body: &pb.Frame_List{List: &pb.List{List: removedList}}}); err == nil {
+			wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			c.ws.Write(wctx, websocket.MessageBinary, b)
+			cancel()
+		}
+		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errRemoved)
+	}
+	if ferr != nil {
+		return c.fail(ctx, ferr.code, ferr.msg)
+	}
+	return nil
+}
+
+const errRemoved = "removed"
+
+// admitByListLocked admits c, whose login's signature has checked, by the
+// account's newest list, or says why not; for a key a version of the list
+// removed, it returns the newest list as signed instead. Under s.mu.
+func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64) ([]byte, *frameError) {
+	notMember := &frameError{code: pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, msg: "key not a member of the account"}
+	unavailable := &frameError{code: pb1.ErrorCode_ERROR_CODE_INTERNAL, msg: "store unavailable"}
 	c.key = pub
 	c.nonce = nonce
 	if len(id) == 0 {
@@ -402,59 +447,95 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 			ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 			MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		}}})
-		return nil
-	}
-	role, err := s.store.Role(id, pub)
-	if err != nil {
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
-	}
-	if role == pb.DeviceRole_DEVICE_ROLE_UNSPECIFIED {
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotMember)
+		return nil, nil
 	}
 	a, err := s.loadLocked(id)
 	if err != nil {
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+		return nil, unavailable
 	}
 	if a == nil {
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, errNotMember)
+		return nil, notMember
+	}
+	device, role := a.list.deviceFor(pub)
+	if device == nil {
+		s.unloadLocked(a)
+		removed, err := s.store.Removed(id, pub)
+		if err != nil {
+			return nil, unavailable
+		}
+		if removed {
+			return a.list.signed, nil
+		}
+		return nil, notMember
+	}
+	// Removed connections waiting to close count toward neither cap.
+	sameKey, live := 0, 0
+	for o := range a.conns {
+		if o.removed {
+			continue
+		}
+		live++
+		if bytes.Equal(o.key, pub) {
+			sameKey++
+		}
+	}
+	if sameKey >= s.cfg.MaxConnsPerKey || live >= s.cfg.MaxConnsPerAccount {
+		s.unloadLocked(a)
+		return nil, rateLimited("too many connections")
 	}
 	locked, _, err := s.store.Locked(id)
 	if err != nil {
 		s.unloadLocked(a)
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+		return nil, unavailable
 	}
 	if locked && role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
 		s.unloadLocked(a)
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED, errLocked)
+		return nil, denied(errLocked)
 	}
 	// What a client is told it pays with: unread, it is not told none.
 	subs, err := s.subscriptionsFor(a, role)
 	if err != nil {
 		s.unloadLocked(a)
-		return c.fail(ctx, pb1.ErrorCode_ERROR_CODE_INTERNAL, "store unavailable")
+		return nil, unavailable
 	}
-	if locked {
-		s.admitLockedAccountLocked(c, a, subs)
-		return nil
-	}
-	s.admitLocked(c, a, role, subs)
-	return nil
-}
-
-// admitLocked logs c in to account a, with Welcome. Under s.mu.
-func (s *Server) admitLocked(c *conn, a *account, role pb.DeviceRole, subs []*pb.AccountSubscription) {
-	c.acct, c.role = a, role
-	s.conns[c] = struct{}{}
-	a.conns[c] = struct{}{}
-	if err := s.store.Seen(a.id, c.key, s.cfg.Now().UnixMilli()); err != nil {
-		s.log.Error("cannot record a device as seen", "err", err)
-	}
-	c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{
+	c.device = device
+	w := &pb.Welcome{
 		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
 		Role:            role,
+		Locked:          locked,
 		Subscriptions:   subs,
-	}}})
+		ListCounter:     a.list.counter,
+	}
+	if a.list.counter > held {
+		w.List = a.list.signed
+	}
+	if locked {
+		s.admitLockedAccountLocked(c, a, w)
+		return nil, nil
+	}
+	s.admitLocked(c, a, w)
+	return nil, nil
+}
+
+// seenKey is the device row a connection's last seen goes to: its
+// signing key, or for a read-only key its phone's.
+func (c *conn) seenKey() []byte {
+	if c.device != nil {
+		return c.device.GetSigningKey()
+	}
+	return c.key
+}
+
+// admitLocked logs c in to account a, with Welcome. Under s.mu.
+func (s *Server) admitLocked(c *conn, a *account, w *pb.Welcome) {
+	c.acct, c.role = a, w.Role
+	s.conns[c] = struct{}{}
+	a.conns[c] = struct{}{}
+	if err := s.store.Seen(a.id, c.seenKey(), s.cfg.Now().UnixMilli()); err != nil {
+		s.log.Error("cannot record a device as seen", "err", err)
+	}
+	c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: w}})
 	s.pushDevicesLocked(a)
 }
 
@@ -482,8 +563,8 @@ func (s *Server) disconnect(c *conn) {
 		}
 		delete(se.attached, c)
 	}
-	if !a.deleted {
-		if err := s.store.Seen(a.id, c.key, s.cfg.Now().UnixMilli()); err != nil {
+	if !a.deleted && !c.removed {
+		if err := s.store.Seen(a.id, c.seenKey(), s.cfg.Now().UnixMilli()); err != nil {
 			s.log.Error("cannot record a device as seen", "err", err)
 		}
 	}
@@ -538,6 +619,11 @@ func (s *Server) encode(f *pb.Frame) ([]byte, *frameError) {
 func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 	s.mu.Lock()
 	a, role, locked := c.acct, c.role, c.locked
+	if c.removed {
+		// Its device is off the list: nothing it sends is taken.
+		s.mu.Unlock()
+		return nil
+	}
 	if a == nil {
 		s.mu.Unlock()
 		return s.handleNoAccount(ctx, c, f)
@@ -555,6 +641,8 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 		switch b := f.GetBody().(type) {
 		case *pb.Frame_DeleteAccount:
 			return s.deleteAccount(c, b.DeleteAccount.GetRequestId()).withID(b.DeleteAccount.GetRequestId())
+		case *pb.Frame_PublishList:
+			return s.publishList(c, b.PublishList).withID(b.PublishList.GetRequestId())
 		case *pb.Frame_Error:
 			return nil
 		}
@@ -618,9 +706,13 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 	case *pb.Frame_JoinEnded:
 		s.joinEnded(c, b.JoinEnded.GetJoinId())
 		return nil
+	case *pb.Frame_PublishList:
+		// Answered by Done, which publishList sends before the List
+		// frames that follow it.
+		return only(host || client, "a read-only key publishes no list", func() *frameError { return s.publishList(c, b.PublishList) }).withID(b.PublishList.GetRequestId())
 	case *pb.Frame_DeleteAccount:
 		// Answered by Done before the close, which deleteAccount sends.
-		return only(client, "only clients delete the account", func() *frameError { return s.deleteAccount(c, b.DeleteAccount.GetRequestId()) }).withID(b.DeleteAccount.GetRequestId())
+		return s.deleteAccount(c, b.DeleteAccount.GetRequestId()).withID(b.DeleteAccount.GetRequestId())
 	case *pb.Frame_Error:
 		return nil
 	}

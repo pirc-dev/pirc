@@ -32,6 +32,15 @@ type conn struct {
 	// logged in without an account. Under Server.mu.
 	acct *account
 	role pb.DeviceRole
+	// The list's entry the key logged in by: its own, or for a read-only
+	// key its phone's. Under Server.mu.
+	device *pb.Device
+	// A version of the list removed its device: nothing from the
+	// connection is taken, and it closes once the List frame telling it
+	// has been written. Under Server.mu.
+	removed bool
+	// Set once that List is queued: nothing more is.
+	dropQueue atomic.Bool
 	// Sessions this connection has; under Server.mu.
 	sessions int
 	// A join this connection waits for, or takes part in; under Server.mu.
@@ -115,6 +124,9 @@ func (c *conn) queue(f *pb.Frame) {
 // queueBytes sends an encoded frame, which callers may share between
 // connections: it is never modified.
 func (c *conn) queueBytes(b []byte) {
+	if c.dropQueue.Load() {
+		return
+	}
 	if c.queued.Add(int64(len(b))) > c.maxQueued {
 		c.close(websocket.StatusTryAgainLater, "too slow")
 		return

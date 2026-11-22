@@ -14,14 +14,14 @@
 // checked against the fixed ones, and each case is run again from its
 // JSON alone by the runner's code.
 //
-// The list maker, the names maker, the raw signing and the sealing with
+// The list maker (in make.ts), the names maker, the raw signing and the sealing with
 // given nonces here are test-only: no device makes lists or names in
 // TypeScript, and the package seals only with random nonces.
 // Likewise the Noise handshakes here with given ephemeral keys, with
 // payloads, or with a static key whose public key is low-order: they
 // craft what an honest party never sends.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnnouncementSchema, DeviceSchema, ListBodySchema, NamesSchema, NoticeSchema } from "@pirc/protocol/v1alpha2";
+import { AnnouncementSchema, ListBodySchema, NamesSchema, NoticeSchema } from "@pirc/protocol/v1alpha2";
 import sodium from "libsodium-wrappers-sumo";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -40,7 +40,6 @@ import {
   NAMES_CONTEXT,
   NOTICE_CONTEXT,
   type AnnouncementText,
-  type DeviceKeys,
   type Kind,
   type ListInput,
   type ListView,
@@ -71,6 +70,7 @@ import {
   type SealedCase,
   type SealExpect,
 } from "./cases.ts";
+import { body, bodyFields, concat, device, encode, equal, makeList, seed, sha256, signList, varint, type Dev } from "./make.ts";
 import { partyHandshake, runChannel, runVector, type ChannelCase, type ChannelFile, type DoneJson, type PartyJson, type StepJson, type VectorFile } from "./channel.ts";
 
 await sodium.ready;
@@ -79,27 +79,11 @@ const e2e = await load();
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 const EMPTY = new Uint8Array(0);
 
-function concat(...parts: Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-}
-
-function equal(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && a.every((x, i) => x === b[i]);
-}
-
 function must(ok: boolean, what: string): void {
   if (!ok) throw new Error(`gen: ${what}`);
 }
 
 const fill = (n: number, start: number): Uint8Array => Uint8Array.from({ length: n }, (_, i) => (start + i * 7) & 0xff);
-const sha256 = (b: Uint8Array): Uint8Array => sodium.crypto_hash_sha256(b);
-const seed = (name: string): Uint8Array => sha256(utf8(`pirc e2e test seed: ${name}`));
 
 // ---------------------------------------------------------------- framed.json
 
@@ -165,93 +149,13 @@ function framedCases(): FramedCase[] {
 
 // ------------------------------------------------------------ devices and keys
 
-type Dev = DeviceKeys;
 const COMPUTER = 1;
 const CLIENT = 2;
 
-function device(name: string, role: number, phone: boolean): Dev {
-  return {
-    role,
-    signingKey: sodium.crypto_sign_seed_keypair(seed(`${name} signing`)).publicKey,
-    channelKey: sodium.crypto_box_seed_keypair(seed(`${name} channel`)).publicKey,
-    boxKey: sodium.crypto_box_seed_keypair(seed(`${name} box`)).publicKey,
-    readOnlyKey: phone ? sodium.crypto_sign_seed_keypair(seed(`${name} read-only`)).publicKey : EMPTY,
-    notificationKey: phone ? sodium.crypto_box_seed_keypair(seed(`${name} notification`)).publicKey : EMPTY,
-  };
-}
 const computer = (name: string): Dev => device(name, COMPUTER, false);
 const browser = (name: string): Dev => device(name, CLIENT, false);
 const phone = (name: string): Dev => device(name, CLIENT, true);
 const signingSecret = (name: string): Uint8Array => sodium.crypto_sign_seed_keypair(seed(`${name} signing`)).privateKey;
-
-// ------------------------------------------- protobuf by hand, and the maker
-
-type Field = { no: number; varint: bigint } | { no: number; bytes: Uint8Array };
-
-function varint(v: bigint): number[] {
-  const out: number[] = [];
-  do {
-    const b = Number(v & 0x7fn);
-    v >>= 7n;
-    out.push(v > 0n ? b | 0x80 : b);
-  } while (v > 0n);
-  return out;
-}
-
-function encode(fields: Field[]): Uint8Array {
-  const out: number[] = [];
-  for (const f of fields) {
-    if ("varint" in f) out.push(...varint(BigInt(f.no << 3)), ...varint(f.varint));
-    else {
-      out.push(...varint(BigInt((f.no << 3) | 2)), ...varint(BigInt(f.bytes.length)));
-      for (const b of f.bytes) out.push(b);
-    }
-  }
-  return Uint8Array.from(out);
-}
-
-function deviceFields(d: Dev, extra: Field[] = []): Field[] {
-  const f: Field[] = [];
-  if (d.role !== 0) f.push({ no: 1, varint: BigInt(d.role) });
-  const keys = [d.signingKey, d.channelKey, d.boxKey, d.readOnlyKey, d.notificationKey];
-  keys.forEach((k, i) => {
-    if (k.length > 0) f.push({ no: i + 2, bytes: k });
-  });
-  return [...f, ...extra];
-}
-
-interface Body {
-  accountId: Uint8Array;
-  counter: bigint;
-  previousHash: Uint8Array;
-  devices: Dev[];
-}
-
-function bodyFields(b: Body, deviceExtra: Map<number, Field[]> = new Map()): Field[] {
-  const f: Field[] = [];
-  if (b.accountId.length > 0) f.push({ no: 1, bytes: b.accountId });
-  if (b.counter !== 0n) f.push({ no: 2, varint: b.counter });
-  if (b.previousHash.length > 0) f.push({ no: 3, bytes: b.previousHash });
-  b.devices.forEach((d, i) => f.push({ no: 4, bytes: encode(deviceFields(d, deviceExtra.get(i))) }));
-  return f;
-}
-
-/** A body as protobuf-es writes it, which must equal the encoding by hand. */
-function body(b: Body): Uint8Array {
-  const made = toBinary(ListBodySchema, create(ListBodySchema, { ...b, devices: b.devices.map((d) => create(DeviceSchema, d)) }));
-  must(equal(made, encode(bodyFields(b))), "protobuf-es and the encoding by hand differ");
-  return made;
-}
-
-function signList(b: Uint8Array, accountId: Uint8Array, secret: Uint8Array, context = LIST_CONTEXT): Uint8Array {
-  return concat(sodium.crypto_sign_detached(framed(context, accountId, b), secret), b);
-}
-
-/** The test-only list maker: what the account's phone does (in Dart), without its checks. */
-function makeList(m: { seed: Uint8Array; accountId: Uint8Array; counter: bigint; previousBody: Uint8Array | null; devices: Dev[] }): Uint8Array {
-  const b = body({ accountId: m.accountId, counter: m.counter, previousHash: m.previousBody ? sha256(m.previousBody) : EMPTY, devices: m.devices });
-  return signList(b, m.accountId, sodium.crypto_sign_seed_keypair(m.seed).privateKey);
-}
 
 // ------------------------------------------------- Ed25519 made by hand
 

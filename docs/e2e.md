@@ -286,7 +286,9 @@ one account; a person with two accounts uses two installs, as now with two relay
 What the relay controls is admission, not membership. It can refuse a device it should take (the
 device sees it cannot connect), but it cannot let in one the list does not have, and cannot read
 what it routes. It stores each account's newest list, routes channel messages, keeps the sealed
-announcements and names, and pairs the two sides of a join.
+announcements and names, and pairs the two sides of a join. It keeps no older version, only the
+keys removed from the list, until the account is deleted: a device removed while it was offline
+logs in, is given the newest version, and is then refused, so that it learns of its removal.
 
 **Signing up and paying.** **Decided**, and outside the cryptography:
 
@@ -298,7 +300,8 @@ announcements and names, and pairs the two sides of a join.
   pay later, by Stripe or a merchant of record.
 - Against abuse: the hosted relay has a domain of its own, not `pirc.dev`; there are caps per
   account (section 3) and per address, join lookups among them; sign-ups can be closed, to invite
-  codes only; an account can be deleted; and abuse reports go to an `abuse@` address.
+  codes only; an account can be deleted, only from the account's phone, as only it changes the
+  list; and abuse reports go to an `abuse@` address.
 
 **Attestation only stops abuse.** It tells the relay that a real app on a real phone is signing
 up or joining, so that accounts cannot be made in bulk. It never stands in for the list: a

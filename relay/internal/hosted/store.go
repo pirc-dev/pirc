@@ -1,6 +1,7 @@
-// The hosted relay's store: every account's members, push handles,
-// attestations and subscriptions, in SQLite (docs/design.md, step 14).
-// Sessions live in memory only: they last as long as a host's connection.
+// The hosted relay's store: every account's newest list, the keys removed
+// from it, push handles, attestations and subscriptions, in SQLite
+// (docs/design.md, step 14). Sessions live in memory only: they last as
+// long as a host's connection.
 
 package hosted
 
@@ -13,23 +14,43 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
-
-	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
 
+// storeVersion is the layout's PRAGMA user_version. A file with tables and
+// another version is refused: the relay never wipes one itself.
+const storeVersion = 2
+
 const schema = `
+-- An account's ID is SHA-256 of its list's version 1 body.
 CREATE TABLE IF NOT EXISTS accounts (
   id BLOB PRIMARY KEY,
   created_ms INTEGER NOT NULL
 );
--- The keys the relay admits to each account, and each one's role
--- (relay.proto's DeviceRole).
-CREATE TABLE IF NOT EXISTS members (
-  account BLOB NOT NULL,
-  device BLOB NOT NULL,
-  role INTEGER NOT NULL,
-  PRIMARY KEY (account, device)
+-- Each account's newest list, as signed: the signature, then the body;
+-- and the account's phone's signing key, version 1's one device.
+CREATE TABLE IF NOT EXISTS lists (
+  account BLOB PRIMARY KEY,
+  phone_key BLOB NOT NULL UNIQUE,
+  counter INTEGER NOT NULL,
+  hash BLOB NOT NULL,
+  signed BLOB NOT NULL,
+  taken_ms INTEGER NOT NULL
 );
+-- The account's phone's names, sealed to each client's box key.
+CREATE TABLE IF NOT EXISTS names (
+  account BLOB NOT NULL,
+  recipient BLOB NOT NULL,
+  sealed BLOB NOT NULL,
+  PRIMARY KEY (account, recipient)
+);
+-- Signing and read-only keys a version of the account's list removed,
+-- until the account is deleted.
+CREATE TABLE IF NOT EXISTS removed (
+  account BLOB NOT NULL,
+  key BLOB NOT NULL,
+  PRIMARY KEY (account, key)
+);
+-- Listed devices only, by signing key.
 CREATE TABLE IF NOT EXISTS devices (
   account BLOB NOT NULL,
   device BLOB NOT NULL,
@@ -81,7 +102,15 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	// One writer: the server serialises its changes anyway.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	// The check, the tables and the version in one transaction: a file is
+	// never left with tables and no version.
+	if err := (&Store{db: db}).tx(func(t *sql.Tx) error {
+		if err := checkVersion(t); err != nil {
+			return err
+		}
+		_, err := t.Exec(schema + fmt.Sprintf("PRAGMA user_version = %d;", storeVersion))
+		return err
+	}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -98,6 +127,21 @@ func OpenStore(dir string) (*Store, error) {
 		}
 	}
 	return &Store{db: db}, nil
+}
+
+// checkVersion refuses a file that has tables but another layout.
+func checkVersion(db *sql.Tx) error {
+	var v, tables int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
+		return err
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table'`).Scan(&tables); err != nil {
+		return err
+	}
+	if tables > 0 && v != storeVersion {
+		return fmt.Errorf("layout %d, not %d: the file is from an older relay, and no migration exists; move it away to start with an empty store", v, storeVersion)
+	}
+	return nil
 }
 
 // addColumn adds a column to a table that lacks it, then runs then.
@@ -127,13 +171,32 @@ func (s *Store) tx(f func(*sql.Tx) error) error {
 	return t.Commit()
 }
 
-// CreateAccount makes an account whose one member is client.
-func (s *Store) CreateAccount(id, client []byte, nowMs int64) error {
+// StoredList is an account's newest list as the store has it.
+type StoredList struct {
+	PhoneKey []byte
+	Counter  uint64
+	Hash     []byte
+	Signed   []byte
+}
+
+// CreateAccount makes an account with its list's version 1, the phone's
+// device row and, when att is not nil, its attestation, in one
+// transaction.
+func (s *Store) CreateAccount(id []byte, l StoredList, att *Attested, nowMs int64) error {
 	return s.tx(func(t *sql.Tx) error {
 		if _, err := t.Exec(`INSERT INTO accounts (id, created_ms) VALUES (?, ?)`, id, nowMs); err != nil {
 			return err
 		}
-		_, err := t.Exec(`INSERT INTO members (account, device, role) VALUES (?, ?, ?)`, id, client, int32(pb.DeviceRole_DEVICE_ROLE_CLIENT))
+		if _, err := t.Exec(`INSERT INTO lists (account, phone_key, counter, hash, signed, taken_ms) VALUES (?, ?, ?, ?, ?, ?)`, id, l.PhoneKey, int64(l.Counter), l.Hash, l.Signed, nowMs); err != nil {
+			return err
+		}
+		if _, err := t.Exec(`INSERT INTO devices (account, device) VALUES (?, ?)`, id, l.PhoneKey); err != nil {
+			return err
+		}
+		if att == nil {
+			return nil
+		}
+		_, err := t.Exec(`INSERT OR REPLACE INTO attestations (account, device, kind, ident) VALUES (?, ?, ?, ?)`, id, l.PhoneKey, att.Kind, att.Ident)
 		return err
 	})
 }
@@ -145,48 +208,82 @@ func (s *Store) HasAccount(id []byte) (bool, error) {
 	return n > 0, err
 }
 
-// AddMember adds a key to an account with a role, or gives a member
-// another.
-func (s *Store) AddMember(account, device []byte, role pb.DeviceRole) error {
-	_, err := s.db.Exec(`INSERT INTO members (account, device, role) VALUES (?, ?, ?) ON CONFLICT (account, device) DO UPDATE SET role = excluded.role`, account, device, int32(role))
-	return err
-}
-
-// Role is the key's role in the account; unspecified when it is not a
-// member, or there is no such account.
-func (s *Store) Role(account, device []byte) (pb.DeviceRole, error) {
-	var r int32
-	err := s.db.QueryRow(`SELECT role FROM members WHERE account = ? AND device = ?`, account, device).Scan(&r)
+// AccountOfPhone is the account the phone's key made, and its version
+// 1 as signed; nil when it made none.
+func (s *Store) AccountOfPhone(phoneKey []byte) (id, first []byte, err error) {
+	var counter int64
+	var signed []byte
+	err = s.db.QueryRow(`SELECT account, counter, signed FROM lists WHERE phone_key = ?`, phoneKey).Scan(&id, &counter, &signed)
 	if errors.Is(err, sql.ErrNoRows) {
-		return pb.DeviceRole_DEVICE_ROLE_UNSPECIFIED, nil
+		return nil, nil, nil
 	}
-	return pb.DeviceRole(r), err
-}
-
-// Member is one key of an account, and its role.
-type Member struct {
-	Key  []byte
-	Role pb.DeviceRole
-}
-
-// Members is every member of the account, by key.
-func (s *Store) Members(account []byte) ([]Member, error) {
-	rows, err := s.db.Query(`SELECT device, role FROM members WHERE account = ? ORDER BY device`, account)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer rows.Close()
-	var out []Member
-	for rows.Next() {
-		var m Member
-		var r int32
-		if err := rows.Scan(&m.Key, &r); err != nil {
-			return nil, err
+	if counter == 1 {
+		first = signed
+	}
+	return id, first, nil
+}
+
+// List is the account's newest list; ok is false when there is none.
+func (s *Store) List(account []byte) (l StoredList, ok bool, err error) {
+	var counter int64
+	err = s.db.QueryRow(`SELECT phone_key, counter, hash, signed FROM lists WHERE account = ?`, account).Scan(&l.PhoneKey, &counter, &l.Hash, &l.Signed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return l, false, nil
+	}
+	l.Counter = uint64(counter)
+	return l, err == nil, err
+}
+
+// RemovedDevice is a device a version removed: its signing key, its
+// box key, and a phone's read-only key.
+type RemovedDevice struct {
+	SigningKey, BoxKey, ReadOnlyKey []byte
+}
+
+// TakeList replaces the account's list with a newer version and, for
+// each device it removes, deletes its device row, the names sealed to it
+// and its attestations, and records its keys as removed: in one
+// transaction, committed to disk before it returns.
+func (s *Store) TakeList(account []byte, l StoredList, removed []RemovedDevice, nowMs int64) error {
+	return s.tx(func(t *sql.Tx) error {
+		r, err := t.Exec(`UPDATE lists SET counter = ?, hash = ?, signed = ?, taken_ms = ? WHERE account = ? AND counter < ?`, int64(l.Counter), l.Hash, l.Signed, nowMs, account, int64(l.Counter))
+		if err != nil {
+			return err
 		}
-		m.Role = pb.DeviceRole(r)
-		out = append(out, m)
-	}
-	return out, rows.Err()
+		if n, err := r.RowsAffected(); err != nil || n != 1 {
+			return fmt.Errorf("hosted: no older list to replace (%d, %v)", n, err)
+		}
+		for _, d := range removed {
+			for _, q := range []struct {
+				sql string
+				key []byte
+			}{
+				{`DELETE FROM devices WHERE account = ? AND device = ?`, d.SigningKey},
+				{`DELETE FROM attestations WHERE account = ? AND device = ?`, d.SigningKey},
+				{`DELETE FROM names WHERE account = ? AND recipient = ?`, d.BoxKey},
+				{`INSERT OR IGNORE INTO removed (account, key) VALUES (?, ?)`, d.SigningKey},
+				{`INSERT OR IGNORE INTO removed (account, key) VALUES (?, ?)`, d.ReadOnlyKey},
+			} {
+				if len(q.key) == 0 {
+					continue
+				}
+				if _, err := t.Exec(q.sql, account, q.key); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// Removed says whether a version of the account's list removed the key.
+func (s *Store) Removed(account, key []byte) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM removed WHERE account = ? AND key = ?`, account, key).Scan(&n)
+	return n > 0, err
 }
 
 // Seen records when a device was last connected.
@@ -351,10 +448,13 @@ func (s *Store) SubscriptionsDue(nowMs int64) ([]KeptSubscription, error) {
 	return out, rows.Err()
 }
 
+// accountTables are every table with an account column.
+var accountTables = []string{"lists", "names", "removed", "devices", "attestations", "subscriptions"}
+
 // DeleteAccount removes the account and everything of it.
 func (s *Store) DeleteAccount(account []byte) error {
 	return s.tx(func(t *sql.Tx) error {
-		for _, table := range []string{"members", "devices", "attestations", "subscriptions"} {
+		for _, table := range accountTables {
 			if _, err := t.Exec(`DELETE FROM `+table+` WHERE account = ?`, account); err != nil {
 				return err
 			}

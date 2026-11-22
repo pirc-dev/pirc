@@ -52,6 +52,10 @@ func TestLock(t *testing.T) {
 	if code(p.errorFor("g")) != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
 		t.Fatal("a locked account took RegisterPush")
 	}
+	// A newer list is taken: the phone can still remove a device.
+	ta := h.accts[string(id)]
+	p.send(publishFrame("l", ta.next(ta.devices...)))
+	p.done("l")
 
 	// A renewal the store takes unlocks it: Done, a close, and a login as
 	// before.

@@ -2053,11 +2053,8 @@ built; steps 14 and 15 are not finished.
           clients speak one protocol (2b), the earlier design's code and
           test files removed, and the relay's hosted mode left with
           accounts, sign-up, attestation, subscriptions, the lock and
-          routing, its membership in a members table until part 5. Sign-up
-          carries no list: the account's ID is the SHA-256 of the
-          signing-up phone's key, which becomes its one member, a client,
-          in the members table; nothing else adds members until part 5. The
-          login challenge is verified by Go's `crypto/ed25519`. `/pirc
+          routing. The login challenge is verified by Go's
+          `crypto/ed25519`. `/pirc
           join` and `/pirc leave` return in part 6, and the hosted end to
           end test in part 9. `extension/test/old-code.ts` checks what a
           release before the hosted relay does with `host.json`'s
@@ -2069,9 +2066,89 @@ built; steps 14 and 15 are not finished.
           Go checks the list).
        4. **Noise** in TypeScript and Dart over libsodium, held to the
           published vectors and run against each other.
-       5. **The relay**: each account's newest list in place of the
-          members table, channel messages routed, the sealed copies
-          stored, the join's lookup.
+       5. **The relay**: each account's newest list deciding whom it
+          admits, channel messages routed, the sealed copies stored, the
+          join's lookup. In pieces, each with its rules here: the list
+          (5a), the sealed copies (5b), channels (5c), the join's lookup
+          (5d), and waking phones through the push gateway (5e). The
+          list's rules:
+          - **The store**, `hosted.db`, holds per account only the newest
+            version: its signed bytes, counter and body hash, and the
+            account's phone's signing key (version 1's one device), unique
+            across accounts; the names sealed to each client; the keys
+            removed from the list; a row per listed device (last seen,
+            push handle); attestations and subscriptions. The bytes are
+            checked again (`CheckList`) whenever they are read from disk,
+            and anything but accepted refuses the account's logins with
+            `INTERNAL`, logged. Its layout is `PRAGMA user_version` 2;
+            the relay refuses to start on a file that has tables and
+            another version, saying to move it away. There is no
+            migration from a file without lists: an account made before
+            has no signed list and cannot be given one.
+          - **Signing up** sends version 1, checked in first mode with the
+            login key as the phone's: refused is `INVALID`, unsupported
+            `VERSION_UNSUPPORTED`. The account's ID is SHA-256 of its body.
+            A phone key that made an account is told its ID again for the
+            same bytes (a lost answer, retried: Ed25519 is deterministic),
+            and `CONFLICT` for others. One transaction writes the account,
+            its list, the phone's device row and its attestation.
+          - **Logging in**: the account's newest list must have the key, a
+            device's signing key in its role (1 a computer, `HOST`; 2 a
+            client), or a phone's read-only key as `READ_ONLY`. `Welcome`
+            carries `list_counter`, and `list` when that is above
+            `Hello.list_counter`. A read-only key's login is its phone's
+            last seen. A key a version removed gets `List` with the newest,
+            then `UNAUTHENTICATED` "removed" and a close, so that a device
+            removed while offline learns of it; the relay keeps the removed
+            keys until the account is deleted. Anything else is
+            `UNAUTHENTICATED`, decided only after the challenge.
+          - **A newer version** comes in `PublishList`, from any client or
+            computer of the account, a locked one's clients included; not
+            from a read-only key. The signature decides, not the sender: a
+            device whose list is newer than `Welcome.list_counter`
+            publishes it. Checked in later mode against the stored phone
+            key, account ID and counter: accepted is taken, then `Done`; the
+            relay's own version again is `Done`; another with its counter
+            is `CONFLICT`, logged as an error, and an older one `CONFLICT`,
+            each followed by `List` with the relay's; unsupported is
+            `VERSION_UNSUPPORTED`, refused `INVALID`, and nothing is kept.
+            The relay is upgraded before the apps whose lists it would
+            refuse.
+          - **Taking it**, under the server's lock and in this order: one
+            transaction replaces the list and, for each device removed,
+            deletes its device row, the names sealed to it and its
+            attestations, and records its keys as removed, committed with
+            `synchronous=FULL`; then in memory the list is replaced, and
+            the removed connections' sessions and joins end; then `Done`
+            to the sender, `List` to every other connection of the
+            account, removed ones included, and `Devices` to watchers;
+            last, each removed connection takes no more frames, is queued
+            nothing more, and closes with 1008 once its `List` has been
+            written, or after five seconds.
+          - **Removed** means that no device of the new version has the
+            connection's key (a signing key, or a read-only key) with the
+            same role and the same five keys: a device listed again with
+            another role or other keys is a removal and an addition. The
+            account's phone stays on every version (its signing key is
+            pinned), so a change to its other keys removes only what
+            changed: its old read-only key, which is recorded as removed
+            and whose connections close, and the names sealed to its old
+            box key. Its signing-key connections, device row and
+            attestation stay.
+          - **`Devices`** has one entry per device of the newest list, in
+            its order, by signing key.
+          - **Deleting the account** is the account's phone's alone, by its
+            signing key, locked or not, as a primary device deletes an
+            account and linked devices cannot. One transaction deletes
+            every table's rows of it; its sessions, joins and connections
+            end.
+          - **Caps**, each a `Config` field: 30 versions taken an hour per
+            account, counting only versions the check accepts, so that no
+            device can spend the cap on frames that are not the phone's;
+            64 connections per key and 512 per account at once, not
+            counting removed connections waiting to close.
+            The list's own caps (10 clients, 50 computers, 16 KB) are
+            `CheckList`'s.
        6. **The computer**: its keys and list files, a channel per client,
           sealed announcements; `/pirc join` and `/pirc leave`.
        7. **Joining** from the app, the web app and the terminal.

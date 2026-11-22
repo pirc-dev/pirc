@@ -89,6 +89,12 @@ export interface HostedOptions {
   /** Empty to log in without an account: to sign up, or to wait for a join. */
   accountId: Uint8Array;
   signer: Signer;
+  /**
+   * The highest version of the account's list the device holds, 0n for
+   * none, read at each login and sent in Hello: Welcome then carries the
+   * relay's newest only when it is higher.
+   */
+  listCounter?: () => bigint;
   open: OpenSocket;
   onFrame(f: Frame): void;
   onState?(s: HostedState): void;
@@ -215,7 +221,11 @@ export class HostedConnection {
     const events: SocketEvents = {
       open: () => {
         if (!mine()) return;
-        this.write(create(FrameSchema, { body: { case: "hello", value: { protocolVersion: ProtocolVersion.V1ALPHA2, publicKey: this.opts.signer.publicKey, accountId: account } } }));
+        this.write(
+          create(FrameSchema, {
+            body: { case: "hello", value: { protocolVersion: ProtocolVersion.V1ALPHA2, publicKey: this.opts.signer.publicKey, accountId: account, listCounter: this.opts.listCounter?.() ?? 0n } },
+          }),
+        );
       },
       pong: () => (alive = true),
       message: (data) => {
@@ -228,6 +238,9 @@ export class HostedConnection {
         }
         const body = frame.body;
         if (phase === "ready") return this.call("onFrame", this.opts.onFrame.bind(this.opts), frame);
+        // A key the account's list removed is given the newest version
+        // before its refusal, so that the device learns of its removal.
+        if (phase === "auth" && body.case === "list") return this.call("onFrame", this.opts.onFrame.bind(this.opts), frame);
         if (body.case === "error") {
           const { code, message } = body.value;
           if (code === ErrorCode.VERSION_UNSUPPORTED) {
