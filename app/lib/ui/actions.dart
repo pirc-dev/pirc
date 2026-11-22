@@ -233,23 +233,23 @@ class _ActionsState extends State<SessionActions> {
             if (text != null) widget.say(text);
           },
         ),
-        SheetRow(label: 'Compact', sub: 'Summarise the conversation to free context', disabled: busy, onTap: () => _act((r) => SessionMessage(compact: Compact(requestId: r)), compacts: true)),
+        SheetRow(label: 'Compact', sub: 'Asks pi to compact the conversation (/compact)', disabled: busy, onTap: () => _act((r) => SessionMessage(compact: Compact(requestId: r)), compacts: true)),
         SheetRow(label: 'Rename', onTap: () => setState(() => _mode = _Mode.rename)),
         SheetRow(
           label: 'Reload',
-          sub: "Load pi's extensions, skills, prompts and context files again",
+          sub: "Asks pi to reload (/reload)",
           disabled: busy,
-          onTap: () => _act((r) => SessionMessage(reload: Reload(requestId: r)), done: 'pi is reloading; the session carries on'),
+          onTap: () => _act((r) => SessionMessage(reload: Reload(requestId: r)), done: 'pi is reloading'),
         ),
       ]),
       SheetGroup(children: [
         SheetRow(
           label: 'Clone',
-          sub: "Carry on in a copy; this one stays in pi's history",
+          sub: "Asks pi to clone the session (/clone)",
           disabled: busy,
-          onTap: () => _act((r) => SessionMessage(clone_20: Clone(requestId: r)), done: "Now in a copy of the session; the original stays in pi's history"),
+          onTap: () => _act((r) => SessionMessage(clone_20: Clone(requestId: r)), done: "pi cloned the session"),
         ),
-        if (movesInTree(s)) SheetRow(label: 'Branches', sub: 'Switch to another branch of this conversation', disabled: busy, onTap: () => setState(() => _mode = _Mode.branches)),
+        if (movesInTree(s)) SheetRow(label: 'Branches', sub: 'The branches pi lists for /tree', disabled: busy, onTap: () => setState(() => _mode = _Mode.branches)),
         SheetRow(label: 'Resume', sub: 'The sessions pi lists for /resume', disabled: busy, onTap: () => setState(() => _mode = _Mode.resume)),
         SheetRow(label: 'Clear conversation', sub: 'Asks pi for a new session (/new)', danger: true, disabled: busy, onTap: () => setState(() => _mode = _Mode.fresh)),
       ]),
@@ -375,7 +375,7 @@ class _ResumeState extends State<_Resume> {
             ),
           ),
         );
-    return Sheet(title: 'Resume', sub: _all ? 'Sessions pi has saved, in every folder' : s.cwd, done: 'Done', children: [
+    return Sheet(title: 'Resume', sub: _all ? 'The sessions pi lists for /resume, in every folder' : s.cwd, done: 'Done', children: [
       Container(
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         padding: const EdgeInsets.all(3),
@@ -459,8 +459,8 @@ class _BranchesState extends State<_Branches> {
         Quoted(branchTitle(picked), more: last.isNotEmpty && last != picked['prompt'] ? last : null),
         if (busy) say('pi is working; stop it first.'),
         SheetGroup(children: [
-          SheetRow(label: 'Switch', sub: 'This branch stays, to come back to', disabled: busy, onTap: () => widget.go(picked, false)),
-          SheetRow(label: 'Switch with a summary', sub: 'pi also summarises this branch, for the model', disabled: busy, onTap: () => widget.go(picked, true)),
+          SheetRow(label: 'Switch', sub: 'Asks pi to switch to this branch (/tree)', disabled: busy, onTap: () => widget.go(picked, false)),
+          SheetRow(label: 'Switch with a summary', sub: 'Asks pi to switch with a summary (/tree)', disabled: busy, onTap: () => widget.go(picked, true)),
         ]),
       ]);
     }
@@ -528,10 +528,10 @@ class MessageSheet extends StatelessWidget {
             if (busy) Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: Text('pi is working; stop it first.', style: look.text(size: 14, color: look.ink2, spacing: 0))),
             SheetGroup(children: [
               if (movesInTree(s)) ...[
-                SheetRow(label: 'Go back to here', sub: 'Carry on from before it; what came after stays as a branch', disabled: busy, onTap: () => go(FromMessage.back)),
-                SheetRow(label: 'Go back with a summary', sub: 'pi also summarises what came after, for the model', disabled: busy, onTap: () => go(FromMessage.summary)),
+                SheetRow(label: 'Go back to here', sub: 'Asks pi to go back to before this message (/tree)', disabled: busy, onTap: () => go(FromMessage.back)),
+                SheetRow(label: 'Go back with a summary', sub: 'Asks pi to go back with a summary (/tree)', disabled: busy, onTap: () => go(FromMessage.summary)),
               ],
-              SheetRow(label: 'Fork from here', sub: 'A new session${windowOf(s) == null ? '' : ' in ${windowOf(s)}'} with what came before it', disabled: busy, onTap: () => go(FromMessage.fork)),
+              SheetRow(label: 'Fork from here', sub: 'Asks pi to fork before this message (/fork)', disabled: busy, onTap: () => go(FromMessage.fork)),
             ]),
           ]);
         },

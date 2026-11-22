@@ -8,7 +8,7 @@ import { live } from "./live.ts";
 import { Icon } from "./icons.tsx";
 import { useLayer } from "./layer.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
-import { ago, title, where, windowOf } from "./names.ts";
+import { ago, title, where } from "./names.ts";
 import { useNow } from "./time.ts";
 import { Answers, Sheet, SheetGroup, SheetRow } from "./Sheet.tsx";
 import { type Run } from "./chat.ts";
@@ -37,11 +37,11 @@ export function MessageSheet(p: { session: SessionView; item: UserItem; close: (
       <SheetGroup>
         {movesInTree(s) && (
           <>
-            <SheetRow label="Go back to here" sub="Carry on from before it; what came after stays as a branch" disabled={busy} onClick={() => p.go("back")} />
-            <SheetRow label="Go back with a summary" sub="pi also summarises what came after, for the model" disabled={busy} onClick={() => p.go("summary")} />
+            <SheetRow label="Go back to here" sub="Asks pi to go back to before this message (/tree)" disabled={busy} onClick={() => p.go("back")} />
+            <SheetRow label="Go back with a summary" sub="Asks pi to go back with a summary (/tree)" disabled={busy} onClick={() => p.go("summary")} />
           </>
         )}
-        <SheetRow label="Fork from here" sub={`A new session${windowOf(s) ? ` in ${windowOf(s)}` : ""} with what came before it`} disabled={busy} onClick={() => p.go("fork")} />
+        <SheetRow label="Fork from here" sub="Asks pi to fork before this message (/fork)" disabled={busy} onClick={() => p.go("fork")} />
       </SheetGroup>
     </Sheet>
   );
@@ -197,21 +197,21 @@ export function Actions(p: {
             p.say(`**$${cost}** so far · ${st.input.toLocaleString()} in, ${st.output.toLocaleString()} out, ${st.cacheRead.toLocaleString()} cached\n\nContext ${ctx}`);
           }
         }} />
-        <SheetRow label="Compact" sub="Summarise the conversation to free context" disabled={busy} onClick={() => void act("compact", {})} />
+        <SheetRow label="Compact" sub="Asks pi to compact the conversation (/compact)" disabled={busy} onClick={() => void act("compact", {})} />
         <SheetRow label="Rename" onClick={() => setMode("rename")} />
-        <SheetRow label="Reload" sub="Load pi's extensions, skills, prompts and context files again" disabled={busy} onClick={async () => {
+        <SheetRow label="Reload" sub="Asks pi to reload (/reload)" disabled={busy} onClick={async () => {
           p.close();
           const r = await p.run("reload", {});
-          if (r?.ok) p.say("pi is reloading; the session carries on");
+          if (r?.ok) p.say("pi is reloading");
         }} />
       </SheetGroup>
       <SheetGroup>
-        <SheetRow label="Clone" sub="Carry on in a copy; this one stays in pi's history" disabled={busy} onClick={async () => {
+        <SheetRow label="Clone" sub="Asks pi to clone the session (/clone)" disabled={busy} onClick={async () => {
           p.close();
           const r = await p.run("clone", {});
-          if (r?.ok) p.say("Now in a copy of the session; the original stays in pi's history");
+          if (r?.ok) p.say("pi cloned the session");
         }} />
-        {movesInTree(s) && <SheetRow label="Branches" sub="Switch to another branch of this conversation" disabled={busy} onClick={() => setMode("branches")} />}
+        {movesInTree(s) && <SheetRow label="Branches" sub="The branches pi lists for /tree" disabled={busy} onClick={() => setMode("branches")} />}
         <SheetRow label="Resume" sub="The sessions pi lists for /resume" disabled={busy} onClick={() => setMode("resume")} />
         <SheetRow label="Clear conversation" sub="Asks pi for a new session (/new)" danger disabled={busy} onClick={() => setMode("new")} />
       </SheetGroup>
@@ -268,7 +268,7 @@ function Resume(p: { session: SessionView; close: () => void; go: (x: PastSessio
   );
   const say = (text: string) => <p className="px-5 py-3 text-[14.5px] text-ink2 cards:px-3.5">{text}</p>;
   return (
-    <Sheet key="resume" title="Resume" sub={all ? "Sessions pi has saved, in every folder" : s.cwd} done="Done" close={p.close}>
+    <Sheet key="resume" title="Resume" sub={all ? "The sessions pi lists for /resume, in every folder" : s.cwd} done="Done" close={p.close}>
       <div className="mx-5 mb-3 flex gap-0.5 cards:mx-3 cards:rounded-[10px] cards:bg-wash cards:p-[3px]" role="group" aria-label="Which sessions">
         {scope(false, "This folder")}
         {scope(true, "All folders")}
@@ -327,8 +327,8 @@ function Branches(p: { session: SessionView; close: () => void; go: (x: Branch, 
         </div>
         {busy && say("pi is working; stop it first.")}
         <SheetGroup>
-          <SheetRow label="Switch" sub="This branch stays, to come back to" disabled={busy} onClick={() => p.go(picked, false)} />
-          <SheetRow label="Switch with a summary" sub="pi also summarises this branch, for the model" disabled={busy} onClick={() => p.go(picked, true)} />
+          <SheetRow label="Switch" sub="Asks pi to switch to this branch (/tree)" disabled={busy} onClick={() => p.go(picked, false)} />
+          <SheetRow label="Switch with a summary" sub="Asks pi to switch with a summary (/tree)" disabled={busy} onClick={() => p.go(picked, true)} />
         </SheetGroup>
       </Sheet>
     );

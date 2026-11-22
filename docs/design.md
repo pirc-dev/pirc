@@ -2085,7 +2085,9 @@ Each step ends with something that can be seen working.
       of pi's /new command. The chat here then starts empty."), since a
       new session read as a new agent; Stop pi asks pi to quit (/quit),
       and the session leaves PiRC's list; Resume lists what pi lists for
-      /resume.
+      /resume. The rest follow: Compact, Reload, Clone, Branches and the
+      choices on a message each say "Asks pi to …" with the command
+      (/compact, /reload, /clone, /tree, /fork).
 
     **Still to do before the app starts** (not decisions):
     - **Reaching the relay.** A self-hosted relay on a private network
