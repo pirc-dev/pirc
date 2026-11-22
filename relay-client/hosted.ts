@@ -95,6 +95,12 @@ export interface HostedOptions {
    * relay's newest only when it is higher.
    */
   listCounter?: () => bigint;
+  /**
+   * A computer's pi process, 1 to 128 bytes, sent in Hello: required from
+   * a computer, which is reached by it (OpenChannel), and absent from
+   * anything else.
+   */
+  instanceId?: string;
   open: OpenSocket;
   onFrame(f: Frame): void;
   onState?(s: HostedState): void;
@@ -223,7 +229,7 @@ export class HostedConnection {
         if (!mine()) return;
         this.write(
           create(FrameSchema, {
-            body: { case: "hello", value: { protocolVersion: ProtocolVersion.V1ALPHA2, publicKey: this.opts.signer.publicKey, accountId: account, listCounter: this.opts.listCounter?.() ?? 0n } },
+            body: { case: "hello", value: { protocolVersion: ProtocolVersion.V1ALPHA2, publicKey: this.opts.signer.publicKey, accountId: account, listCounter: this.opts.listCounter?.() ?? 0n, instanceId: this.opts.instanceId ?? "" } },
           }),
         );
       },

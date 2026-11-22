@@ -211,8 +211,9 @@ func (s *Server) publishList(c *conn, p *pb.PublishList) *frameError {
 }
 
 // takeListLocked replaces a's list with next: first in the store, then
-// in memory, ending the sessions and joins of the connections of every
-// device it removes, which are marked removed. Under s.mu.
+// in memory, ending the sessions, channels and joins of the connections
+// of every device it removes, which are marked removed, and deleting the
+// copies sealed to removed recipients. Under s.mu.
 //
 // The account's phone is on every version (CheckList pins its signing
 // key), so a change to its other keys removes only what changed: its
@@ -257,13 +258,13 @@ func (s *Server) takeListLocked(a *account, next *accountList) *frameError {
 		delete(a.watchers, o)
 		for id, se := range a.sessions {
 			if se.owner == o {
-				s.endLocked(a, id, se)
-				continue
+				s.endLocked(a, id, se, false)
 			}
-			delete(se.attached, o)
 		}
+		s.closeChannelsLocked(o, pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 		s.joins.dropLocked(s, o)
 	}
+	dropUnlistedLocked(a)
 	s.log.Info("list taken", "account", shortKey(a.id), "counter", next.counter, "removed", len(gone))
 	return nil
 }
@@ -289,18 +290,21 @@ func (s *Server) tellListLocked(a *account, from *conn) {
 
 func (s *Server) watchDevices(c *conn) {
 	c.acct.watchers[c] = struct{}{}
-	if f := s.devicesLocked(c.acct); f != nil {
-		c.queue(f)
-	}
+	s.sendDevicesLocked(c.acct, map[*conn]struct{}{c: {}})
 }
 
-// devicesLocked is the Devices frame for the devices of a's newest
-// list. Under s.mu.
-func (s *Server) devicesLocked(a *account) *pb.Frame {
+// devicesLocked is the status of each device of a's newest list, and the
+// names copies by box key. Under s.mu.
+func (s *Server) devicesLocked(a *account) ([]*pb.DeviceStatus, map[string][]byte) {
 	rows, err := s.store.Devices(a.id)
 	if err != nil {
 		s.log.Error("cannot read devices", "err", err)
-		return nil
+		return nil, nil
+	}
+	names, err := s.store.Names(a.id)
+	if err != nil {
+		s.log.Error("cannot read names", "err", err)
+		return nil, nil
 	}
 	online := map[string]bool{}
 	for o := range a.conns {
@@ -318,20 +322,26 @@ func (s *Server) devicesLocked(a *account) *pb.Frame {
 		}
 		out = append(out, st)
 	}
-	return &pb.Frame{Body: &pb.Frame_Devices{Devices: &pb.Devices{Devices: out}}}
+	return out, names
+}
+
+// sendDevicesLocked sends Devices to each of these watchers, with the
+// names sealed to its own box key. Under s.mu.
+func (s *Server) sendDevicesLocked(a *account, to map[*conn]struct{}) {
+	if len(to) == 0 {
+		return
+	}
+	ds, names := s.devicesLocked(a)
+	if names == nil {
+		return
+	}
+	for w := range to {
+		w.queue(&pb.Frame{Body: &pb.Frame_Devices{Devices: &pb.Devices{Devices: ds, Names: names[string(w.device.GetBoxKey())]}}})
+	}
 }
 
 // pushDevicesLocked sends Devices to a's watchers. Under s.mu.
-func (s *Server) pushDevicesLocked(a *account) {
-	if len(a.watchers) == 0 {
-		return
-	}
-	if f := s.devicesLocked(a); f != nil {
-		for w := range a.watchers {
-			w.queue(f)
-		}
-	}
-}
+func (s *Server) pushDevicesLocked(a *account) { s.sendDevicesLocked(a, a.watchers) }
 
 // setPush registers or, with "", unregisters this client's push handle.
 // Waking through the push gateway comes with the app's notifications
@@ -376,15 +386,18 @@ func (s *Server) deleteAccount(c *conn, requestID string) *frameError {
 	return nil
 }
 
-// forgetDeletedLocked drops a deleted account from memory: its sessions
-// and joins end, and it is no longer loaded. Under s.mu.
+// forgetDeletedLocked drops a deleted account from memory: its sessions,
+// their copies, its kept notices, channels and joins end, and it is no
+// longer loaded. Under s.mu.
 func (s *Server) forgetDeletedLocked(a *account) {
 	a.deleted = true
 	delete(s.accounts, string(a.id))
 	for id, se := range a.sessions {
-		s.endLocked(a, id, se)
+		s.endLocked(a, id, se, false)
 	}
+	forgetEndedLocked(a)
 	for o := range a.conns {
+		s.closeChannelsLocked(o, pb1.ErrorCode_ERROR_CODE_SESSION_GONE)
 		s.joins.dropLocked(s, o)
 	}
 }

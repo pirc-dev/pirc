@@ -2118,8 +2118,9 @@ built; steps 14 and 15 are not finished.
             transaction replaces the list and, for each device removed,
             deletes its device row, the names sealed to it and its
             attestations, and records its keys as removed, committed with
-            `synchronous=FULL`; then in memory the list is replaced, and
-            the removed connections' sessions and joins end; then `Done`
+            `synchronous=FULL`; then in memory the list is replaced, the
+            removed connections' sessions, channels and joins end, and
+            copies sealed to removed recipients are deleted; then `Done`
             to the sender, `List` to every other connection of the
             account, removed ones included, and `Devices` to watchers;
             last, each removed connection takes no more frames, is queued
@@ -2149,6 +2150,85 @@ built; steps 14 and 15 are not finished.
             counting removed connections waiting to close.
             The list's own caps (10 clients, 50 computers, 16 KB) are
             `CheckList`'s.
+
+          The sealed copies' rules (5b):
+          - **Announcements and notices** come in `SessionAnnounce`, only
+            from a computer, for its own key and its connection's instance
+            ID, as `SealedCopy` lists (`payload` is gone): `announcements`
+            to the box keys of clients on the relay's newest list,
+            `notices` to the notification keys of phones on it. At most 10
+            of each kind, one per recipient, each 40 to 8,192 bytes (the
+            largest honest copy, every field at its cap and a 128-byte
+            session ID, is 6,005); a recipient twice, an 11th copy or one
+            too short is `INVALID`, one too long `TOO_LARGE`, and what was
+            stored stays. A copy to a key not on the list is dropped and
+            the rest kept, since a computer's list may lag the relay's.
+            Each announcement replaces both kinds of the session's copies
+            wholly. They live in memory with the session, never in
+            `hosted.db`: a relay restart loses them until each computer
+            announces again.
+          - **To each client**, `SessionList` and `SessionUpdated` are
+            encoded per subscriber: an entry's `sealed` is the copy sealed
+            to that client's box key, or empty. `SubscribeSessions` is for
+            clients only.
+          - **The read-only key** sends only `FetchNotices` (and `Error`);
+            anything else is `PERMISSION_DENIED`. `Notices` holds every
+            notice sealed to its phone's notification key, with its session
+            and when the relay took it, in frames of at most the frame
+            limit, `more` on all but the last.
+          - **Deleted**: an announcement when its session ends (`SessionEnd`,
+            its connection closing, its computer removed) or its recipient
+            is removed. A notice stays fetchable for ten minutes after its
+            session ends, so that a push sent at a turn's end still shows
+            something when pi quits; the account stays in memory meanwhile.
+            It goes at once with its computer's or its recipient's removal,
+            and with the account.
+          - **Names**: `PublishNames` only from the account's phone (its
+            stored signing key), one copy per client on the list, to its box
+            key, 40 to 32,768 bytes, refused and dropped as announcements
+            are. Each publish replaces every copy, in `hosted.db`'s `names`
+            table, `Done` once committed; each watcher's own copy is in
+            `Devices.names`, at `WatchDevices`, in every `Devices` and to
+            every watcher after a publish. A copy goes with its recipient's
+            removal and with the account.
+          - **Caps**, each a `Config` field: announcements 5 a second per
+            connection, 20 at once; 32 sessions per connection and 256 per
+            account; 2 MiB of sealed copies in memory per account, kept
+            notices included; 30 notice fetches a minute per read-only
+            connection; 30 names publishes an hour per account; past each,
+            `RATE_LIMITED`.
+
+          Channels' rules (5c):
+          - **Addressing**: a computer logs in with `Hello.instance_id`, its
+            pi process, 1 to 128 bytes; anything else sends none. A client's
+            `OpenChannel` names the computer's signing key and the instance
+            ID, with IK's first message, exactly 96 bytes; the relay sends it
+            to the newest connection of that key and instance in the account
+            (a newer connection takes new channels; older channels last
+            until their connection closes), or answers `SESSION_NOT_FOUND`.
+            Only a client opens, only to a computer of its own account.
+          - **IDs** come from one counter for the relay's run; the client is
+            answered `ChannelOpened`, and the process given the ID and the
+            message only, not who opened it, which Noise's static key says.
+          - **Bytes**: each `ChannelMessage` is 16 to 65,535 bytes, passed
+            on unread and in order (one reader and one queue per
+            connection); anything else is `INVALID`. Nothing is kept for an
+            end that is gone.
+          - **Ends**: either side's `CloseChannel` is passed to the other.
+            The relay closes a channel, telling the ends still connected,
+            when either connection goes (`SESSION_GONE`), either device is
+            removed (`PERMISSION_DENIED`), the process has sent nothing 30
+            seconds after the open (`TIMEOUT`), or more than 1 MiB is queued
+            toward one end of it (`RATE_LIMITED`): a slow reader costs one
+            channel, not its connection, whose own 4 MiB queue cap still
+            closes the connection.
+          - **Caps**, each a `Config` field: 64 channels per client
+            connection, 128 per process connection, 30 opens a minute per
+            client connection, the 30-second wait and the 1 MiB queue.
+          - `Attach`, `Detach` and `Routed` are gone (21, 22 and 40
+            reserved): who reads a session is inside its channel. The frame
+            limit is 1 MiB by default, at least 512 KiB; the largest frame
+            is `PublishNames`, about 330 KB.
        6. **The computer**: its keys and list files, a channel per client,
           sealed announcements; `/pirc join` and `/pirc leave`.
        7. **Joining** from the app, the web app and the terminal.

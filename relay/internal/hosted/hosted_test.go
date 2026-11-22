@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,10 +36,12 @@ type harness struct {
 	cfg Config
 	// The accounts signed up, by ID, with their newest lists.
 	accts map[string]*testAccount
+	// Keys any test list has had as a computer's.
+	computers map[string]bool
 }
 
 func newHarness(t *testing.T, tweak func(*Config)) *harness {
-	h := &harness{t: t, dir: t.TempDir(), accts: map[string]*testAccount{}}
+	h := &harness{t: t, dir: t.TempDir(), accts: map[string]*testAccount{}, computers: map[string]bool{}}
 	h.start(tweak)
 	return h
 }
@@ -98,6 +101,8 @@ type client struct {
 	frames chan *pb.Frame
 	// The error that ended the connection, once frames is closed.
 	err error
+	// Held, the connection stops reading (after at most one more frame).
+	hold sync.Mutex
 }
 
 func newClient(t *testing.T, ws *websocket.Conn, d dev) *client {
@@ -116,6 +121,8 @@ func newClient(t *testing.T, ws *websocket.Conn, d dev) *client {
 				return
 			}
 			c.frames <- f
+			c.hold.Lock()
+			c.hold.Unlock()
 		}
 	}()
 	return c
@@ -139,6 +146,35 @@ func (h *harness) loginAs(d dev, account []byte, signOrigin string, version pb.P
 // list's version held.
 func (h *harness) loginHolding(d dev, account []byte, signOrigin string, version pb.ProtocolVersion, held uint64) (*client, *pb.Frame) {
 	h.t.Helper()
+	return h.loginWith(d, account, signOrigin, version, held, h.instanceOf(d, account))
+}
+
+// instanceOf is the instance ID a test device logs in with to an
+// account: "i1" for a key a test list has had as a computer's, else none.
+func (h *harness) instanceOf(d dev, account []byte) string {
+	if len(account) == 0 {
+		return ""
+	}
+	if ta := h.accts[string(account)]; ta != nil {
+		h.noteComputers(ta)
+	}
+	if h.computers[string(d.pub)] {
+		return "i1"
+	}
+	return ""
+}
+
+func (h *harness) noteComputers(ta *testAccount) {
+	for _, e := range ta.devices {
+		if e.GetRole() == RoleComputer {
+			h.computers[string(e.GetSigningKey())] = true
+		}
+	}
+}
+
+// loginWith logs in as loginHolding does, with an instance ID.
+func (h *harness) loginWith(d dev, account []byte, signOrigin string, version pb.ProtocolVersion, held uint64, instance string) (*client, *pb.Frame) {
+	h.t.Helper()
 	ws, _, err := h.dialRaw(Path)
 	if err != nil {
 		h.t.Fatal(err)
@@ -146,7 +182,7 @@ func (h *harness) loginHolding(d dev, account []byte, signOrigin string, version
 	ws.SetReadLimit(64 << 20)
 	c := newClient(h.t, ws, d)
 	h.t.Cleanup(func() { ws.CloseNow() })
-	c.send(&pb.Frame{Body: &pb.Frame_Hello{Hello: &pb.Hello{ProtocolVersion: version, PublicKey: d.pub, AccountId: account, ListCounter: held}}})
+	c.send(&pb.Frame{Body: &pb.Frame_Hello{Hello: &pb.Hello{ProtocolVersion: version, PublicKey: d.pub, AccountId: account, ListCounter: held, InstanceId: instance}}})
 	f := c.next()
 	ch := f.GetChallenge()
 	if ch == nil {
@@ -295,6 +331,9 @@ func (h *harness) signUp(phone dev) []byte {
 func (h *harness) add(account []byte, d dev, role pb.DeviceRole) {
 	h.t.Helper()
 	ta := h.accts[string(account)]
+	if role == pb.DeviceRole_DEVICE_ROLE_HOST {
+		h.computers[string(d.pub)] = true
+	}
 	h.publish(account, ta.next(append(ta.devices, entry(d, listRole(role)))...))
 }
 
@@ -304,6 +343,7 @@ func (h *harness) publish(account, signed []byte) {
 	c, _ := h.login(h.accts[string(account)].phone, account)
 	c.send(&pb.Frame{Body: &pb.Frame_PublishList{PublishList: &pb.PublishList{RequestId: "pl", List: signed}}})
 	c.done("pl")
+	h.noteComputers(h.accts[string(account)])
 	c.ws.Close(websocket.StatusNormalClosure, "")
 }
 
@@ -491,7 +531,7 @@ func account2(h *harness) (id []byte, phone, read, host dev, p, r, hc *client) {
 
 func TestSessions(t *testing.T) {
 	h := newHarness(t, nil)
-	id, phone, _, host, p, r, hc := account2(h)
+	id, phone, _, host, p, _, hc := account2(h)
 	// Another account, which must see nothing of this one.
 	stranger := newDev(9)
 	sc, _ := h.login(stranger, h.signUp(stranger))
@@ -501,80 +541,28 @@ func TestSessions(t *testing.T) {
 	}
 
 	ref := &pb1.SessionRef{HostKey: host.pub, SessionId: "s1", InstanceId: "i1"}
-	announce := func(id string) {
-		hc.send(&pb.Frame{Body: &pb.Frame_SessionAnnounce{SessionAnnounce: &pb.SessionAnnounce{Session: ref, Payload: []byte("opaque " + id)}}})
+	box := derived(phone, "box")
+	announce := func(text string) {
+		hc.send(announceFrame(ref, []*pb.SealedCopy{sealedTo(box, text)}, nil))
 	}
 	// A session of another host.
-	hc.send(&pb.Frame{Body: &pb.Frame_SessionAnnounce{SessionAnnounce: &pb.SessionAnnounce{Session: &pb1.SessionRef{HostKey: phone.pub, SessionId: "s1", InstanceId: "i1"}}}})
+	hc.send(announceFrame(&pb1.SessionRef{HostKey: phone.pub, SessionId: "s1", InstanceId: "i1"}, nil, nil))
 	if e := hc.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
 		t.Errorf("announcing another host's session: %v", e)
 	}
 	announce("b")
-	// An announcement has no answer: wait for the relay to have it.
-	for i := 0; i < 200; i++ {
-		h.srv.mu.Lock()
-		n := 0
-		if a := h.srv.accounts[string(id)]; a != nil {
-			n = len(a.sessions)
-		}
-		h.srv.mu.Unlock()
-		if n == 1 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	h.waitSessions(id, 1)
 
 	p.send(&pb.Frame{Body: &pb.Frame_SubscribeSessions{SubscribeSessions: &pb.SubscribeSessions{}}})
 	l := p.until("SessionList", func(f *pb.Frame) bool { return f.GetSessionList() != nil }).GetSessionList()
-	if len(l.Sessions) != 1 || !proto.Equal(l.Sessions[0].Session, ref) || string(l.Sessions[0].Payload) != "opaque b" {
+	if len(l.Sessions) != 1 || !proto.Equal(l.Sessions[0].Session, ref) || !bytes.Equal(l.Sessions[0].Sealed, sealedTo(box, "b").Sealed) {
 		t.Fatalf("list %v", l)
 	}
-	// The read-only key reads the list, and does nothing else.
-	r.send(&pb.Frame{Body: &pb.Frame_SubscribeSessions{SubscribeSessions: &pb.SubscribeSessions{}}})
-	if l := r.until("SessionList", func(f *pb.Frame) bool { return f.GetSessionList() != nil }).GetSessionList(); len(l.Sessions) != 1 {
-		t.Errorf("read-only list %v", l)
-	}
-	r.send(&pb.Frame{Body: &pb.Frame_Attach{Attach: &pb.Attach{Session: ref}}})
-	if e := r.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
-		t.Errorf("read-only attach: %v", e)
-	}
-	r.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, Payload: []byte("x")}}})
-	if e := r.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
-		t.Errorf("read-only routed: %v", e)
-	}
-
-	// A request: the relay names the client.
-	p.send(&pb.Frame{Body: &pb.Frame_Attach{Attach: &pb.Attach{Session: ref}}})
-	p.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, ClientKey: host.pub, Payload: []byte("request")}}})
-	got := hc.until("Routed", func(f *pb.Frame) bool { return f.GetRouted() != nil }).GetRouted()
-	if !bytes.Equal(got.ClientKey, phone.pub) || string(got.Payload) != "request" {
-		t.Errorf("host got %v", got)
-	}
-	// The stranger cannot reach the session.
-	sc.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, Payload: []byte("x")}}})
-	if e := sc.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_SESSION_NOT_FOUND {
-		t.Errorf("stranger routed: %v", e)
-	}
-	sc.send(&pb.Frame{Body: &pb.Frame_Attach{Attach: &pb.Attach{Session: ref}}})
-	if e := sc.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_SESSION_NOT_FOUND {
-		t.Errorf("stranger attach: %v", e)
-	}
-
-	// Broadcasts to the attached; answers to one client of the account.
-	hc.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, Payload: []byte("broadcast")}}})
-	if got := p.until("Routed", func(f *pb.Frame) bool { return f.GetRouted() != nil }).GetRouted(); string(got.Payload) != "broadcast" || len(got.ClientKey) != 0 {
-		t.Errorf("phone got %v", got)
-	}
-	hc.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, ClientKey: stranger.pub, Payload: []byte("to the stranger")}}})
-	hc.send(&pb.Frame{Body: &pb.Frame_Routed{Routed: &pb.Routed{Session: ref, ClientKey: phone.pub, Payload: []byte("answer")}}})
-	if got := p.until("Routed", func(f *pb.Frame) bool { return f.GetRouted() != nil }).GetRouted(); string(got.Payload) != "answer" {
-		t.Errorf("phone got %v", got)
-	}
-	sc.quiet("a frame of another account", func(f *pb.Frame) bool { return f.GetRouted() != nil || f.GetSessionUpdated() != nil })
+	sc.quiet("a frame of another account", func(f *pb.Frame) bool { return f.GetSessionUpdated() != nil })
 
 	// A newer announcement replaces the stored one.
 	announce("c")
-	if u := p.until("SessionUpdated", func(f *pb.Frame) bool { return f.GetSessionUpdated() != nil }).GetSessionUpdated(); string(u.Entry.Payload) != "opaque c" {
+	if u := p.until("SessionUpdated", func(f *pb.Frame) bool { return f.GetSessionUpdated() != nil }).GetSessionUpdated(); !bytes.Equal(u.Entry.Sealed, sealedTo(box, "c").Sealed) {
 		t.Errorf("updated %v", u.Entry)
 	}
 
@@ -583,6 +571,36 @@ func TestSessions(t *testing.T) {
 	if f := p.until("SessionEnded", func(f *pb.Frame) bool { return f.GetSessionEnded() != nil }); !proto.Equal(f.GetSessionEnded().Session, ref) {
 		t.Errorf("ended %v", f)
 	}
+}
+
+// waitSessions waits for the relay to hold n sessions of the account: an
+// announcement has no answer.
+func (h *harness) waitSessions(id []byte, n int) {
+	h.t.Helper()
+	for i := 0; i < 400; i++ {
+		h.srv.mu.Lock()
+		got := 0
+		if a := h.srv.accounts[string(id)]; a != nil {
+			got = len(a.sessions)
+		}
+		h.srv.mu.Unlock()
+		if got == n {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	h.t.Fatalf("the relay does not hold %d sessions", n)
+}
+
+func announceFrame(ref *pb1.SessionRef, announcements, notices []*pb.SealedCopy) *pb.Frame {
+	return &pb.Frame{Body: &pb.Frame_SessionAnnounce{SessionAnnounce: &pb.SessionAnnounce{Session: ref, Announcements: announcements, Notices: notices}}}
+}
+
+// sealedTo is a test copy to a recipient: 40 bytes or more, made of its
+// text, which the relay does not read.
+func sealedTo(key []byte, text string) *pb.SealedCopy {
+	b := append(bytes.Repeat([]byte{0}, MinSealedBytes), text...)
+	return &pb.SealedCopy{RecipientKey: key, Sealed: b}
 }
 
 func TestJoin(t *testing.T) {

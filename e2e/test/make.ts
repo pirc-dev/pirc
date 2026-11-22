@@ -136,3 +136,11 @@ export function signingPair(name: string): {
     sign: (m) => sodium.crypto_sign_detached(m, kp.privateKey),
   };
 }
+
+/** The X25519 secret keys of device()'s box and channel keys. */
+export function boxSecrets(name: string): { box: Uint8Array; channel: Uint8Array } {
+  return {
+    box: sodium.crypto_box_seed_keypair(seed(`${name} box`)).privateKey,
+    channel: sodium.crypto_box_seed_keypair(seed(`${name} channel`)).privateKey,
+  };
+}

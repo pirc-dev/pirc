@@ -194,6 +194,12 @@ one. Each request names its session, and a process refuses one it does not run, 
 routes a client to another process on the same computer gets nothing. All the processes of a
 computer answer to the same channel key.
 
+The relay's part (`relay.proto`, `OpenChannel`): a pi process logs in with an instance ID, and a
+client opens a channel by the computer's signing key and that ID, with IK's first message; the
+relay passes it to the newest connection of that process, gives the channel an ID, and passes
+each Noise message on in order, unread, without saying who opened it. A channel lives only
+while both connections do, and the relay closes it when either device is removed.
+
 HMAC-SHA-512 in Noise's key derivation is libsodium's `crypto_auth_hmacsha512` in its init,
 update and final form, which takes Noise's 64-byte key; never `crypto_auth`, which truncates.
 Both implementations, in TypeScript and Dart, are held to the published test vectors (cacophony's
@@ -225,6 +231,12 @@ So the relay cannot replay an old announcement to a client that has seen a newer
 one to another session, and one computer cannot write over another's. A computer whose clock is
 set back and then restarted sends announcements its clients refuse, without either side
 noticing, until the clock passes the old value.
+
+The relay keeps each copy in memory with its session, gives it only to its recipient, and drops a
+copy to a key not on its newest list. An announcement goes when its session ends or its
+recipient is removed; a notice stays fetchable for ten minutes after its session ends, so that
+a notification for a turn's end can still show it, and goes at once with its computer's or
+recipient's removal.
 
 **Notifications.** The push carries nothing, as now. The notification extension logs in with the
 read-only key, fetches the account's newest list and the notice sealed to its notification key,

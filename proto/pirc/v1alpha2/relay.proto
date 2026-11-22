@@ -3,8 +3,9 @@
 // WebSocket message. A self-hosted relay speaks v1alpha1 only, and a
 // hosted relay v1alpha2 only (docs/e2e.md, section 9).
 //
-// The relay reads these frames but not their payloads: announcements,
-// routed frames and join steps pass through it unread.
+// The relay reads these frames but not what is sealed or encrypted in
+// them: sealed copies, channel messages and join steps pass through it
+// unread, and it never names the sender of any of them.
 syntax = "proto3";
 
 package pirc.v1alpha2;
@@ -31,10 +32,8 @@ message Frame {
     SessionAnnounce session_announce = 10;
     SessionEnd session_end = 11;
 
-    // Client or read-only key to relay: what to receive.
+    // Client to relay: what to receive.
     SubscribeSessions subscribe_sessions = 20;
-    Attach attach = 21;
-    Detach detach = 22;
     WatchDevices watch_devices = 23;
 
     // Relay to client: the session list and its changes.
@@ -48,8 +47,19 @@ message Frame {
     PublishList publish_list = 60;
     List list = 61;
 
-    // Between a session and clients, through the relay.
-    Routed routed = 40;
+    // A channel between a client and a pi process (docs/e2e.md, section
+    // 4): its Noise messages, passed on unread.
+    OpenChannel open_channel = 41;
+    ChannelOpened channel_opened = 42;
+    ChannelMessage channel_message = 43;
+    CloseChannel close_channel = 44;
+
+    // The account's phone to relay: the names sealed to each client.
+    PublishNames publish_names = 62;
+    // Read-only key to relay, and the answer: the notices sealed to its
+    // phone.
+    FetchNotices fetch_notices = 63;
+    Notices notices = 64;
 
     // Answers to the account frames below.
     Done done = 79;
@@ -75,8 +85,8 @@ message Frame {
     // close: 1008 means only that the relay refuses its key now.
     pirc.v1alpha1.Error error = 50;
   }
-  reserved 12, 70 to 78;
-  reserved "publish_bundle", "publish_version", "publish_withdrawal", "get_versions", "versions", "publish_pre_key", "pre_keys", "publish_labels", "publish_label_key_wraps", "label_state";
+  reserved 12, 21, 22, 40, 70 to 78;
+  reserved "attach", "detach", "routed", "publish_bundle", "publish_version", "publish_withdrawal", "get_versions", "versions", "publish_pre_key", "pre_keys", "publish_labels", "publish_label_key_wraps", "label_state";
 }
 
 message Hello {
@@ -89,6 +99,11 @@ message Hello {
   // The highest version of the account's list the device holds, 0 for
   // none: Welcome carries the relay's newest only when it is higher.
   uint64 list_counter = 4;
+  // A computer's pi process, 1 to 128 bytes, required from a computer and
+  // empty from anything else: channels are opened to it by this ID
+  // (OpenChannel), and its announcements carry it. A newer connection of
+  // the same key and instance takes new channels and its sessions.
+  string instance_id = 5;
 }
 
 message Challenge {
@@ -143,7 +158,8 @@ enum DeviceRole {
   // A phone, a browser or another app: a shell on every host.
   DEVICE_ROLE_CLIENT = 2;
   // A phone's read-only key, readable while it is locked: the account's
-  // newest list and its notices only.
+  // newest list and its notices only. It sends only FetchNotices (and
+  // Error); anything else is refused with PERMISSION_DENIED.
   DEVICE_ROLE_READ_ONLY = 3;
 }
 
@@ -171,37 +187,60 @@ message AccountSubscription {
   bool lapsed = 5;
 }
 
-// Host to relay, as in v1alpha1; the relay stores the payload unread.
+// A copy sealed to one device (docs/e2e.md, section 5): the relay keeps
+// it unread and gives it to that device only.
+message SealedCopy {
+  // A client's box key, or a phone's notification key.
+  bytes recipient_key = 1;
+  // The nonce, then crypto_box_easy, as e2e/sealed.ts makes it.
+  bytes sealed = 2;
+}
+
+// Host to relay: a live session of this connection's process, its
+// instance ID the connection's (Hello.instance_id), with its copies, kept
+// in memory with the session. Each one replaces both kinds of the
+// session's copies wholly, so a recipient left out loses its old copy.
+// At most 10 copies of each kind, one per recipient, each 40 to 8,192
+// bytes: a recipient twice, more than 10, or a copy too short is INVALID,
+// too long TOO_LARGE, and the copies stored stay. A copy to a key not on
+// the relay's newest list (a client's box key for an announcement, a
+// phone's notification key for a notice) is dropped and the rest kept.
+// Past the caps: 5 a second per connection (20 at once), 32 sessions per
+// connection and 256 per account, 2 MiB of copies per account,
+// RATE_LIMITED. A session's copies are deleted when it ends (SessionEnd,
+// its connection closing, its computer removed) or their recipient is
+// removed; but a notice stays fetchable for ten minutes after its session
+// ends, unless its computer or recipient is removed.
 message SessionAnnounce {
   pirc.v1alpha1.SessionRef session = 1;
-  reserved 2;
-  reserved "keys";
-  bytes payload = 3;
-  // As in v1alpha1: wake the clients registered for push.
+  reserved 2, 3;
+  reserved "keys", "payload";
+  // Wake the account's phones registered for push.
   bool push = 4;
+  // One per client on the list, to its box key.
+  repeated SealedCopy announcements = 5;
+  // One per phone on the list, to its notification key.
+  repeated SealedCopy notices = 6;
 }
 
 message SessionEnd {
   pirc.v1alpha1.SessionRef session = 1;
 }
 
+// Client to relay: send me SessionList now, and the changes after it.
+// Clients only: a read-only key holds no box key.
 message SubscribeSessions {}
 
-message Attach {
-  pirc.v1alpha1.SessionRef session = 1;
-}
-
-message Detach {
-  pirc.v1alpha1.SessionRef session = 1;
-}
-
+// A session as one client is told it: each subscriber's entries are its
+// own.
 message SessionEntry {
   pirc.v1alpha1.SessionRef session = 1;
-  reserved 2, 5;
-  reserved "keys", "bundles";
-  // The latest announcement, as the host sent it.
-  bytes payload = 3;
+  reserved 2, 3, 5;
+  reserved "keys", "payload", "bundles";
   google.protobuf.Timestamp announced_at = 4;
+  // The latest announcement's copy sealed to this client's box key;
+  // empty when the computer sealed it none (a client added since).
+  bytes sealed = 6;
 }
 
 // Relay to client: every live session, in frames of at most
@@ -237,15 +276,88 @@ message DeviceStatus {
 // One entry per device on the account's newest list, in its order.
 message Devices {
   repeated DeviceStatus devices = 1;
+  // The account's phone's names, signed and sealed to this client's box
+  // key (PublishNames); empty if it has none.
+  bytes names = 2;
 }
 
-// As in v1alpha1; the relay passes the payload on unread.
-message Routed {
+// The account's phone (its signing key, version 1's one device) to relay:
+// the names, signed, one copy per client on the list, sealed to its box
+// key, each 40 to 32,768 bytes, at most 10. Refused and dropped as
+// SessionAnnounce's copies are; from any other key PERMISSION_DENIED.
+// Each replaces every copy, kept in the relay's store; answered by Done
+// once stored, then Devices to every watcher with its own copy. Past 30
+// an hour per account, RATE_LIMITED. A copy is deleted with its
+// recipient's removal and with the account.
+message PublishNames {
+  string request_id = 1;
+  repeated SealedCopy copies = 2;
+}
+
+// Read-only key to relay: every notice sealed to its phone's notification
+// key, of live sessions and of sessions ended in the last ten minutes.
+// Answered by Notices, in frames of at most max_frame_bytes, more set on
+// all but the last. Past 30 a minute per connection, RATE_LIMITED.
+message FetchNotices {
+  string request_id = 1;
+}
+
+message Notices {
+  string request_id = 1;
+  repeated StoredNotice notices = 2;
+  bool more = 3;
+}
+
+message StoredNotice {
   pirc.v1alpha1.SessionRef session = 1;
-  bytes client_key = 2;
-  reserved 3;
-  reserved "keys";
-  bytes payload = 4;
+  bytes sealed = 2;
+  // When the relay took it.
+  google.protobuf.Timestamp stored_at = 3;
+}
+
+// Client to relay: open a channel to a pi process of a computer of this
+// account, by the computer's signing key and the process's instance ID,
+// with Noise IK's first message, exactly 96 bytes. The relay sends it to
+// the newest connection of that key and instance, with channel_id and
+// message only (who opened it is Noise's to say), and answers
+// ChannelOpened; or Error with SESSION_NOT_FOUND when no such process is
+// connected, INVALID for a malformed one, PERMISSION_DENIED from anything
+// but a client. Past 30 opens a minute per client connection, 64 channels
+// per client connection or 128 per process connection, RATE_LIMITED.
+message OpenChannel {
+  string request_id = 1;
+  bytes host_key = 2;
+  string instance_id = 3;
+  bytes message = 4;
+  // Relay to process only.
+  uint64 channel_id = 5;
+}
+
+// Relay to client: the channel's ID, unique for the relay's run.
+message ChannelOpened {
+  string request_id = 1;
+  uint64 channel_id = 2;
+}
+
+// Either way: one Noise message, 16 to 65,535 bytes, passed on unread and
+// in order; anything else is INVALID. Bytes queued toward one end are
+// counted per channel: past 1 MiB the relay closes the channel
+// (RATE_LIMITED), not the connection. Nothing is kept for an end that is
+// gone.
+message ChannelMessage {
+  uint64 channel_id = 1;
+  bytes message = 2;
+}
+
+// Either way: the channel is over. Either side's is passed to the other.
+// The relay closes a channel, telling both ends still connected, when
+// either connection goes (SESSION_GONE), either device is removed
+// (PERMISSION_DENIED), the process has sent no message 30 seconds after
+// the open (TIMEOUT), or its queue toward one end passes 1 MiB
+// (RATE_LIMITED).
+message CloseChannel {
+  uint64 channel_id = 1;
+  pirc.v1alpha1.ErrorCode code = 2;
 }
 
 message Done {

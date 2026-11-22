@@ -206,12 +206,13 @@ type netFlags struct {
 	maxFrame                     *int
 }
 
-func addNetFlags(fs *flag.FlagSet) (*netFlags, error) {
+// addNetFlags adds them; maxFrame is the largest frame's default.
+func addNetFlags(fs *flag.FlagSet, maxFrame int) (*netFlags, error) {
 	plainDefault, err := envBool("PIRC_RELAY_PLAINTEXT")
 	if err != nil {
 		return nil, err
 	}
-	frameDefault, err := envInt("PIRC_RELAY_MAX_FRAME_BYTES", 16<<20)
+	frameDefault, err := envInt("PIRC_RELAY_MAX_FRAME_BYTES", maxFrame)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +303,7 @@ func run(log *slog.Logger, n *netFlags, useTLS bool, handler http.Handler, shutd
 
 func serve(args []string) error {
 	fs, dataDir := flags("serve")
-	nf, err := addNetFlags(fs)
+	nf, err := addNetFlags(fs, 16<<20)
 	if err != nil {
 		return err
 	}

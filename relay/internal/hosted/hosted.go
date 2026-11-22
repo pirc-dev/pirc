@@ -6,7 +6,7 @@
 // v1alpha1 at all, and the self-hosted mode (package server) knows nothing
 // of it.
 //
-// It passes announcements, routed frames and join steps on unread, and
+// It passes sealed copies, channel messages and join steps on unread, and
 // keeps no label of any device.
 package hosted
 
@@ -70,6 +70,13 @@ func framedNumber(v uint64) []byte {
 // Path is where the hosted relay serves its WebSocket.
 const Path = "/v1alpha2"
 
+// The largest frame by default, and the least a relay may be started
+// with: PublishNames, the largest, is about 330 KB.
+const (
+	DefaultMaxFrameBytes = 1 << 20
+	MinMaxFrameBytes     = 512 << 10
+)
+
 // Limits on what the relay stores or passes on.
 const (
 	MaxIDBytes = 128
@@ -100,8 +107,29 @@ type Config struct {
 	// address; more are refused.
 	MaxPendingLogins        int
 	MaxPendingLoginsPerAddr int
-	MaxAnnounceBytes        int
-	MaxSessionsPerConn      int
+	// Announcements a second per connection, and at once; sessions per
+	// connection and per account; bytes of sealed copies an account holds
+	// in memory.
+	MaxAnnouncesPerSecond    int
+	MaxAnnounceBurst         int
+	MaxSessionsPerConn       int
+	MaxSessionsPerAccount    int
+	MaxSealedBytesPerAccount int
+	// How long a notice stays fetchable after its session ends.
+	NoticeRetention time.Duration
+	// Notice fetches a minute per read-only connection.
+	MaxNoticeFetchesPerMinute int
+	// Names published an hour per account.
+	MaxNamesPublishesPerAccount int
+	// Channels: open at once per client connection and per process
+	// connection; opened a minute per client connection; how long the
+	// process has to send its first message; bytes queued toward one end
+	// of one channel before it is closed.
+	MaxChannelsPerClient     int
+	MaxChannelsPerProcess    int
+	MaxChannelOpensPerMinute int
+	ChannelReplyTimeout      time.Duration
+	MaxChannelQueuedBytes    int
 	// How long a join's wait lasts.
 	JoinTimeout time.Duration
 	// How long an account stays locked before it is deleted (lock.go).
@@ -130,10 +158,10 @@ func (c *Config) defaults() error {
 		return errors.New("hosted: the relay's origin is needed")
 	}
 	if c.MaxFrameBytes == 0 {
-		c.MaxFrameBytes = 16 << 20
+		c.MaxFrameBytes = DefaultMaxFrameBytes
 	}
-	if c.MaxFrameBytes < 256<<10 {
-		return fmt.Errorf("hosted: max frame bytes must be at least %d", 256<<10)
+	if c.MaxFrameBytes < MinMaxFrameBytes {
+		return fmt.Errorf("hosted: max frame bytes must be at least %d", MinMaxFrameBytes)
 	}
 	set := func(p *time.Duration, d time.Duration) {
 		if *p == 0 {
@@ -145,6 +173,8 @@ func (c *Config) defaults() error {
 	set(&c.PingInterval, 25*time.Second)
 	set(&c.JoinTimeout, 10*time.Minute)
 	set(&c.LockedFor, 60*24*time.Hour)
+	set(&c.NoticeRetention, 10*time.Minute)
+	set(&c.ChannelReplyTimeout, 30*time.Second)
 	seti := func(p *int, n int) {
 		if *p == 0 {
 			*p = n
@@ -154,8 +184,17 @@ func (c *Config) defaults() error {
 	seti(&c.SendQueueBytes, 4*c.MaxFrameBytes)
 	seti(&c.MaxPendingLogins, 256)
 	seti(&c.MaxPendingLoginsPerAddr, 8)
-	seti(&c.MaxAnnounceBytes, 64<<10)
+	seti(&c.MaxAnnouncesPerSecond, 5)
+	seti(&c.MaxAnnounceBurst, 20)
 	seti(&c.MaxSessionsPerConn, 32)
+	seti(&c.MaxSessionsPerAccount, 256)
+	seti(&c.MaxSealedBytesPerAccount, 2<<20)
+	seti(&c.MaxNoticeFetchesPerMinute, 30)
+	seti(&c.MaxNamesPublishesPerAccount, 30)
+	seti(&c.MaxChannelsPerClient, 64)
+	seti(&c.MaxChannelsPerProcess, 128)
+	seti(&c.MaxChannelOpensPerMinute, 30)
+	seti(&c.MaxChannelQueuedBytes, 1<<20)
 	seti(&c.MaxLookupsPerAccount, 20)
 	seti(&c.MaxLookupsPerAddr, 20)
 	seti(&c.MaxWaitsPerAddr, 4)
@@ -191,6 +230,11 @@ type Server struct {
 	// List versions taken this hour, by account.
 	listPublishes     map[string]*counter
 	lastPublishesTrim time.Time
+	// Names published this hour, by account.
+	namesPublishes map[string]*counter
+	lastNamesTrim  time.Time
+	// The last login's and the last channel's numbers.
+	lastSeq, lastChannel uint64
 }
 
 func New(cfg Config) (*Server, error) {
@@ -198,14 +242,15 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	return &Server{
-		cfg:           cfg,
-		log:           cfg.Logger,
-		store:         cfg.Store,
-		pendingByAddr: map[string]int{},
-		accounts:      map[string]*account{},
-		conns:         map[*conn]struct{}{},
-		joins:         newJoins(),
-		listPublishes: map[string]*counter{},
+		cfg:            cfg,
+		log:            cfg.Logger,
+		store:          cfg.Store,
+		pendingByAddr:  map[string]int{},
+		accounts:       map[string]*account{},
+		conns:          map[*conn]struct{}{},
+		joins:          newJoins(),
+		listPublishes:  map[string]*counter{},
+		namesPublishes: map[string]*counter{},
 	}, nil
 }
 
@@ -283,7 +328,8 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		ws:        ws,
 		addr:      addr,
 		remote:    remote,
-		send:      make(chan []byte, s.cfg.SendQueue),
+		send:      make(chan outFrame, s.cfg.SendQueue),
+		channels:  map[uint64]*channel{},
 		maxQueued: int64(s.cfg.SendQueueBytes),
 		done:      make(chan struct{}),
 		closed:    make(chan struct{}),
@@ -307,14 +353,17 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 
 func shortKey(k []byte) string { return fmt.Sprintf("%x", k[:min(len(k), 6)]) }
 
-// account is an account with at least one connection, as the relay has it
-// in memory: its newest list, connections and live sessions.
+// account is an account with at least one connection, or notices kept
+// after their sessions ended, as the relay has it in memory: its newest
+// list, connections and live sessions.
 type account struct {
 	id    []byte
 	list  *accountList
 	conns map[*conn]struct{}
 	// Live sessions.
-	sessions    map[sessionID]*session
+	sessions map[sessionID]*session
+	// Notices of ended sessions, kept for NoticeRetention.
+	ended       map[*endedNotices]bool
 	subscribers map[*conn]struct{}
 	// Clients watching Devices.
 	watchers map[*conn]struct{}
@@ -350,6 +399,7 @@ func (s *Server) loadLocked(id []byte) (*account, error) {
 		list:        l,
 		conns:       map[*conn]struct{}{},
 		sessions:    map[sessionID]*session{},
+		ended:       map[*endedNotices]bool{},
 		subscribers: map[*conn]struct{}{},
 		watchers:    map[*conn]struct{}{},
 	}
@@ -357,9 +407,10 @@ func (s *Server) loadLocked(id []byte) (*account, error) {
 	return a, nil
 }
 
-// unloadLocked forgets an account no connection has. Under s.mu.
+// unloadLocked forgets an account no connection has, with no notices
+// kept. Under s.mu.
 func (s *Server) unloadLocked(a *account) {
-	if len(a.conns) == 0 && s.accounts[string(a.id)] == a {
+	if len(a.conns) == 0 && len(a.ended) == 0 && s.accounts[string(a.id)] == a {
 		delete(s.accounts, string(a.id))
 	}
 }
@@ -413,7 +464,7 @@ func (s *Server) login(ctx context.Context, c *conn) error {
 	// Admit under the lock that deleting the account takes: an account
 	// deleted during the challenge has no list left.
 	s.mu.Lock()
-	removedList, ferr := s.admitByListLocked(c, pub, id, nonce, hello.GetListCounter())
+	removedList, ferr := s.admitByListLocked(c, pub, id, nonce, hello.GetListCounter(), hello.GetInstanceId())
 	s.mu.Unlock()
 	if removedList != nil {
 		// A key a version removed: the newest list, written before the
@@ -436,12 +487,16 @@ const errRemoved = "removed"
 // admitByListLocked admits c, whose login's signature has checked, by the
 // account's newest list, or says why not; for a key a version of the list
 // removed, it returns the newest list as signed instead. Under s.mu.
-func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64) ([]byte, *frameError) {
+func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64, instance string) ([]byte, *frameError) {
 	notMember := &frameError{code: pb1.ErrorCode_ERROR_CODE_UNAUTHENTICATED, msg: "key not a member of the account"}
 	unavailable := &frameError{code: pb1.ErrorCode_ERROR_CODE_INTERNAL, msg: "store unavailable"}
 	c.key = pub
 	c.nonce = nonce
+	badInstance := invalid("an instance ID is 1 to 128 bytes from a computer, and empty from anything else")
 	if len(id) == 0 {
+		if instance != "" {
+			return nil, badInstance
+		}
 		s.conns[c] = struct{}{}
 		c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{
 			ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
@@ -467,6 +522,10 @@ func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64) 
 			return a.list.signed, nil
 		}
 		return nil, notMember
+	}
+	if host := role == pb.DeviceRole_DEVICE_ROLE_HOST; host != (instance != "") || len(instance) > MaxIDBytes {
+		s.unloadLocked(a)
+		return nil, badInstance
 	}
 	// Removed connections waiting to close count toward neither cap.
 	sameKey, live := 0, 0
@@ -499,6 +558,9 @@ func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64) 
 		return nil, unavailable
 	}
 	c.device = device
+	c.instance = instance
+	s.lastSeq++
+	c.seq = s.lastSeq
 	w := &pb.Welcome{
 		ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 		MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
@@ -556,12 +618,11 @@ func (s *Server) disconnect(c *conn) {
 	delete(a.conns, c)
 	delete(a.subscribers, c)
 	delete(a.watchers, c)
+	s.closeChannelsLocked(c, pb1.ErrorCode_ERROR_CODE_SESSION_GONE)
 	for id, se := range a.sessions {
 		if se.owner == c {
-			s.endLocked(a, id, se)
-			continue
+			s.endLocked(a, id, se, !c.removed)
 		}
-		delete(se.attached, c)
 	}
 	if !a.deleted && !c.removed {
 		if err := s.store.Seen(a.id, c.seenKey(), s.cfg.Now().UnixMilli()); err != nil {
@@ -656,7 +717,16 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 	}
 	host := role == pb.DeviceRole_DEVICE_ROLE_HOST
 	client := role == pb.DeviceRole_DEVICE_ROLE_CLIENT
-	readOnly := role == pb.DeviceRole_DEVICE_ROLE_READ_ONLY
+	if role == pb.DeviceRole_DEVICE_ROLE_READ_ONLY {
+		// The newest list, in Welcome, and its phone's notices only.
+		switch b := f.GetBody().(type) {
+		case *pb.Frame_FetchNotices:
+			return s.fetchNotices(c, b.FetchNotices.GetRequestId()).withID(b.FetchNotices.GetRequestId())
+		case *pb.Frame_Error:
+			return nil
+		}
+		return denied("a read-only key only fetches notices").withID(requestIDOf(f))
+	}
 	// A request answered by Done: refused unless ok, else run.
 	request := func(ok bool, refusal, id string, run func() *frameError) *frameError {
 		if !ok {
@@ -680,21 +750,24 @@ func (s *Server) handle(ctx context.Context, c *conn, f *pb.Frame) *frameError {
 	case *pb.Frame_SessionEnd:
 		return only(host, "only hosts end sessions", func() *frameError { return s.end(c, b.SessionEnd.GetSession()) })
 	case *pb.Frame_SubscribeSessions:
-		return only(client || readOnly, "only clients subscribe", func() *frameError { s.subscribe(c); return nil })
-	case *pb.Frame_Attach:
-		return only(client, "only clients attach", func() *frameError { return s.attach(c, b.Attach.GetSession(), true) })
-	case *pb.Frame_Detach:
-		return only(client, "only clients detach", func() *frameError { return s.attach(c, b.Detach.GetSession(), false) })
+		return only(client, "only clients subscribe", func() *frameError { s.subscribe(c); return nil })
 	case *pb.Frame_WatchDevices:
 		return only(client, "only clients watch the devices", func() *frameError { s.watchDevices(c); return nil })
-	case *pb.Frame_Routed:
-		switch {
-		case host:
-			return s.routeFromHost(c, b.Routed)
-		case client:
-			return s.routeFromClient(c, b.Routed)
+	case *pb.Frame_OpenChannel:
+		return only(client, "only clients open channels", func() *frameError { return s.openChannel(c, b.OpenChannel) }).withID(b.OpenChannel.GetRequestId())
+	case *pb.Frame_ChannelMessage:
+		return s.channelMessage(c, b.ChannelMessage)
+	case *pb.Frame_CloseChannel:
+		s.closeChannelFrom(c, b.CloseChannel)
+		return nil
+	case *pb.Frame_PublishNames:
+		// Answered by Done before the Devices frames that follow it.
+		if e := s.publishNames(c, b.PublishNames); e != nil {
+			return e.withID(b.PublishNames.GetRequestId())
 		}
-		return denied("a read-only key sends nothing to sessions")
+		s.done(c, b.PublishNames.GetRequestId())
+		s.pushDevicesLocked(a)
+		return nil
 	case *pb.Frame_RegisterPush:
 		return request(client, "only clients register for push", b.RegisterPush.GetRequestId(), func() *frameError { return s.setPush(c, b.RegisterPush.GetHandle()) })
 	case *pb.Frame_UnregisterPush:

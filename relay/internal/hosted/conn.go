@@ -41,12 +41,25 @@ type conn struct {
 	removed bool
 	// Set once that List is queued: nothing more is.
 	dropQueue atomic.Bool
+	// A computer's pi process (Hello.instance_id); empty for any other
+	// key.
+	instance string
+	// When it logged in, in the server's order: the newest connection of
+	// a process takes its new channels.
+	seq uint64
 	// Sessions this connection has; under Server.mu.
 	sessions int
+	// Its channels, by ID; under Server.mu.
+	channels map[uint64]*channel
+	// Announcements (a bucket refilled at a fixed rate), channel opens
+	// this minute and notice fetches this minute; under Server.mu.
+	announceTokens float64
+	announceAt     time.Time
+	opens, fetches counter
 	// A join this connection waits for, or takes part in; under Server.mu.
 	wait   *joinWait
 	joinID string
-	send   chan []byte
+	send   chan outFrame
 	// Bytes in send, and the most allowed.
 	queued    atomic.Int64
 	maxQueued int64
@@ -91,11 +104,14 @@ func (c *conn) writeLoop(ctx context.Context, pingEvery time.Duration) {
 			return
 		case <-ctx.Done():
 			return
-		case b := <-c.send:
+		case o := <-c.send:
 			wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			err := c.ws.Write(wctx, websocket.MessageBinary, b)
+			err := c.ws.Write(wctx, websocket.MessageBinary, o.b)
 			cancel()
-			c.queued.Add(-int64(len(b)))
+			c.queued.Add(-int64(len(o.b)))
+			if o.channel != nil {
+				o.channel.Add(-int64(len(o.b)))
+			}
 			if err != nil {
 				c.close(websocket.StatusGoingAway, "write failed")
 				return
@@ -121,20 +137,44 @@ func (c *conn) queue(f *pb.Frame) {
 	c.queueBytes(b)
 }
 
+// outFrame is an encoded frame queued, and the count of a channel's bytes
+// queued that it is part of, if any.
+type outFrame struct {
+	b       []byte
+	channel *atomic.Int64
+}
+
 // queueBytes sends an encoded frame, which callers may share between
 // connections: it is never modified.
-func (c *conn) queueBytes(b []byte) {
+func (c *conn) queueBytes(b []byte) { c.queueOut(outFrame{b: b}) }
+
+// queueOut queues a frame, disconnecting the peer when its queue is full.
+// A channel's count, already raised by the frame's length, is lowered
+// again once it is written, or now if it is not queued.
+func (c *conn) queueOut(o outFrame) {
+	unqueued := func() {
+		if o.channel != nil {
+			o.channel.Add(-int64(len(o.b)))
+		}
+	}
 	if c.dropQueue.Load() {
+		unqueued()
 		return
 	}
-	if c.queued.Add(int64(len(b))) > c.maxQueued {
+	if c.queued.Add(int64(len(o.b))) > c.maxQueued {
+		c.queued.Add(-int64(len(o.b)))
+		unqueued()
 		c.close(websocket.StatusTryAgainLater, "too slow")
 		return
 	}
 	select {
 	case <-c.done:
-	case c.send <- b:
+		c.queued.Add(-int64(len(o.b)))
+		unqueued()
+	case c.send <- o:
 	default:
+		c.queued.Add(-int64(len(o.b)))
+		unqueued()
 		c.close(websocket.StatusTryAgainLater, "too slow")
 	}
 }

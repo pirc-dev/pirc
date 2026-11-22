@@ -1,7 +1,8 @@
 // The hosted relay's store: every account's newest list, the keys removed
 // from it, push handles, attestations and subscriptions, in SQLite
-// (docs/design.md, step 14). Sessions live in memory only: they last as
-// long as a host's connection.
+// (docs/design.md, step 14), and the names the account's phone seals to
+// each client. Sessions and their sealed copies live in memory only: they
+// last as long as a host's connection.
 
 package hosted
 
@@ -277,6 +278,40 @@ func (s *Store) TakeList(account []byte, l StoredList, removed []RemovedDevice, 
 		}
 		return nil
 	})
+}
+
+// SetNames replaces every names copy of the account with these, by
+// recipient box key, in one transaction.
+func (s *Store) SetNames(account []byte, copies map[string][]byte) error {
+	return s.tx(func(t *sql.Tx) error {
+		if _, err := t.Exec(`DELETE FROM names WHERE account = ?`, account); err != nil {
+			return err
+		}
+		for k, b := range copies {
+			if _, err := t.Exec(`INSERT INTO names (account, recipient, sealed) VALUES (?, ?, ?)`, account, []byte(k), b); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Names are the account's names copies, by recipient box key.
+func (s *Store) Names(account []byte) (map[string][]byte, error) {
+	rows, err := s.db.Query(`SELECT recipient, sealed FROM names WHERE account = ?`, account)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]byte{}
+	for rows.Next() {
+		var k, b []byte
+		if err := rows.Scan(&k, &b); err != nil {
+			return nil, err
+		}
+		out[string(k)] = b
+	}
+	return out, rows.Err()
 }
 
 // Removed says whether a version of the account's list removed the key.

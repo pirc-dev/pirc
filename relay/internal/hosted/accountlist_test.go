@@ -249,7 +249,7 @@ func TestRemoval(t *testing.T) {
 	ref := &pb1.SessionRef{HostKey: host.pub, SessionId: "s1", InstanceId: "i1"}
 	b.send(&pb.Frame{Body: &pb.Frame_SubscribeSessions{SubscribeSessions: &pb.SubscribeSessions{}}})
 	b.until("SessionList", func(f *pb.Frame) bool { return f.GetSessionList() != nil })
-	hc.send(&pb.Frame{Body: &pb.Frame_SessionAnnounce{SessionAnnounce: &pb.SessionAnnounce{Session: ref, Payload: []byte("x")}}})
+	hc.send(announceFrame(ref, []*pb.SealedCopy{sealedTo(derived(browser, "box"), "x")}, nil))
 	b.until("SessionUpdated", func(f *pb.Frame) bool { return f.GetSessionUpdated() != nil })
 	h.cfg.Store.AddAttestation(id, host.pub, "test", []byte("host"))
 	h.cfg.Store.db.Exec(`INSERT INTO names (account, recipient, sealed) VALUES (?, ?, x'00'), (?, ?, x'00')`, id, derived(host, "box"), id, derived(browser, "box"))

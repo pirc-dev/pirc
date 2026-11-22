@@ -1,13 +1,16 @@
 // The hosted connection (hosted.ts) against the Go relay's hosted mode:
 // signing up with version 1 of the list, logging in to the account,
-// publishing newer versions, a removed device told before its close, and
-// a refused key retried rather than given up.
+// publishing newer versions, a removed device told before its close, a
+// refused key retried rather than given up, a computer's sealed copy
+// opened by its client, and Noise IK through a channel.
 import { create } from "@bufbuild/protobuf";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import { load as loadE2e } from "@pirc/e2e";
 import { framed } from "@pirc/e2e/framed";
-import { device, makeList, seed, sha256, signingPair } from "../../e2e/test/make.ts";
+import { load as loadNoise, type Transport } from "@pirc/e2e/noise";
+import { boxSecrets, device, makeList, seed, sha256, signingPair } from "../../e2e/test/make.ts";
 import { ErrorCode } from "@pirc/protocol";
 import { DeviceRole, FrameSchema, type Frame } from "@pirc/protocol/v1alpha2";
 
@@ -27,7 +30,7 @@ async function generate(): Promise<Signer> {
   };
 }
 
-function connect(signer: Signer, accountId: Uint8Array, opts: { refusedRetryMs?: number; listCounter?: () => bigint } = {}) {
+function connect(signer: Signer, accountId: Uint8Array, opts: { refusedRetryMs?: number; listCounter?: () => bigint; instanceId?: string } = {}) {
   const frames: Frame[] = [];
   const states: HostedState[] = [];
   // Frames and states in the order they came.
@@ -187,6 +190,7 @@ test("the phone publishes version 2 with a computer, then version 3 without it, 
   // The computer logs in holding nothing: Welcome carries version 2.
   const c = connect(signerOf("hosted computer"), account, {
     refusedRetryMs: 60_000,
+    instanceId: "i1",
   });
   const welcome = await c.until("Welcome", () => (c.conn.current.kind === "ready" ? c.conn.current.welcome : undefined));
   assert.equal(welcome.role, DeviceRole.HOST);
@@ -223,4 +227,121 @@ test("the phone publishes version 2 with a computer, then version 3 without it, 
   assert.equal(c.frames.filter((f) => f.body.case === "list").length, 2);
   c.conn.stop();
   a.conn.stop();
+});
+
+// An account of a phone and a computer, both connected, the computer as
+// pi process "i1".
+async function phoneAndComputer(name: string) {
+  const P = device(`${name} phone`, CLIENT, true);
+  const C = device(`${name} computer`, COMPUTER, false);
+  const key = seed(`${name} phone signing`);
+  const v1 = makeList({ seed: key, accountId: EMPTY, counter: 1n, previousBody: null, devices: [P] });
+  const accountId = sha256(v1.subarray(64));
+  const phone = connect(signerOf(`${name} phone`), EMPTY);
+  await phone.until("ready", () => (phone.conn.current.kind === "ready" ? true : undefined));
+  phone.conn.send(create(FrameSchema, { body: { case: "signUp", value: { requestId: "s", attestation: { kind: { case: "test", value: new Uint8Array([1]) } }, list: v1 } } }));
+  await phone.until("SignedUp", () => phone.frames.find((f) => f.body.case === "signedUp"));
+  phone.conn.switchAccount(accountId);
+  await phone.until("Welcome", () => (phone.conn.current.kind === "ready" && phone.conn.current.welcome.role === DeviceRole.CLIENT ? true : undefined));
+  const v2 = makeList({ seed: key, accountId, counter: 2n, previousBody: v1.subarray(64), devices: [P, C] });
+  phone.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p2", list: v2 } } }));
+  await phone.until("Done", () => phone.frames.find((f) => f.body.case === "done" && f.body.value.requestId === "p2"));
+  const computer = connect(signerOf(`${name} computer`), accountId, { instanceId: "i1" });
+  await computer.until("Welcome", () => (computer.conn.current.kind === "ready" ? true : undefined));
+  return { P, C, accountId, phone, computer, list: { counter: 2n, devices: [P, C] }, secrets: { phone: boxSecrets(`${name} phone`), computer: boxSecrets(`${name} computer`) } };
+}
+
+// The next frame of a connection a predicate takes, each taken once.
+function taker(c: ReturnType<typeof connect>) {
+  const taken = new Set<Frame>();
+  return async <T>(what: string, pick: (f: Frame) => T | undefined): Promise<T> =>
+    c.until(what, () => {
+      for (const f of c.frames) {
+        if (taken.has(f)) continue;
+        const v = pick(f);
+        if (v !== undefined) {
+          taken.add(f);
+          return v;
+        }
+      }
+      return undefined;
+    });
+}
+
+test("a computer's announcement, sealed with e2e/sealed.ts, reaches its client through the relay and opens there", async () => {
+  const e2e = await loadE2e();
+  const a = await phoneAndComputer("sealed");
+  const fromPhone = taker(a.phone);
+  a.phone.conn.send(create(FrameSchema, { body: { case: "subscribeSessions", value: {} } }));
+  await fromPhone("SessionList", (f) => (f.body.case === "sessionList" ? f.body.value : undefined));
+
+  const sessionId = "0194f3e2-7c1a-7000-8000-000000000001";
+  const slot = { accountId: a.accountId, computerKey: a.C.signingKey, sessionId: new TextEncoder().encode(sessionId) };
+  const ordering = BigInt(Date.now());
+  const body = { sessionName: "the session", folder: "/work", model: "a model", computerName: "build box", notice: "a question?" };
+  const sealed = e2e.seal({ list: a.list, boxSecretKey: a.secrets.computer.box, slot: { ...slot, kind: "announcement" }, ordering, body });
+  assert.equal(sealed.copies.length, 1);
+  a.computer.conn.send(
+    create(FrameSchema, {
+      body: {
+        case: "sessionAnnounce",
+        value: { session: { hostKey: a.C.signingKey, sessionId, instanceId: "i1" }, announcements: sealed.copies.map((c) => ({ recipientKey: c.recipientKey, sealed: c.sealed })) },
+      },
+    }),
+  );
+  const entry = await fromPhone("SessionUpdated", (f) => (f.body.case === "sessionUpdated" ? f.body.value.entry : undefined));
+  assert.ok(entry);
+  assert.deepEqual(entry.sealed, sealed.copies[0]!.sealed);
+  const opened = e2e.openAnnouncement({ sealed: entry.sealed, slot, recipientSecretKey: a.secrets.phone.box, list: a.list, highest: null, now: BigInt(Date.now()) });
+  assert.deepEqual(opened, { result: "accepted", ordering, body });
+  a.phone.conn.stop();
+  a.computer.conn.stop();
+});
+
+test("Noise IK through a channel: the handshake, then transport messages of 0 and 65,519 bytes both ways", async () => {
+  const noise = await loadNoise();
+  const a = await phoneAndComputer("channel");
+  const fromPhone = taker(a.phone);
+  const fromComputer = taker(a.computer);
+  const initiator = noise.ikInitiator({ staticKey: noise.staticKey(a.secrets.phone.channel), responderKey: a.C.channelKey, accountId: a.accountId });
+  const m1 = await initiator.writeMessage();
+  assert.ok(m1.ok);
+  assert.equal(m1.message.length, 96);
+  a.phone.conn.send(create(FrameSchema, { body: { case: "openChannel", value: { requestId: "o", hostKey: a.C.signingKey, instanceId: "i1", message: m1.message } } }));
+  const id = await fromPhone("ChannelOpened", (f) => (f.body.case === "channelOpened" ? f.body.value.channelId : undefined));
+  const open = await fromComputer("OpenChannel", (f) => (f.body.case === "openChannel" ? f.body.value : undefined));
+  assert.equal(open.channelId, id);
+
+  const responder = noise.ikResponder({ staticKey: noise.staticKey(a.secrets.computer.channel), accountId: a.accountId });
+  assert.ok((await responder.readMessage(open.message)).ok);
+  const m2 = await responder.writeMessage();
+  assert.ok(m2.ok && m2.transport);
+  const computerSide: Transport = m2.transport;
+  const msg = (message: Uint8Array) => create(FrameSchema, { body: { case: "channelMessage", value: { channelId: id, message } } });
+  a.computer.conn.send(msg(m2.message));
+  const got2 = await fromPhone("message 2", (f) => (f.body.case === "channelMessage" ? f.body.value.message : undefined));
+  const r2 = await initiator.readMessage(got2);
+  assert.ok(r2.ok && r2.transport);
+  const phoneSide: Transport = r2.transport;
+  assert.deepEqual(phoneSide.remoteStatic, a.C.channelKey);
+
+  for (const n of [0, 65_519]) {
+    const plain = new Uint8Array(n).map((_, i) => i & 0xff);
+    for (const [from, to, sender, receiver] of [
+      [a.phone, fromComputer, phoneSide, computerSide],
+      [a.computer, fromPhone, computerSide, phoneSide],
+    ] as const) {
+      const sent = sender.send(plain);
+      assert.ok(sent.ok);
+      assert.equal(sent.message.length, n + 16);
+      assert.ok(from.conn.send(msg(sent.message)));
+      const got = await to(`${n} bytes`, (f) => (f.body.case === "channelMessage" ? f.body.value.message : undefined));
+      const r = receiver.receive(got);
+      assert.ok(r.ok);
+      assert.deepEqual(r.plaintext, plain);
+    }
+  }
+  assert.equal(computerSide.confirmed, true);
+  a.phone.conn.stop();
+  a.computer.conn.stop();
 });

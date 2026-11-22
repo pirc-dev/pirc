@@ -34,7 +34,7 @@ func init() { extraCommands["serve-hosted"] = serveHosted }
 
 func serveHosted(args []string) error {
 	fs, dataDir := flags("serve-hosted")
-	nf, err := addNetFlags(fs)
+	nf, err := addNetFlags(fs, hosted.DefaultMaxFrameBytes)
 	if err != nil {
 		return err
 	}
