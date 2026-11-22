@@ -7,6 +7,7 @@
 // A close never removes the device: 1008 means only that the relay refuses
 // its key now. A refused login is tried again, slowly.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { framed } from "@pirc/e2e/framed";
 import { ErrorCode } from "@pirc/protocol";
 import { FrameSchema, ProtocolVersion, type Frame, type Welcome } from "@pirc/protocol/v1alpha2";
 
@@ -18,24 +19,6 @@ export const AUTH_CONTEXT = "pirc-auth-v1alpha2";
 
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
-function leb128(n: number): number[] {
-  const out: number[] = [];
-  do {
-    out.push(n < 128 ? n : (n & 0x7f) | 0x80);
-    n = Math.floor(n / 128);
-  } while (n > 0);
-  return out;
-}
-
-/**
- * How the login string is built: the context's ASCII, a NUL byte, then
- * each part prefixed by its length as an unsigned LEB128.
- */
-export function framed(context: string, ...parts: Uint8Array[]): Uint8Array {
-  const out: number[] = [...utf8(context), 0];
-  for (const p of parts) out.push(...leb128(p.length), ...p);
-  return Uint8Array.from(out);
-}
 export const HOSTED_PATH = "/v1alpha2";
 
 export interface SocketEvents {

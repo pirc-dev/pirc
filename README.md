@@ -103,10 +103,12 @@ Needs Node 24 (with corepack) and Go 1.24; Flutter for the mobile app.
   output is not committed.
 
 Layout: `proto/` (the protocol), `relay/` (the relay and the push
-gateway, in Go), `protocol/` (generated TypeScript types), `relay-client/`
-(login and reconnection, shared by every TypeScript peer), `extension/`
-(the pi package), `web/` (the web app), `app/` (the mobile app, Flutter),
-`cases/` (test cases shared by the web and mobile apps), `test/` (the
+gateway, in Go), `protocol/` (generated TypeScript types), `e2e/` (the hosted account's
+device list and its check, in TypeScript), `relay-client/` (login and
+reconnection, shared by every TypeScript peer), `extension/` (the pi
+package), `web/` (the web app), `app/` (the mobile app, Flutter),
+`cases/` (test cases the clients share: the web and mobile apps' client
+logic, notifications, and the hosted account's pieces), `test/` (the
 end-to-end harness).
 
 Issues are welcome; pull requests are not taken for now

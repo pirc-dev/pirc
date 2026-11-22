@@ -17,6 +17,7 @@
   },
   "include": [
     "protocol/**/*.ts",
+    "e2e/**/*.ts",
     "relay-client/**/*.ts",
     "extension/**/*.ts",
     "web/core/**/*.ts",

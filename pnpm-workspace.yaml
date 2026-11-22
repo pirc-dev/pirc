@@ -1,5 +1,6 @@
 packages:
   - protocol
+  - e2e
   - relay-client
   - extension
   - web

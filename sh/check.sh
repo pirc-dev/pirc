@@ -51,8 +51,11 @@ node --experimental-transform-types --no-warnings sh/roundtrip.ts encode \
   | (cd relay && go run ./cmd/framedump) \
   | node --experimental-transform-types --no-warnings sh/roundtrip.ts compare
 
-step "relay client, extension and web app: unit tests"
-node --experimental-transform-types --no-warnings --test relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
+step "cases/e2e: regenerating them changes no file"
+node --experimental-transform-types --no-warnings e2e/test/gen.ts --check
+
+step "e2e, relay client, extension and web app: unit tests"
+node --experimental-transform-types --no-warnings --test e2e/test/*.test.ts relay-client/test/*.test.ts extension/test/*.test.ts web/test/*.test.ts
 
 step "mobile app: generate, analyze, test"
 if command -v flutter >/dev/null; then

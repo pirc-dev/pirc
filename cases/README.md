@@ -10,6 +10,9 @@ changes the cases, and every client is made to pass them again.
   frames sent, view events, replies and state that must follow.
 - `functions/`: the client logic's pure functions, arguments in, result
   out.
+- `e2e/`: the hosted account's shared pieces (`docs/e2e.md`). These files
+  are what any implementation of its checks must pass; TypeScript's runs
+  them in `sh/check.sh`. See "End to end" below.
 - `notices/`: notifications, in the same form as `functions/`: which
   sessions have a notice not yet shown, and the title and body written
   from it (`web/core/notices.ts`). The iOS notification extension's Swift
@@ -102,3 +105,26 @@ Positions in a text, and lengths cut to, count UTF-16 code units, as both
 JavaScript's and Dart's strings do. Sessions equal in time and window are
 ordered by title in the platform's collation (`localeCompare`), which may
 differ between languages; no case depends on it.
+
+## End to end
+
+`e2e/framed.json` holds `framed` and its 8-byte number (`docs/e2e.md`,
+section 2); `e2e/list.json` the device list's check (section 3), the
+phone's list maker to exact bytes, and RFC 8032's test 1 for the raw
+Ed25519 verify. They are written from fixed seeds by
+`e2e/test/gen.ts`, never by hand, and `sh/check.sh` fails if regenerating
+them changes a file:
+
+```sh
+node --experimental-transform-types --no-warnings e2e/test/gen.ts
+```
+
+A file is `{"about", "cases": [...]}`. Bytes are hex; numbers that may
+pass 2^53 are decimal strings. Each case names its `check` and the parts
+it `needs` (`first-mode`, `self`, `make-list`, ...); a runner states the
+parts it has, runs every case needing only those, and checks how many it
+ran against the file. `expect` is the result exactly, with its reason,
+counter and SHA-256 of the body where the check returns them, or
+`{"throws": true}` for a caller's mistake; `go` is the relay's result
+where Go's `crypto/ed25519` accepts a signature libsodium refuses. The
+TypeScript runner is `e2e/test/cases.test.ts`.

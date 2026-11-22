@@ -116,8 +116,13 @@ The account is a **device list**. Each version holds:
   phone its read-only key and notification key;
 - the account's phone's signature, over framed(`pirc-e2e-v2 list`, account ID, body).
 
-It is encoded with Protocol Buffers and signed as sent. Every verifier, and the relay, refuses a
-list in which any public key appears twice, so that a login names one device and one role.
+It is encoded with Protocol Buffers (`account.proto`) and signed as sent: a version travels as
+the 64-byte signature followed by the body's bytes, with no envelope to parse before the signature
+is checked. "Hash" here is SHA-256 of the body's bytes, and the first version holds only the
+account's phone. Every verifier, and the relay, refuses a list in which any public key appears
+twice, so that a login names one device and one role. How each check runs, in what order and with
+what result, is in `cases/e2e/`, which any implementation of the check must pass; TypeScript's
+runs those files in `sh/check.sh`.
 
 **One signer.** Every version is signed by the account's phone. A device learns that phone's key
 when it joins (section 6), with the first version, which it checks hashes to the account ID and

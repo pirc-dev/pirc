@@ -5,11 +5,12 @@ import { create } from "@bufbuild/protobuf";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import { framed } from "@pirc/e2e/framed";
 import { ErrorCode } from "@pirc/protocol";
 import { DeviceRole, FrameSchema, type Frame } from "@pirc/protocol/v1alpha2";
 
 import { Harness, startHostedRelay } from "../../test/harness.ts";
-import { framed, HostedConnection, hostedOrigin, type HostedState, type Signer } from "../hosted.ts";
+import { HostedConnection, hostedOrigin, type HostedState, type Signer } from "../hosted.ts";
 import { wsSocket } from "../hosted-ws.ts";
 
 const h = new Harness();

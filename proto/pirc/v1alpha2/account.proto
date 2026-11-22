@@ -1,0 +1,77 @@
+// What a hosted account's devices sign, seal and open (docs/e2e.md,
+// sections 2, 3 and 5): the device list, the names the account's phone
+// gives devices, and what a computer seals for each client.
+//
+// None of these travels as a protobuf envelope around a signature. A
+// signed list or signed names is the 64-byte Ed25519 signature followed by
+// the body's bytes, verified on those bytes before they are parsed. Text
+// is bytes, decoded as UTF-8 by each reader and refused if malformed.
+syntax = "proto3";
+
+package pirc.v1alpha2;
+
+// A device on the list.
+message Device {
+  // 1 a computer, 2 a client. A number, not an enum, so that every
+  // language reads an unknown value the same way.
+  uint32 role = 1;
+  // Ed25519, 32 bytes.
+  bytes signing_key = 2;
+  // X25519, 32 bytes, used only inside Noise.
+  bytes channel_key = 3;
+  // X25519, 32 bytes, opening what the relay stores for the device.
+  bytes box_key = 4;
+  // Ed25519, 32 bytes; a phone only, else empty.
+  bytes read_only_key = 5;
+  // X25519, 32 bytes; a phone only, else empty.
+  bytes notification_key = 6;
+}
+
+// A version of the device list, signed by the account's phone over
+// framed("pirc-e2e-v2 list", account ID, body). It holds no unknown
+// field, in itself or in any device.
+message ListBody {
+  // Empty in version 1, else 32 bytes: SHA-256 of version 1's body.
+  bytes account_id = 1;
+  // 1, 2, 3..., below 2^63.
+  uint64 counter = 2;
+  // Empty in version 1, else 32 bytes: SHA-256 of the previous version's
+  // body.
+  bytes previous_hash = 3;
+  repeated Device devices = 4;
+}
+
+// Every device's name, signed by the account's phone over
+// framed("pirc-e2e-v2 names", account ID, body) and sealed to each client.
+message Names {
+  // The counter of the list the names were made from.
+  uint64 list_counter = 1;
+  // Below 2^63; higher than any earlier names of the account.
+  uint64 ordering = 2;
+  repeated Name names = 3;
+}
+
+// One device's name, at most 200 bytes of UTF-8.
+message Name {
+  bytes signing_key = 1;
+  bytes name = 2;
+}
+
+// A session as a computer seals it for each client. Caps, in bytes of
+// UTF-8: a session name, model or computer name 200; a folder 1,024; a
+// notice 4,096, and it may be empty.
+message Announcement {
+  bytes session_name = 1;
+  bytes folder = 2;
+  bytes model = 3;
+  bytes computer_name = 4;
+  bytes notice = 5;
+}
+
+// A session's notice as a computer seals it to each phone's notification
+// key, with the caps of Announcement.
+message Notice {
+  bytes session_name = 1;
+  bytes computer_name = 2;
+  bytes notice = 3;
+}
