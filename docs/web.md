@@ -458,7 +458,7 @@ not in `web/`, since they belong to neither client.
   only while the reader is there; scrolled up, a button goes back to it,
   and says "New messages" when something came meanwhile.
 
-Reasons: a widely used stack, with the most ready-made parts for
+Reasons: the stack with the most ready-made parts for
 chat-style rendering (markdown, code highlighting, long lists). React's cost
 with token-by-token streaming is known and handled by keeping finished
 messages from re-rendering.

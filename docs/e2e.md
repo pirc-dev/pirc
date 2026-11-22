@@ -265,7 +265,8 @@ computer, a browser or another phone, joins the same way.
    role.
 
 **The text is secret for its ten minutes.** The new device, not the relay, makes it work once and
-expire after ten minutes. Anyone who reads it first could join that device to an account of their
+expire after ten minutes. The relay ends a join's wait with `TIMEOUT` after those ten minutes, and a
+join paired from it ten minutes after the wait began. Anyone who reads it first could join that device to an account of their
 own, which for a computer means controlling it. So `/pirc join` says, beside it, that it gives
 whoever uses it full control of this machine, and afterwards which phone approved it: "Joined the
 account, approved by 'Pixel 9'. If your phone does not show this computer now, run `/pirc

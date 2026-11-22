@@ -324,7 +324,8 @@ The questions, as settled:
 
    **Transport security**: TLS is the relay's default. Plain `ws://` is an
    explicit relay setting, for networks that already encrypt (WireGuard,
-   Tailscale), so they need no second layer.
+   Tailscale), so they need no second layer. Plaintext is not limited to
+   private addresses: the explicit setting is enough.
 
    Reasons: on a relay you run yourself the operator is you, so end-to-end
    encryption protects little there; and users of overlay networks want no
@@ -607,6 +608,10 @@ The questions, as settled:
   while locked to fetch the session list, with a second key that the
   relay allows nothing else; its main key is
   released only after Face ID or the device's PIN.
+- **Accepted**: a session reference can collide with one under a forged
+  short host key, but it still reaches only the real session.
+- **Open**: a cap on connections per key; marking a removed host that asks
+  to join again; checking a key file's mode when it is loaded.
 
 ## 7. Protocol
 
@@ -1328,7 +1333,8 @@ built; steps 14 and 15 are not finished.
        certificate stores are readable only by root;
      - a launchd daemon (`/Library/LaunchDaemons`, with `UserName`), so
        the relay runs without anyone logged in; a launchd agent would stop
-       at logout.
+       at logout. Not yet checked: that the daemon keeps running through a
+       logout.
 
      The registry commands must run as the service's user: the lock file
      and the registry are created `0600`, and a `sudo pirc-relay add-host`
@@ -1877,9 +1883,14 @@ built; steps 14 and 15 are not finished.
        Test builds need a test key, since simulators and emulators fail
        attestation.
     3. **Where it runs.** On a shared server at first, a dedicated one
-       later (5). Its availability is best effort, and the terms say so.
+       later (5). It runs release tags only, not the main branch, with an
+       off-site backup every hour and an outside check that alerts when it
+       stops answering. Its availability is best effort, and the terms say
+       so.
     4. **Terms and privacy.** The hosted relay's terms and its privacy
-       policy are written from templates, read as:
+       policy are written from templates, without legal review; the
+       readings below are the publisher's own, and their risk is accepted
+       until advice says otherwise:
        - the EU's requirement of a representative in the Union not
          applying, under its exemption for occasional processing that is
          unlikely to risk people's rights;
@@ -2107,7 +2118,8 @@ built; steps 14 and 15 are not finished.
          closed or the phone restarts.
        - *Caps* (D9): 10 clients and 50 computers (`e2e.md`, section 3).
 
-       D4, D7 and D8 belonged to the earlier design.
+       D7 (a join cut off) and D8 (the label key) belonged to the earlier
+       design.
 
     6. **Running it**: the abuse guards (caps, the sign-up switch and
        invite codes); the relay's own domain; the server (decision 3); the
