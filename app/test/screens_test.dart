@@ -1,7 +1,7 @@
 // The screens, drawn from a model fed real relay frames, in light and dark,
 // compared with saved images (test/goldens). The images are drawn on macOS
 // with the Roboto Flutter ships; elsewhere text draws differently, so they
-// are skipped there, and in CI, saying so. flutter test --update-goldens
+// are skipped there, and in CI, saying so. TZ=UTC flutter test --update-goldens
 // draws them again.
 import 'dart:async';
 import 'dart:convert';
@@ -58,6 +58,37 @@ const mono = 'Mono';
 // 15 runners: about 3% of each image's pixels).
 const goldensSkip = 'skipped: golden images are drawn on macOS, outside CI';
 final drawsGoldens = Platform.isMacOS && Platform.environment['CI'] != 'true';
+
+// macOS draws the edges of text a little differently from one release to the
+// next, so a pixel counts as changed only when a channel moves by more than
+// [slack] of 255: what the screen shows still has to match.
+class EdgeTolerant extends LocalFileComparator {
+  EdgeTolerant(super.testFile);
+
+  static const slack = 24;
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final saved = await getGoldenBytes(golden);
+    final (a, b) = (await rgba(imageBytes), await rgba(saved));
+    if (a.width == b.width && a.height == b.height && a.bytes.length == b.bytes.length) {
+      var same = true;
+      for (var i = 0; i < a.bytes.length && same; i++) {
+        same = (a.bytes[i] - b.bytes[i]).abs() <= slack;
+      }
+      if (same) return true;
+    }
+    final result = await GoldenFileComparator.compareLists(imageBytes, saved);
+    if (result.passed) return true;
+    throw FlutterError(await generateFailureOutput(result, golden, basedir));
+  }
+
+  static Future<({int width, int height, Uint8List bytes})> rgba(List<int> png) async {
+    final frame = await (await ui.instantiateImageCodec(Uint8List.fromList(png))).getNextFrame();
+    final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+    return (width: frame.image.width, height: frame.image.height, bytes: data!.buffer.asUint8List());
+  }
+}
 
 // Roboto from Flutter's own cache, and the fonts the app bundles
 // (CupertinoIcons), so that text and icons draw as they will.
@@ -227,7 +258,10 @@ Future<void> phone(WidgetTester tester) async {
 }
 
 void main() {
-  setUpAll(loadFonts);
+  setUpAll(() async {
+    goldenFileComparator = EdgeTolerant((goldenFileComparator as LocalFileComparator).basedir.resolve('screens_test.dart'));
+    await loadFonts();
+  });
 
   for (final b in Brightness.values) {
     testWidgets('the session list, ${b.name}', (tester) async {

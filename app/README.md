@@ -13,8 +13,11 @@ Needs Flutter on `PATH`; `sh/check.sh` skips the app without it.
 The screens are checked by golden images (`test/goldens`), drawn from a
 model fed real relay frames, with the Roboto in Flutter's cache. They are
 drawn on macOS and skipped elsewhere, and in CI, saying so; after a change to a
-screen, `flutter test --update-goldens` draws them again, and the images
-are looked at before they are kept.
+screen, `TZ=UTC flutter test --update-goldens` draws them again, and the images
+are looked at before they are kept. They are drawn in UTC, as `sh/app.sh`
+runs them, since a screen with a time shows it in the machine's own zone, and
+a pixel counts as changed only past a little, since macOS draws the edges of
+text a little differently from one release to the next.
 
 `ios/PircNotices` is the iOS notification extension's core, a Swift
 package with no Flutter in it: it reads the session list with the
