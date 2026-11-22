@@ -21,8 +21,47 @@ const CHECKS: Record<string, Set<string>> = {
   "list.json": new Set(["list", "verify"]),
 };
 
+/** What each check's cases hold: every key in required, exactly one of oneOf, and nothing else. */
+const SHAPES: Record<string, { required: string[]; optional?: string[]; oneOf?: string[] }> = {
+  framed: { required: ["check", "about", "needs", "context", "parts"], oneOf: ["bytes", "throws"] },
+  number: { required: ["check", "about", "needs", "value"], oneOf: ["bytes", "throws"] },
+  list: { required: ["check", "about", "needs", "bytes", "phoneKey", "mode", "highest", "expect"], optional: ["accountId", "self", "go"] },
+  "make-list": { required: ["check", "about", "needs", "seed", "accountId", "counter", "previousBody", "devices", "bytes"] },
+  verify: { required: ["check", "about", "needs", "key", "message", "signature", "valid"] },
+};
+const EXPECT_KEYS = new Set(["result", "reason", "counter", "hash", "list", "throws"]);
+const DEVICE_KEYS = ["role", "signingKey", "channelKey", "boxKey", "readOnlyKey", "notificationKey"];
+
+function shapeOf(where: string, c: Record<string, unknown>): void {
+  const shape = SHAPES[String(c.check)];
+  assert.ok(shape, `${where}: unknown check ${String(c.check)}`);
+  const keys = Object.keys(c);
+  for (const k of shape.required) assert.ok(k in c, `${where}: no ${k}`);
+  if (shape.oneOf) assert.equal(shape.oneOf.filter((k) => k in c).length, 1, `${where}: not exactly one of ${shape.oneOf.join(", ")}`);
+  const allowed = new Set([...shape.required, ...(shape.optional ?? []), ...(shape.oneOf ?? [])]);
+  for (const k of keys) assert.ok(allowed.has(k), `${where}: unknown key ${k}`);
+  for (const k of ["expect", "go"]) {
+    if (!(k in c)) continue;
+    const e = c[k] as Record<string, unknown>;
+    for (const ek of Object.keys(e)) assert.ok(EXPECT_KEYS.has(ek), `${where}: unknown key ${k}.${ek}`);
+    assert.notEqual("result" in e, "throws" in e, `${where}: ${k} has not exactly one of result and throws`);
+  }
+  const needs = c.needs as string[];
+  assert.equal(needs.includes("self"), "self" in c, `${where}: needs self iff it has a self`);
+  assert.equal(needs.includes("make-list"), c.check === "make-list", `${where}: needs make-list iff it is a make-list case`);
+  if ("self" in c) assert.deepEqual(Object.keys(c.self as object).sort(), [...DEVICE_KEYS].sort(), `${where}: self's keys`);
+  if ("devices" in c) {
+    for (const d of c.devices as object[]) assert.deepEqual(Object.keys(d).sort(), [...DEVICE_KEYS].sort(), `${where}: a device's keys`);
+  }
+}
+
+/** A file of cases/e2e, its shape checked: no unknown key, every needed key present, at least one case. */
 function read<C>(name: string): CaseFile<C> {
-  return JSON.parse(readFileSync(new URL(name, CASES_DIR), "utf8")) as CaseFile<C>;
+  const file = JSON.parse(readFileSync(new URL(name, CASES_DIR), "utf8")) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(file).sort(), ["about", "cases"], `${name}: its keys`);
+  assert.ok(Array.isArray(file.cases) && file.cases.length > 0, `${name}: no cases`);
+  (file.cases as Record<string, unknown>[]).forEach((c, i) => shapeOf(`${name}, case ${i}`, c));
+  return file as unknown as CaseFile<C>;
 }
 
 function runnable(name: string, c: { check: string; needs: string[] }): boolean {

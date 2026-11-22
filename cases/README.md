@@ -112,8 +112,9 @@ differ between languages; no case depends on it.
 section 2); `e2e/list.json` the device list's check (section 3), the
 phone's list maker to exact bytes, and RFC 8032's test 1 for the raw
 Ed25519 verify. They are written from fixed seeds by
-`e2e/test/gen.ts`, never by hand, and `sh/check.sh` fails if regenerating
-them changes a file:
+`e2e/test/gen.ts` alone, never by hand, and `sh/check.sh` fails if they
+differ from what it writes; the runners' checks of each file's shape are
+a second guard. To write them:
 
 ```sh
 node --experimental-transform-types --no-warnings e2e/test/gen.ts
@@ -127,4 +128,5 @@ ran against the file. `expect` is the result exactly, with its reason,
 counter and SHA-256 of the body where the check returns them, or
 `{"throws": true}` for a caller's mistake; `go` is the relay's result
 where Go's `crypto/ed25519` accepts a signature libsodium refuses. The
-TypeScript runner is `e2e/test/cases.test.ts`.
+TypeScript runner is `e2e/test/cases.test.ts`; the relay's Go
+runner, of both files, is `relay/internal/hosted/list_test.go`.

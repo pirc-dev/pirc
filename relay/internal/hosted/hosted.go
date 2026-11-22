@@ -35,16 +35,35 @@ import (
 // AuthContext is the login signature's context (relay.proto, Auth).
 const AuthContext = "pirc-auth-v1alpha2"
 
-// framed is how the login and attestation strings are built: the
-// context's ASCII, a NUL byte, then each part prefixed by its length as an
-// unsigned LEB128.
+// framed is how every signed string is built (docs/e2e.md, section 2):
+// the context's ASCII, a NUL byte, then each part prefixed by its length as
+// an unsigned LEB128. Every context is a constant, so one that is empty or
+// holds a byte outside 0x20..0x7E is a mistake in the code: framed panics.
 func framed(context string, parts ...[]byte) []byte {
+	if context == "" {
+		panic("hosted: framed: empty context")
+	}
+	for i := 0; i < len(context); i++ {
+		if c := context[i]; c < 0x20 || c > 0x7e {
+			panic(fmt.Sprintf("hosted: framed: context byte %#x at %d", c, i))
+		}
+	}
 	out := append([]byte(context), 0)
 	for _, p := range parts {
 		out = binary.AppendUvarint(out, uint64(len(p)))
 		out = append(out, p...)
 	}
 	return out
+}
+
+// framedNumber is a number as a framed part holds it: 8 bytes,
+// big-endian (docs/e2e.md, section 2). Only list_test.go calls it, for
+// cases/e2e/framed.json. A value of 2^63 or more panics.
+func framedNumber(v uint64) []byte {
+	if v >= 1<<63 {
+		panic(fmt.Sprintf("hosted: framedNumber: %d is 2^63 or more", v))
+	}
+	return binary.BigEndian.AppendUint64(nil, v)
 }
 
 // Path is where the hosted relay serves its WebSocket.
