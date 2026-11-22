@@ -114,7 +114,7 @@ $linked"
       const pkg = {
         name: "pirc-extension",
         version,
-        description: "PiRC: puts every interactive pi session on a PiRC relay",
+        description: "PiRC: remote control for pi from your iPhone, Android phone or browser",
         license: "MIT",
         homepage: "https://pirc.dev",
         // npm checks this against the repository a release is published
