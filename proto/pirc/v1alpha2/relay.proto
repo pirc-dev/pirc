@@ -341,8 +341,9 @@ message ChannelOpened {
 
 // Either way: one Noise message, 16 to 65,535 bytes, passed on unread and
 // in order; anything else is INVALID. Bytes queued toward one end are
-// counted per channel: past 1 MiB the relay closes the channel
-// (RATE_LIMITED), not the connection. Nothing is kept for an end that is
+// counted per channel, and so are frames: past 1 MiB, or a quarter of the
+// connection's frame queue (64 frames by default), the relay closes the
+// channel (RATE_LIMITED), not the connection. Nothing is kept for an end that is
 // gone.
 message ChannelMessage {
   uint64 channel_id = 1;
@@ -353,8 +354,8 @@ message ChannelMessage {
 // The relay closes a channel, telling both ends still connected, when
 // either connection goes (SESSION_GONE), either device is removed
 // (PERMISSION_DENIED), the process has sent no message 30 seconds after
-// the open (TIMEOUT), or its queue toward one end passes 1 MiB
-// (RATE_LIMITED).
+// the open (TIMEOUT), or its queue toward one end passes 1 MiB or 64
+// frames (RATE_LIMITED).
 message CloseChannel {
   uint64 channel_id = 1;
   pirc.v1alpha1.ErrorCode code = 2;

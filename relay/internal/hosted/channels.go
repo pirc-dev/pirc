@@ -8,7 +8,6 @@ package hosted
 import (
 	"bytes"
 	"crypto/ed25519"
-	"sync/atomic"
 	"time"
 
 	pb1 "pirc.dev/relay/internal/pb/pirc/v1alpha1"
@@ -30,7 +29,7 @@ type channel struct {
 	replied bool
 	timer   *time.Timer
 	// Bytes queued toward each end.
-	toClient, toProc atomic.Int64
+	toClient, toProc queued
 }
 
 // other is the end of ch that is not c.
@@ -41,8 +40,8 @@ func (ch *channel) other(c *conn) *conn {
 	return ch.client
 }
 
-// queuedToward is the count of bytes queued toward end c.
-func (ch *channel) queuedToward(c *conn) *atomic.Int64 {
+// queuedToward counts what is queued toward end c.
+func (ch *channel) queuedToward(c *conn) *queued {
 	if c == ch.client {
 		return &ch.toClient
 	}
@@ -117,8 +116,11 @@ func (s *Server) channelMessage(c *conn, m *pb.ChannelMessage) *frameError {
 	}
 	to := ch.other(c)
 	n := ch.queuedToward(to)
-	if n.Add(int64(len(b))) > int64(s.cfg.MaxChannelQueuedBytes) {
-		n.Add(-int64(len(b)))
+	// Small messages fill the connection's frame slots long before its
+	// bytes: both are capped per channel.
+	if n.bytes.Add(int64(len(b))) > int64(s.cfg.MaxChannelQueuedBytes) || n.frames.Add(1) > int64(s.cfg.MaxChannelQueuedFrames) {
+		n.bytes.Add(-int64(len(b)))
+		n.frames.Add(-1)
 		s.closeChannelLocked(ch, pb1.ErrorCode_ERROR_CODE_RATE_LIMITED, nil)
 		return nil
 	}

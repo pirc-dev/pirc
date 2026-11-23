@@ -299,3 +299,42 @@ func TestChannelRemoval(t *testing.T) {
 		t.Errorf("the computer removed: %v", c)
 	}
 }
+
+// Small messages reach the frames queued toward one end of a channel
+// long before its bytes: the channel closes, RATE_LIMITED, and the
+// connection stays.
+func TestChannelQueueCapSmallMessages(t *testing.T) {
+	h := newHarness(t, nil)
+	sa := newSealedAccount(h)
+	id := open(t, sa.b, sa.hc, sa.hst, "i1")
+	sa.hc.send(msgFrame(id, filled(1, 48)))
+	gotMessage(sa.b)
+	sa.hc.hold.Lock()
+	closed := false
+	for i := 0; i < 200000 && !closed; i++ {
+		sa.b.send(msgFrame(id, filled(2, MinChannelMessageBytes)))
+		if i%500 != 0 {
+			continue
+		}
+		for {
+			f, err := sa.b.read(time.Millisecond)
+			if err != nil {
+				break
+			}
+			if f.GetCloseChannel().GetChannelId() == id {
+				if f.GetCloseChannel().Code != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+					t.Errorf("closed %v", f.GetCloseChannel())
+				}
+				closed = true
+			}
+		}
+	}
+	sa.hc.hold.Unlock()
+	if !closed {
+		t.Fatal("the channel was not closed")
+	}
+	if c := gotClose(sa.hc, id); c != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+		t.Errorf("the process was told %v", c)
+	}
+	open(t, sa.b, sa.hc, sa.hst, "i1")
+}

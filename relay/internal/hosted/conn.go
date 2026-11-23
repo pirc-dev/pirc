@@ -109,9 +109,7 @@ func (c *conn) writeLoop(ctx context.Context, pingEvery time.Duration) {
 			err := c.ws.Write(wctx, websocket.MessageBinary, o.b)
 			cancel()
 			c.queued.Add(-int64(len(o.b)))
-			if o.channel != nil {
-				o.channel.Add(-int64(len(o.b)))
-			}
+			o.unqueued()
 			if err != nil {
 				c.close(websocket.StatusGoingAway, "write failed")
 				return
@@ -141,7 +139,19 @@ func (c *conn) queue(f *pb.Frame) {
 // queued that it is part of, if any.
 type outFrame struct {
 	b       []byte
-	channel *atomic.Int64
+	channel *queued
+}
+
+// queued counts the bytes and frames queued toward one end of a channel.
+type queued struct{ bytes, frames atomic.Int64 }
+
+// unqueued lowers its channel's counts by o, once o is written or
+// dropped.
+func (o outFrame) unqueued() {
+	if o.channel != nil {
+		o.channel.bytes.Add(-int64(len(o.b)))
+		o.channel.frames.Add(-1)
+	}
 }
 
 // queueBytes sends an encoded frame, which callers may share between
@@ -152,11 +162,7 @@ func (c *conn) queueBytes(b []byte) { c.queueOut(outFrame{b: b}) }
 // A channel's count, already raised by the frame's length, is lowered
 // again once it is written, or now if it is not queued.
 func (c *conn) queueOut(o outFrame) {
-	unqueued := func() {
-		if o.channel != nil {
-			o.channel.Add(-int64(len(o.b)))
-		}
-	}
+	unqueued := o.unqueued
 	if c.dropQueue.Load() {
 		unqueued()
 		return

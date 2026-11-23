@@ -182,9 +182,17 @@ func (s *Server) announce(c *conn, an *pb.SessionAnnounce) *frameError {
 	if !ok && len(a.sessions) >= s.cfg.MaxSessionsPerAccount {
 		return rateLimited("too many sessions in this account")
 	}
+	// The bytes this announcement replaces: its live copies, or the
+	// notices kept since it ended, deleted below.
 	held := 0
 	if ok {
 		held = se.announcements.size() + se.notices.size()
+	} else {
+		for e := range a.ended {
+			if idOf(e.ref) == id {
+				held += e.notices.size()
+			}
+		}
 	}
 	if s.sealedBytesLocked(a)-held+ann.size()+notices.size() > s.cfg.MaxSealedBytesPerAccount {
 		return rateLimited("too many sealed copies in this account")

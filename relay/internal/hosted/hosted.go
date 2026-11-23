@@ -130,6 +130,9 @@ type Config struct {
 	MaxChannelOpensPerMinute int
 	ChannelReplyTimeout      time.Duration
 	MaxChannelQueuedBytes    int
+	// Frames queued toward one end of one channel before it is closed: a
+	// quarter of the connection's SendQueue.
+	MaxChannelQueuedFrames int
 	// How long a join's wait lasts.
 	JoinTimeout time.Duration
 	// How long an account stays locked before it is deleted (lock.go).
@@ -195,6 +198,7 @@ func (c *Config) defaults() error {
 	seti(&c.MaxChannelsPerProcess, 128)
 	seti(&c.MaxChannelOpensPerMinute, 30)
 	seti(&c.MaxChannelQueuedBytes, 1<<20)
+	seti(&c.MaxChannelQueuedFrames, max(1, c.SendQueue/4))
 	seti(&c.MaxLookupsPerAccount, 20)
 	seti(&c.MaxLookupsPerAddr, 20)
 	seti(&c.MaxWaitsPerAddr, 4)

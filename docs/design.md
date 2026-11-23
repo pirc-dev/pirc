@@ -2218,8 +2218,9 @@ built; steps 14 and 15 are not finished.
             The relay closes a channel, telling the ends still connected,
             when either connection goes (`SESSION_GONE`), either device is
             removed (`PERMISSION_DENIED`), the process has sent nothing 30
-            seconds after the open (`TIMEOUT`), or more than 1 MiB is queued
-            toward one end of it (`RATE_LIMITED`): a slow reader costs one
+            seconds after the open (`TIMEOUT`), or more than 1 MiB or 64 frames
+            (a quarter of the connection's frame queue) are queued toward one
+            end of it (`RATE_LIMITED`): a slow reader costs one
             channel, not its connection, whose own 4 MiB queue cap still
             closes the connection.
           - **Caps**, each a `Config` field: 64 channels per client

@@ -264,6 +264,12 @@ func TestNoticesAfterTheSession(t *testing.T) {
 	if ns, _ := fetch(r, "d"); len(ns) != 0 {
 		t.Errorf("after the retention, %v", ns)
 	}
+	// Nothing kept holds the account in memory once its connections go.
+	h.srv.mu.Lock()
+	if n := len(h.srv.accounts[string(id)].ended); n != 0 {
+		t.Errorf("%d kept notices after the retention", n)
+	}
+	h.srv.mu.Unlock()
 
 	// A removed computer's notices go at once, ended or live.
 	hc, _ := h.login(sa.hst, id)
