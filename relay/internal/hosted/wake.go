@@ -143,9 +143,12 @@ func (w *waker) close(a *account, key []byte, win *wakeWindow) {
 		return
 	}
 	w.mu.Lock()
-	if w.windows[k] == nil {
-		w.open(a, key)
+	if w.windows[k] != nil {
+		// An announcement opened a window meanwhile, and its wake is sent.
+		w.mu.Unlock()
+		return
 	}
+	w.open(a, key)
 	w.mu.Unlock()
 	w.send(a, key)
 }

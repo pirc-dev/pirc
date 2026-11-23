@@ -126,6 +126,11 @@ func TestJoinAttestationOnceListed(t *testing.T) {
 	if n := h.attestations(id, dd.pub); n != 0 {
 		t.Fatalf("an attestation stored by a version without the device: %d", n)
 	}
+	// A phone's attestation is not stored for a key listed as a computer.
+	h.publish(id, ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient), entry(dd, RoleComputer)))
+	if n := h.attestations(id, dd.pub); n != 0 {
+		t.Fatalf("an attestation stored for a computer: %d", n)
+	}
 	h.publish(id, ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient), entry(dd, RoleClient)))
 	if n := h.attestations(id, dd.pub); n != 1 {
 		t.Fatalf("attestation rows once listed: %d", n)

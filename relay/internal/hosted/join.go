@@ -192,7 +192,7 @@ func (s *Server) storeAttestationsLocked(a *account) {
 		if jn.att == nil || jn.client.acct != a {
 			continue
 		}
-		if _, role := a.list.deviceFor(jn.device.key); role != pb.DeviceRole_DEVICE_ROLE_CLIENT && role != pb.DeviceRole_DEVICE_ROLE_HOST {
+		if _, role := a.list.deviceFor(jn.device.key); role != pb.DeviceRole_DEVICE_ROLE_CLIENT {
 			continue
 		}
 		if err := s.store.AddAttestation(a.id, jn.device.key, jn.att.Kind, jn.att.Ident); err != nil {
