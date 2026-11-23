@@ -1562,6 +1562,117 @@ void main() {
     expect(await prefs.get('store.none'), 'yes');
   });
 
+  group('a sheet dragged down', () {
+    // A page with a button that opens a sheet of [rows] rows.
+    Future<void> open(WidgetTester tester, int rows) async {
+      await tester.pumpWidget(frame(Builder(
+        builder: (context) => CupertinoPageScaffold(
+          child: Center(
+            child: CupertinoButton(
+              child: const Text('Open'),
+              onPressed: () => showSheet<void>(context, (_) => Sheet(title: 'A sheet', done: 'Done', children: [
+                    SheetGroup(children: [for (var i = 0; i < rows; i++) SheetRow(label: 'Row $i', onTap: () {})]),
+                  ])),
+            ),
+          ),
+        ),
+      )));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsOneWidget);
+    }
+
+    Offset top(WidgetTester tester) => tester.getTopLeft(find.text('A sheet'));
+
+    testWidgets('by its handle, past a third: it closes', (tester) async {
+      await open(tester, 3);
+      await tester.timedDrag(find.text('A sheet'), const Offset(0, 250), const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsNothing);
+    });
+
+    testWidgets('a little, slowly: it follows, then goes back', (tester) async {
+      await open(tester, 3);
+      final rest = top(tester);
+      final g = await tester.startGesture(tester.getCenter(find.text('A sheet')));
+      await g.moveBy(const Offset(0, 20));
+      await g.moveBy(const Offset(0, 40));
+      await tester.pump();
+      expect(top(tester).dy, greaterThan(rest.dy + 30), reason: 'under the finger');
+      await tester.pump(const Duration(seconds: 1));
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsOneWidget);
+      expect(top(tester), rest);
+    });
+
+    testWidgets('flicked: it closes', (tester) async {
+      await open(tester, 3);
+      await tester.fling(find.text('A sheet'), const Offset(0, 80), 1500);
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsNothing);
+    });
+
+    testWidgets('by rows that do not scroll: it closes; a tap on one still works', (tester) async {
+      await open(tester, 3);
+      await tester.tap(find.text('Row 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsOneWidget);
+      await tester.timedDrag(find.text('Row 1'), const Offset(0, 250), const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsNothing);
+    });
+
+    testWidgets('by rows that scroll: they come back to the top first, then it closes', (tester) async {
+      await open(tester, 40);
+      final rest = top(tester);
+      await tester.timedDrag(find.text('Row 5'), const Offset(0, -300), const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('Row 0').hitTestable(), findsNothing, reason: 'scrolled');
+      expect(top(tester), rest, reason: 'the title stays');
+      // Back down by as much: the rows only.
+      await tester.timedDrag(find.text('Row 10'), const Offset(0, 300), const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsOneWidget);
+      expect(find.text('Row 0').hitTestable(), findsOneWidget);
+      // Down again from the top: the sheet.
+      await tester.timedDrag(find.text('Row 3'), const Offset(0, 400), const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsNothing);
+    });
+
+    testWidgets('down then up again before letting go: it stays, and so do the rows', (tester) async {
+      await open(tester, 40);
+      final rest = top(tester);
+      final g = await tester.startGesture(tester.getCenter(find.text('Row 3')));
+      for (var i = 0; i < 10; i++) {
+        await g.moveBy(const Offset(0, 15));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final down = top(tester).dy - rest.dy;
+      expect(down, greaterThan(100));
+      // Up by as far as the sheet came down.
+      for (var i = 0; i < down ~/ 15; i++) {
+        await g.moveBy(const Offset(0, -15));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(seconds: 1));
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(find.text('A sheet'), findsOneWidget);
+      expect(top(tester), rest);
+      expect(find.text('Row 0').hitTestable(), findsOneWidget, reason: 'not scrolled by the way back up');
+    });
+
+    test('the rule: a third of its height, or a flick, and never upwards', () {
+      expect(dragCloses(299, 0, 900), isFalse);
+      expect(dragCloses(301, 0, 900), isTrue);
+      expect(dragCloses(301, -500, 900), isFalse, reason: 'thrown back up');
+      expect(dragCloses(20, 800, 900), isTrue);
+      expect(dragCloses(0, 800, 900), isFalse);
+    });
+  });
+
   group('a join link opened from outside the app', () {
     const channel = MethodChannel('dev.pirc.app/links');
     const first = 'pirc://join?relay=ws%3A%2F%2F127.0.0.1%3A9&token=t1';

@@ -1,10 +1,12 @@
 // A sheet over the page, from the bottom (or from the top, where the
 // keyboard would cover it): a title, plain rows, and a scrim that closes
 // it. Its owner opens and closes it through useLayer (layer.ts), so that
-// going back closes it.
+// going back closes it. From the bottom, a finger can drag it down to close
+// it (drag.ts).
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
+import { SheetDrag } from "./drag.ts";
 import { useHold } from "./update.ts";
 
 export function Sheet(p: { title: string; sub?: string; done?: string; top?: boolean; close: () => void; children: React.ReactNode }) {
@@ -16,6 +18,52 @@ export function Sheet(p: { title: string; sub?: string; done?: string; top?: boo
     panel.current?.querySelector<HTMLElement>("input, button:not(:disabled)")?.focus({ preventScroll: true });
     return () => before?.focus({ preventScroll: true });
   }, []);
+  // Dragged down by a finger: it follows, then closes or goes back. Touch
+  // events rather than pointer ones, so that a drag of the sheet can stop the
+  // rows from scrolling, and theirs need not.
+  const close = useRef(p.close);
+  close.current = p.close;
+  useEffect(() => {
+    const el = panel.current;
+    if (!el || p.top) return;
+    const drag = new SheetDrag();
+    let done = false;
+    let closing: ReturnType<typeof setTimeout> | undefined;
+    const put = (dy: number, settle: boolean) => {
+      el.style.transition = settle ? "transform 0.2s ease-out" : "none";
+      el.style.transform = dy > 0 ? `translateY(${dy}px)` : "";
+    };
+    const start = (e: TouchEvent) => {
+      if (e.touches.length === 1 && !done) drag.start(e.touches[0].clientY, e.timeStamp, el.scrollTop);
+    };
+    const move = (e: TouchEvent) => {
+      if (e.touches.length !== 1 || done) return;
+      const dy = drag.move(e.touches[0].clientY, e.timeStamp, el.scrollTop);
+      if (drag.pulling() && e.cancelable) e.preventDefault();
+      if (dy !== undefined) put(dy, false);
+    };
+    const end = (e: TouchEvent) => {
+      if (done) return;
+      const how = drag.end(e.timeStamp, el.offsetHeight);
+      if (how === "back") put(0, true);
+      if (how === "close") {
+        done = true;
+        put(el.offsetHeight, true);
+        closing = setTimeout(() => close.current(), 200);
+      }
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    return () => {
+      clearTimeout(closing);
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [p.top]);
   return createPortal(
     <div className="fixed inset-0 z-40">
       <button className="absolute inset-0 bg-scrim" aria-label="Close" tabIndex={-1} onClick={p.close} />
@@ -27,7 +75,7 @@ export function Sheet(p: { title: string; sub?: string; done?: string; top?: boo
         className={`absolute inset-x-0 mx-auto max-w-lg bg-sheet shadow-[0_-10px_40px_rgb(0_0_0/0.14)] native:shadow-[0_-8px_30px_rgb(0_0_0/0.15)] cockpit:border-wash2 ${p.top ? "native:rounded-b-[14px] cockpit:rounded-b-[18px] cockpit:border-b" : "native:rounded-t-[14px] cockpit:rounded-t-[18px] cockpit:border-t"} ${
           p.top
             ? "top-0 rounded-b-[22px] pt-[max(0.75rem,env(safe-area-inset-top))] pb-5"
-            : "bottom-0 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-[22px] pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+            : "bottom-0 max-h-[85dvh] overflow-y-auto overscroll-none rounded-t-[22px] pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
         }`}
       >
         {!p.top && <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-wash2" />}

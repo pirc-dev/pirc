@@ -2,6 +2,9 @@
 // (web/page/src/Sheet.tsx): from the bottom, on the grouped grey, with a
 // handle, a title, and Done; rows on cards; two answers side by side. Above
 // the keyboard when one is open, where the web's goes to the top instead.
+// Dragged down, by its handle and title or by rows already scrolled to the
+// top, it follows the finger and closes past a third of its height or on a
+// flick; short of that it goes back.
 import 'package:flutter/cupertino.dart';
 
 import 'look.dart';
@@ -10,61 +13,148 @@ import 'look.dart';
 Future<T?> showSheet<T>(BuildContext context, WidgetBuilder builder) =>
     showCupertinoModalPopup<T>(context: context, barrierColor: Look.of(context).scrim, builder: builder);
 
-class Sheet extends StatelessWidget {
+// Whether a drag let go [dy] below where the sheet rests, moving at
+// [velocity] (downwards positive), closes a sheet [height] tall.
+// web/page/src/drag.ts decides the same.
+bool dragCloses(double dy, double velocity, double height) => dy > 0 && (velocity > 700 || (velocity > -300 && dy > height / 3));
+
+class Sheet extends StatefulWidget {
   const Sheet({super.key, required this.title, this.sub, this.done, required this.children});
   final String title;
   final String? sub;
-  // The word that closes it, at the top; none: a scrim tap, or an answer.
+  // The word that closes it, at the top; none: a scrim tap, an answer, or a
+  // drag down.
   final String? done;
   final List<Widget> children;
+
+  @override
+  State<Sheet> createState() => _SheetState();
+}
+
+class _SheetState extends State<Sheet> with SingleTickerProviderStateMixin {
+  // How far below where it rests the finger has it.
+  late final _dy = AnimationController.unbounded(vsync: this);
+  var _closing = false;
+
+  @override
+  void dispose() {
+    _dy.dispose();
+    super.dispose();
+  }
+
+  void _drag(double delta) {
+    if (_closing) return;
+    _dy.value = (_dy.value + delta).clamp(0, double.infinity);
+  }
+
+  void _let(double velocity) {
+    if (_closing) return;
+    // The sheet's own height, without the keyboard it sits on.
+    final height = (context.size?.height ?? 0) - MediaQuery.of(context).viewInsets.bottom;
+    final held = ModalRoute.of(context)?.popDisposition == RoutePopDisposition.doNotPop;
+    if (!held && dragCloses(_dy.value, velocity, height)) {
+      _closing = true;
+      Navigator.of(context).maybePop().then((popped) {
+        if (popped || !mounted) return;
+        _closing = false;
+        _back();
+      });
+    } else {
+      _back();
+    }
+  }
+
+  void _back() => _dy.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+
+  // Rows scrolled to the top and pulled further: the sheet comes down; pushed
+  // up again while it is down: it goes back up before they scroll.
+  bool _scrolled(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    if (n is OverscrollNotification && n.dragDetails != null && n.overscroll < 0) {
+      _drag(-n.overscroll);
+    } else if (n is ScrollUpdateNotification && n.dragDetails != null && _dy.value > 0 && (n.scrollDelta ?? 0) > 0) {
+      final take = n.scrollDelta!.clamp(0, _dy.value).toDouble();
+      _drag(-take);
+      final at = n.metrics.pixels - take;
+      if (at >= n.metrics.minScrollExtent) Scrollable.of(n.context!).position.correctBy(-take);
+    } else if (n is ScrollEndNotification && _dy.value > 0) {
+      _let(n.dragDetails?.primaryVelocity ?? 0);
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
     final media = MediaQuery.of(context);
+    final w = widget;
     return Padding(
       padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: (media.size.height - media.viewInsets.bottom) * 0.85),
-        child: Container(
-          decoration: BoxDecoration(
-            color: look.sheet,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            boxShadow: const [BoxShadow(color: Color(0x26000000), offset: Offset(0, -8), blurRadius: 30)],
-          ),
-          child: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.only(bottom: 20),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(top: 8),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: look.wash2, borderRadius: BorderRadius.circular(2)))),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 12, 12),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(title, style: look.text(size: 17, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        if (sub != null && sub!.isNotEmpty)
-                          Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: look.text(size: 13, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis)),
+      child: AnimatedBuilder(
+        animation: _dy,
+        builder: (context, child) => Transform.translate(offset: Offset(0, _dy.value), child: child),
+        child: GestureDetector(
+          // Anywhere the rows do not take the drag themselves: the handle and
+          // title always, the rows when they do not scroll.
+          onVerticalDragUpdate: (d) => _drag(d.primaryDelta ?? 0),
+          onVerticalDragEnd: (d) => _let(d.primaryVelocity ?? 0),
+          onVerticalDragCancel: () => _let(0),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: (media.size.height - media.viewInsets.bottom) * 0.85),
+            child: Container(
+              decoration: BoxDecoration(
+                color: look.sheet,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                boxShadow: const [BoxShadow(color: Color(0x26000000), offset: Offset(0, -8), blurRadius: 30)],
+              ),
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.only(bottom: 20),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                    Semantics(
+                      label: 'Drag down to close',
+                      child: Center(child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: look.wash2, borderRadius: BorderRadius.circular(2)))),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 12, 12),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(w.title, style: look.text(size: 17, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            if (w.sub != null && w.sub!.isNotEmpty)
+                              Padding(padding: const EdgeInsets.only(top: 2), child: Text(w.sub!, style: look.text(size: 13, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          ]),
+                        ),
+                        if (w.done != null)
+                          Semantics(
+                            button: true,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => Navigator.of(context).pop(),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                                child: Align(alignment: Alignment.centerRight, widthFactor: 1, child: Text(w.done!, style: look.text(size: 17, weight: FontWeight.w600, color: look.accent, spacing: 0))),
+                              ),
+                            ),
+                          ),
                       ]),
                     ),
-                    if (done != null)
-                      Semantics(
-                        button: true,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => Navigator.of(context).pop(),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                            child: Align(alignment: Alignment.centerRight, widthFactor: 1, child: Text(done!, style: look.text(size: 17, weight: FontWeight.w600, color: look.accent, spacing: 0))),
-                          ),
+                    Flexible(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _scrolled,
+                        // Clamped, so that a pull past the top reaches the
+                        // sheet rather than bouncing the rows.
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: w.children),
                         ),
                       ),
+                    ),
                   ]),
                 ),
-                ...children,
-              ]),
+              ),
             ),
           ),
         ),
