@@ -197,6 +197,7 @@ a flag wins over its variable. The unit reads `/etc/pirc-relay/env`:
 | `PIRC_RELAY_PLAINTEXT` | `--plaintext` | `false` |
 | `PIRC_RELAY_MAX_FRAME_BYTES` | `--max-frame-bytes` | 16 MiB |
 | `PIRC_RELAY_TRUSTED_PROXIES` | `--trusted-proxies` | none |
+| `PIRC_RELAY_PROXY_PROTOCOL_FROM` | `--proxy-protocol-from` | none |
 | `PIRC_RELAY_PUSH_GATEWAY` | `--push-gateway` | none |
 | `PIRC_RELAY_CLOSED_TO_HOSTS` | `--closed-to-hosts` | `false` |
 | `PIRC_RELAY_DATA_DIR` | `--data-dir` | `$XDG_STATE_HOME/pirc-relay`; the unit sets `/var/lib/pirc-relay` |
@@ -260,6 +261,16 @@ Choose one:
   put any address in the header. The relay also counts logins in progress
   by that address, at most 8 from any one, so behind an unlisted proxy all
   peers share the proxy's 8.
+- **A TCP router that passes TLS through**, such as HAProxy in TCP mode
+  choosing a backend by server name, in front of a relay that keeps its
+  own certificate. The relay then sees every peer as the router, unless
+  the router sends a PROXY protocol v2 header (HAProxy's `send-proxy-v2`)
+  and its address is in `PIRC_RELAY_PROXY_PROTOCOL_FROM` (addresses and
+  CIDR prefixes, separated by commas). Every connection from a listed
+  address must open with the header, or it is closed; a header from any
+  other address closes the connection too, so list only your routers.
+  A `LOCAL` header, as a health check sends, leaves the router's own
+  address.
 - **No TLS**, with `PIRC_RELAY_PLAINTEXT=true`, only on a network that
   already encrypts, such as WireGuard or Tailscale.
 

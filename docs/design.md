@@ -393,8 +393,12 @@ The questions, as settled:
    is removed; below.)
 
    **The address** a request records, and the relay logs, is the
-   connection's own, unless that comes from a proxy the operator listed
-   (`PIRC_RELAY_TRUSTED_PROXIES`). Then it is
+   connection's own. A TCP router the operator listed
+   (`PIRC_RELAY_PROXY_PROTOCOL_FROM`), one that passes TLS through
+   unopened, must open each connection with a PROXY protocol v2 header,
+   and the client's address in it stands as the connection's; a header
+   from anyone unlisted closes the connection. Behind a proxy the
+   operator listed (`PIRC_RELAY_TRUSTED_PROXIES`) it is
    the rightmost `X-Forwarded-For` entry that is not itself a listed proxy,
    shown as "<client> via <proxy>". The caps per address count an IPv6
    address by its /64, which one network holds whole. Entries further left were written by

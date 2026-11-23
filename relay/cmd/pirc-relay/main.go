@@ -201,9 +201,11 @@ func envInt(name string, def int) (int, error) {
 // netFlags are serve's flags for where and how it listens, which
 // serve-hosted shares.
 type netFlags struct {
-	listen, cert, key, proxyList *string
-	plaintext                    *bool
-	maxFrame                     *int
+	listen, cert, key, proxyList, routerList *string
+	plaintext                                *bool
+	maxFrame                                 *int
+	// routers are routerList parsed, by check.
+	routers []netip.Prefix
 }
 
 // addNetFlags adds them; maxFrame is the largest frame's default.
@@ -217,12 +219,13 @@ func addNetFlags(fs *flag.FlagSet, maxFrame int) (*netFlags, error) {
 		return nil, err
 	}
 	return &netFlags{
-		listen:    fs.String("listen", envString("PIRC_RELAY_LISTEN", "127.0.0.1:8443"), "address to listen on (PIRC_RELAY_LISTEN)"),
-		cert:      fs.String("tls-cert", envString("PIRC_RELAY_TLS_CERT", ""), "TLS certificate file (PIRC_RELAY_TLS_CERT)"),
-		key:       fs.String("tls-key", envString("PIRC_RELAY_TLS_KEY", ""), "TLS key file (PIRC_RELAY_TLS_KEY)"),
-		plaintext: fs.Bool("plaintext", plainDefault, "serve without TLS: only on a network that already encrypts, or behind a proxy that terminates TLS (PIRC_RELAY_PLAINTEXT)"),
-		maxFrame:  fs.Int("max-frame-bytes", frameDefault, "largest frame accepted or sent (PIRC_RELAY_MAX_FRAME_BYTES)"),
-		proxyList: fs.String("trusted-proxies", envString("PIRC_RELAY_TRUSTED_PROXIES", ""), "comma-separated addresses or CIDR prefixes of proxies whose X-Forwarded-For is believed (PIRC_RELAY_TRUSTED_PROXIES)"),
+		listen:     fs.String("listen", envString("PIRC_RELAY_LISTEN", "127.0.0.1:8443"), "address to listen on (PIRC_RELAY_LISTEN)"),
+		cert:       fs.String("tls-cert", envString("PIRC_RELAY_TLS_CERT", ""), "TLS certificate file (PIRC_RELAY_TLS_CERT)"),
+		key:        fs.String("tls-key", envString("PIRC_RELAY_TLS_KEY", ""), "TLS key file (PIRC_RELAY_TLS_KEY)"),
+		plaintext:  fs.Bool("plaintext", plainDefault, "serve without TLS: only on a network that already encrypts, or behind a proxy that terminates TLS (PIRC_RELAY_PLAINTEXT)"),
+		maxFrame:   fs.Int("max-frame-bytes", frameDefault, "largest frame accepted or sent (PIRC_RELAY_MAX_FRAME_BYTES)"),
+		proxyList:  fs.String("trusted-proxies", envString("PIRC_RELAY_TRUSTED_PROXIES", ""), "comma-separated addresses or CIDR prefixes of proxies whose X-Forwarded-For is believed (PIRC_RELAY_TRUSTED_PROXIES)"),
+		routerList: fs.String("proxy-protocol-from", envString("PIRC_RELAY_PROXY_PROTOCOL_FROM", ""), "comma-separated addresses or CIDR prefixes of TCP routers whose every connection opens with a PROXY protocol v2 header, the client's address then standing as the connection's; a header from anyone else is refused (PIRC_RELAY_PROXY_PROTOCOL_FROM)"),
 	}, nil
 }
 
@@ -234,6 +237,9 @@ func (n *netFlags) check() (useTLS bool, proxies []netip.Prefix, err error) {
 	}
 	if proxies, err = proxy.Parse(*n.proxyList); err != nil {
 		return false, nil, err
+	}
+	if n.routers, err = proxy.Parse(*n.routerList); err != nil {
+		return false, nil, fmt.Errorf("--proxy-protocol-from: %w", err)
 	}
 	useTLS = *n.cert != "" || *n.key != ""
 	switch {
@@ -250,6 +256,12 @@ func (n *netFlags) check() (useTLS bool, proxies []netip.Prefix, err error) {
 func warnProxies(log *slog.Logger, proxies []netip.Prefix) {
 	for _, p := range proxy.Wide(proxies) {
 		log.Warn("a trusted proxy prefix covers more than one address: any peer inside it can give any address as its own", "prefix", p)
+	}
+}
+
+func warnRouters(log *slog.Logger, routers []netip.Prefix) {
+	for _, p := range proxy.Wide(routers) {
+		log.Warn("a PROXY protocol prefix covers more than one address: any peer inside it can give any address as its own", "prefix", p)
 	}
 }
 
@@ -288,6 +300,11 @@ func run(log *slog.Logger, n *netFlags, useTLS bool, handler http.Handler, shutd
 	ln, err := net.Listen("tcp", *n.listen)
 	if err != nil {
 		return err
+	}
+	ln = proxyListener(ln, n.routers)
+	warnRouters(log, n.routers)
+	if len(n.routers) > 0 {
+		attrs = append(attrs, "proxy_protocol_from", *n.routerList)
 	}
 	log.Info("listening", append([]any{"url", fmt.Sprintf("%s://%s%s", scheme, *n.listen, path)}, attrs...)...)
 	if useTLS {
