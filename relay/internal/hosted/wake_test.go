@@ -176,3 +176,36 @@ func TestWakeGoneHandleUnregistered(t *testing.T) {
 	}
 	t.Fatal("a handle the gateway no longer knows stayed registered")
 }
+
+// A window's wake at its end looks at the account as loaded then: one
+// unloaded and loaded again meanwhile, whose phone is now connected, is
+// not woken.
+func TestWakeWindowAcrossReload(t *testing.T) {
+	g := newFakeGateway(t)
+	h := newHarness(t, func(c *Config) { c.PushGateway = g.URL; c.WakeWindow = 500 * time.Millisecond })
+	ta, _, host, browser, p, hc, b, r := listAccount(h)
+	registerPush(b, "browser")
+	for _, c := range []*client{p, b, r} {
+		c.ws.Close(websocket.StatusNormalClosure, "")
+	}
+	time.Sleep(100 * time.Millisecond)
+	announcePush(hc, host, "s", true)
+	if got := g.woken(1); len(got) != 1 {
+		t.Fatalf("woken %v", got)
+	}
+	hc.ws.Close(websocket.StatusNormalClosure, "")
+	time.Sleep(100 * time.Millisecond)
+	h.srv.mu.Lock()
+	loaded := h.srv.accounts[string(ta.id)] != nil
+	h.srv.mu.Unlock()
+	if loaded {
+		t.Fatal("the account is still loaded")
+	}
+	hc2, _ := h.login(host, ta.id)
+	announcePush(hc2, host, "s", true)
+	h.login(browser, ta.id)
+	time.Sleep(600 * time.Millisecond)
+	if got := g.woken(1); len(got) != 1 {
+		t.Errorf("a connected phone was woken at the window's end: %v", got)
+	}
+}

@@ -5,6 +5,7 @@ package hosted
 import (
 	"bytes"
 	"encoding/binary"
+	"google.golang.org/protobuf/proto"
 	"testing"
 	"time"
 
@@ -301,40 +302,51 @@ func TestChannelRemoval(t *testing.T) {
 }
 
 // Small messages reach the frames queued toward one end of a channel
-// long before its bytes: the channel closes, RATE_LIMITED, and the
-// connection stays.
+// long before its bytes: the channel closes, RATE_LIMITED, and neither
+// connection does. Run on connections whose writers are stopped, so
+// that nothing drains their queues.
 func TestChannelQueueCapSmallMessages(t *testing.T) {
 	h := newHarness(t, nil)
-	sa := newSealedAccount(h)
-	id := open(t, sa.b, sa.hc, sa.hst, "i1")
-	sa.hc.send(msgFrame(id, filled(1, 48)))
-	gotMessage(sa.b)
-	sa.hc.hold.Lock()
-	closed := false
-	for i := 0; i < 200000 && !closed; i++ {
-		sa.b.send(msgFrame(id, filled(2, MinChannelMessageBytes)))
-		if i%500 != 0 {
-			continue
+	stopped := func() *conn {
+		return &conn{send: make(chan outFrame, h.srv.cfg.SendQueue), maxQueued: int64(h.srv.cfg.SendQueueBytes),
+			channels: map[uint64]*channel{}, done: make(chan struct{}), closed: make(chan struct{})}
+	}
+	client, proc := stopped(), stopped()
+	h.srv.mu.Lock()
+	defer h.srv.mu.Unlock()
+	ch := &channel{id: 1, client: client, proc: proc, timer: time.NewTimer(time.Hour)}
+	client.channels[1], proc.channels[1] = ch, ch
+	sent := 0
+	for client.channels[1] != nil && sent <= h.srv.cfg.MaxChannelQueuedFrames {
+		if e := h.srv.channelMessage(client, &pb.ChannelMessage{ChannelId: 1, Message: filled(2, MinChannelMessageBytes)}); e != nil {
+			t.Fatal(e)
 		}
-		for {
-			f, err := sa.b.read(time.Millisecond)
-			if err != nil {
-				break
-			}
-			if f.GetCloseChannel().GetChannelId() == id {
-				if f.GetCloseChannel().Code != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
-					t.Errorf("closed %v", f.GetCloseChannel())
-				}
-				closed = true
-			}
+		sent++
+	}
+	if client.channels[1] != nil || sent != h.srv.cfg.MaxChannelQueuedFrames+1 {
+		t.Fatalf("the channel is open after %d messages", sent)
+	}
+	select {
+	case <-client.done:
+		t.Fatal("the client's connection closed")
+	case <-proc.done:
+		t.Fatal("the process's connection closed")
+	default:
+	}
+	last := func(c *conn) *pb.Frame {
+		var o outFrame
+		for len(c.send) > 0 {
+			o = <-c.send
+		}
+		f := &pb.Frame{}
+		if err := proto.Unmarshal(o.b, f); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	for name, c := range map[string]*conn{"client": client, "process": proc} {
+		if cl := last(c).GetCloseChannel(); cl.GetChannelId() != 1 || cl.GetCode() != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+			t.Errorf("the %s was told %v", name, cl)
 		}
 	}
-	sa.hc.hold.Unlock()
-	if !closed {
-		t.Fatal("the channel was not closed")
-	}
-	if c := gotClose(sa.hc, id); c != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
-		t.Errorf("the process was told %v", c)
-	}
-	open(t, sa.b, sa.hc, sa.hst, "i1")
 }

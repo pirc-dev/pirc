@@ -80,6 +80,15 @@ func (s *Server) asleepLocked(a *account) []sleeper {
 	return out
 }
 
+// loadedLocked is the account as loaded now: a window's account may have
+// been unloaded and loaded again since. Under s.mu.
+func (s *Server) loadedLocked(a *account) *account {
+	if cur := s.accounts[string(a.id)]; cur != nil {
+		return cur
+	}
+	return a
+}
+
 func windowKey(a *account, key []byte) string { return string(a.id) + string(key) }
 
 // wakeLocked wakes a's phones that are asleep. Under s.mu.
@@ -126,7 +135,7 @@ func (w *waker) close(a *account, key []byte, win *wakeWindow) {
 	}
 	w.s.mu.Lock()
 	asleep := false
-	for _, p := range w.s.asleepLocked(a) {
+	for _, p := range w.s.asleepLocked(w.s.loadedLocked(a)) {
 		asleep = asleep || bytes.Equal(p.key, key)
 	}
 	w.s.mu.Unlock()
@@ -149,6 +158,7 @@ func (w *waker) send(a *account, key []byte) {
 	defer func() { <-w.inFlight }()
 	s := w.s
 	s.mu.Lock()
+	a = s.loadedLocked(a)
 	handle := ""
 	for _, p := range s.asleepLocked(a) {
 		if bytes.Equal(p.key, key) {
