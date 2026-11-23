@@ -279,11 +279,11 @@ func run(log *slog.Logger, n *netFlags, useTLS bool, handler http.Handler, shutd
 	// The certificate is loaded and the address taken before the relay says
 	// it listens, so that a bad file or a busy port is the last word logged.
 	if useTLS {
-		pair, err := tls.LoadX509KeyPair(*n.cert, *n.key)
+		certs, err := newCertFiles(*n.cert, *n.key, log)
 		if err != nil {
 			return fmt.Errorf("TLS certificate: %w", err)
 		}
-		hs.TLSConfig = &tls.Config{Certificates: []tls.Certificate{pair}}
+		hs.TLSConfig = &tls.Config{GetCertificate: certs.get}
 	}
 	ln, err := net.Listen("tcp", *n.listen)
 	if err != nil {

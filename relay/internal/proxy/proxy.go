@@ -53,8 +53,10 @@ func trusted(a netip.Addr, proxies []netip.Prefix) bool {
 	return false
 }
 
-// ClientAddr is the peer's address: addr, bare, to limit it by,
-// and shown, for logs and approval requests. From a trusted proxy it is
+// ClientAddr is the peer's address: addr, to limit it by, and shown, for
+// logs and approval requests. addr is an IPv4 address bare, and an IPv6
+// address as its /64, since one network has every address of its /64 to
+// pass for many peers with. From a trusted proxy it is
 // the rightmost X-Forwarded-For entry that is not itself a trusted proxy:
 // each proxy appends the address it saw, so anything left of that was
 // written by the client and may be forged. From anyone else the header is
@@ -65,27 +67,38 @@ func ClientAddr(r *http.Request, proxies []netip.Prefix) (addr, shown string) {
 		return r.RemoteAddr, r.RemoteAddr
 	}
 	if !trusted(ap.Addr().Unmap(), proxies) {
-		return ap.Addr().Unmap().String(), r.RemoteAddr
+		return limitKey(ap.Addr()), r.RemoteAddr
 	}
 	var hops []string
 	for _, v := range r.Header.Values("X-Forwarded-For") {
 		hops = append(hops, strings.Split(v, ",")...)
 	}
-	client := ""
+	client, key := "", ""
 	for i := len(hops) - 1; i >= 0; i-- {
 		a, err := netip.ParseAddr(strings.TrimSpace(hops[i]))
 		if err != nil {
 			break
 		}
 		client = a.Unmap().String()
+		key = limitKey(a)
 		if !trusted(a.Unmap(), proxies) {
 			break
 		}
 	}
 	if client == "" {
-		return ap.Addr().Unmap().String(), r.RemoteAddr
+		return limitKey(ap.Addr()), r.RemoteAddr
 	}
-	return client, client + " via " + r.RemoteAddr
+	return key, client + " via " + r.RemoteAddr
+}
+
+// limitKey is a as ClientAddr limits it: an IPv4 address (or IPv4-mapped
+// one) bare, an IPv6 address as its /64.
+func limitKey(a netip.Addr) string {
+	a = a.Unmap()
+	if a.Is4() {
+		return a.String()
+	}
+	return netip.PrefixFrom(a, 64).Masked().String()
 }
 
 // Wide reports the prefixes that cover more than one address: any peer

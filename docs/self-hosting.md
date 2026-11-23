@@ -230,8 +230,8 @@ Choose one:
   its two `LoadCredential=` paths to your certificate (the full chain) and
   key. systemd reads them as root and gives the relay private copies, so
   the key can stay readable by root only. Leave `PIRC_RELAY_PLAINTEXT`
-  false. The relay reads the certificate when it starts, so **restart it
-  after every renewal**, for example with certbot's
+  false. systemd copies the credentials when the relay starts, so
+  **restart it after every renewal**, for example with certbot's
   `--deploy-hook "systemctl restart pirc-relay"`. Hosts and clients reconnect on their
   own within about half a minute.
 - **A proxy that terminates TLS**, such as nginx or Caddy, in front of a

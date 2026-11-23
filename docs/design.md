@@ -396,7 +396,8 @@ The questions, as settled:
    connection's own, unless that comes from a proxy the operator listed
    (`PIRC_RELAY_TRUSTED_PROXIES`). Then it is
    the rightmost `X-Forwarded-For` entry that is not itself a listed proxy,
-   shown as "<client> via <proxy>". Entries further left were written by
+   shown as "<client> via <proxy>". The caps per address count an IPv6
+   address by its /64, which one network holds whole. Entries further left were written by
    the client, and a header from anyone unlisted is ignored: trusted from
    any source, the header would let any peer that reaches the relay
    directly, or on the same private network as its proxy, claim any
@@ -1351,9 +1352,12 @@ built; steps 14 and 15 are not finished.
      and the registry are created `0600`, and a `sudo pirc-relay add-host`
      run as root would lock the service out. So each command refuses to
      touch a data directory owned by another user, naming the owner. The
-     relay reads its certificate once: a renewed certificate needs a
-     restart (a renewal hook). Peers reconnect on their own within about
-     half a minute (the relay client's backoff caps at 30 s).
+     relay takes a certificate renewed over its files at the next
+     handshake, with no restart, and keeps serving the last good pair
+     while the two files do not match. Given the files by systemd's
+     `LoadCredential=`, which copies them at start, it needs a restart
+     (a renewal hook). Peers reconnect on their own within about half a
+     minute (the relay client's backoff caps at 30 s).
    - **Extension package.** Published to its own public repository,
      `pirc-extension`, holding only what pi installs: `package.json`
      (`"type": "module"`, a pi manifest pointing at the bundle, pi's
