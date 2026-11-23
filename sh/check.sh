@@ -39,6 +39,12 @@ if [ -n "$agpl" ]; then
   exit 1
 fi
 
+step "release builds: the relay and the gateway link only the modules NOTICE lists"
+built=$(mktemp -d)
+sh/build.sh relay "$built/relay" >/dev/null
+sh/build.sh gateway "$built/gateway" >/dev/null
+rm -rf "$built"
+
 step "tsc"
 node_modules/.bin/tsc -p .
 node_modules/.bin/tsc -p web/page

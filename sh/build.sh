@@ -59,6 +59,7 @@ case "$what" in
     # The modules the binary links besides its own, as NOTICE and
     # third_party/ list them; a change there must update both.
     relay_modules="github.com/coder/websocket v1.8.15
+github.com/pires/go-proxyproto v0.11.0
 google.golang.org/protobuf v1.36.12
 rsc.io/qr v0.2.0"
     mkdir -p "$out/third_party" "$out/service"
@@ -73,7 +74,7 @@ $linked"
     # The relay is AGPL-3.0 (relay/cmd/pirc-relay/LICENSE).
     cp relay/cmd/pirc-relay/LICENSE "$out/LICENSE"
     cp NOTICE "$out/"
-    for d in go golang.org-x coder-websocket go-protobuf rsc-qr; do cp -R "third_party/$d" "$out/third_party/"; done
+    for d in go golang.org-x coder-websocket pires-go-proxyproto go-protobuf rsc-qr; do cp -R "third_party/$d" "$out/third_party/"; done
     cp relay/service/* "$out/service/"
     if [ -z "${GOOS:-}${GOARCH:-}" ]; then
       [ "$("$out/pirc-relay" version)" = "$version" ] || die "the relay does not report version $version"

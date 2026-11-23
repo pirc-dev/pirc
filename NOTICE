@@ -56,6 +56,8 @@ pirc-relay (Go):
     third_party/golang.org-x/
   - github.com/coder/websocket 1.8.15, Copyright (c) 2025 Coder. ISC:
     third_party/coder-websocket/
+  - github.com/pires/go-proxyproto 0.11.0, Copyright 2016 Paulo Pires.
+    Apache-2.0: third_party/pires-go-proxyproto/
   - google.golang.org/protobuf 1.36.12, Copyright (c) 2018 The Go
     Authors. BSD-3-Clause, with a patent grant: third_party/go-protobuf/
   - rsc.io/qr 0.2.0, Copyright (c) 2009 The Go Authors. BSD-3-Clause:
