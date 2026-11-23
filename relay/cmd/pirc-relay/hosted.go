@@ -5,11 +5,11 @@
 // Built only with the hosted tag, so that until stage 6 no release has it:
 //
 //	go build -tags hosted ./cmd/pirc-relay
-//	pirc-relay serve-hosted --origin wss://relay.example (--tls-cert F --tls-key F | --plaintext) [--test-attestation | stores' flags]
+//	pirc-relay serve-hosted --origin wss://relay.example (--tls-cert F --tls-key F | --plaintext) [--push-gateway URL] [--test-attestation | stores' flags]
 //
 // Its accounts are in hosted.db in the data directory, which a self-hosted
 // relay's registry may share: the two are apart. Besides serve's network
-// flags it reads PIRC_RELAY_ORIGIN and PIRC_RELAY_TEST_ATTESTATION, and
+// flags it reads PIRC_RELAY_ORIGIN, PIRC_RELAY_PUSH_GATEWAY and PIRC_RELAY_TEST_ATTESTATION, and
 // for the stores' real checks (hosted.Stores) PIRC_RELAY_APPLE_APP_ID,
 // PIRC_RELAY_APPLE_IAP_KEY_ID, PIRC_RELAY_APPLE_ISSUER_ID,
 // PIRC_RELAY_APPLE_IAP_KEY, PIRC_RELAY_GOOGLE_CREDENTIALS and
@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"pirc.dev/relay/internal/hosted"
+	"pirc.dev/relay/internal/server"
 )
 
 func init() { extraCommands["serve-hosted"] = serveHosted }
@@ -55,6 +56,7 @@ func serveHosted(args []string) error {
 	if err != nil {
 		return err
 	}
+	gatewayFlag := fs.String("push-gateway", envString("PIRC_RELAY_PUSH_GATEWAY", ""), "push gateway to wake the account's phones through when a computer announces a session with push; none when empty (PIRC_RELAY_PUSH_GATEWAY)")
 	recheck := fs.Duration("recheck-every", 10*time.Minute, "how often to look for subscriptions due to be asked about again")
 	sandbox := fs.Bool("store-sandbox", sandboxDefault, "take App Attest's development environment and the stores' sandbox and test purchases: for a relay of test builds (PIRC_RELAY_STORE_SANDBOX)")
 	if err := parse(fs, dataDir, args); err != nil {
@@ -71,8 +73,15 @@ func serveHosted(args []string) error {
 	if err := checkOrigin(*origin); err != nil {
 		return err
 	}
+	gateway, err := server.ParseGateway(*gatewayFlag)
+	if err != nil {
+		return err
+	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	warnProxies(log, proxies)
+	if gateway == "" {
+		log.Info("no push gateway: phones registered for push are not woken (--push-gateway)")
+	}
 	var verifier hosted.Verifier
 	switch {
 	case *testAtt:
@@ -122,6 +131,7 @@ func serveHosted(args []string) error {
 		Origin:         *origin,
 		Verifier:       verifier,
 		MaxFrameBytes:  *nf.maxFrame,
+		PushGateway:    gateway,
 		TrustedProxies: proxies,
 		Logger:         log,
 	})

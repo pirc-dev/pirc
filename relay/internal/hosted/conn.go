@@ -59,7 +59,10 @@ type conn struct {
 	// A join this connection waits for, or takes part in; under Server.mu.
 	wait   *joinWait
 	joinID string
-	send   chan outFrame
+	// Closes a connection without an account that is in no wait or join;
+	// under Server.mu.
+	idle *time.Timer
+	send chan outFrame
 	// Bytes in send, and the most allowed.
 	queued    atomic.Int64
 	maxQueued int64

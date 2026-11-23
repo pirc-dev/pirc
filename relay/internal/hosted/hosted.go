@@ -83,7 +83,7 @@ const (
 	// The largest frame accepted before Welcome.
 	loginReadLimit = 4096
 	// A join step, and the steps one join may pass on.
-	maxJoinStepBytes   = 128 << 10
+	maxJoinStepBytes   = 65535
 	maxJoinSteps       = 8
 	MaxPushHandleBytes = 4096
 )
@@ -138,10 +138,20 @@ type Config struct {
 	// How long an account stays locked before it is deleted (lock.go).
 	LockedFor time.Duration
 	// Join lookups per hour, per account and per address; and joins one
-	// address may be waiting on at once.
+	// address, and the server, may have waiting at once.
 	MaxLookupsPerAccount int
 	MaxLookupsPerAddr    int
 	MaxWaitsPerAddr      int
+	MaxWaits             int
+	// How long a connection logged in without an account may be in no
+	// wait or join before it is closed.
+	NoAccountIdle time.Duration
+	// The push gateway's address (server.ParseGateway's result), through
+	// which a session announced with push wakes the account's phones;
+	// none when empty. At most one wake per phone per WakeWindow, and one
+	// more at its end if asked for meanwhile.
+	PushGateway string
+	WakeWindow  time.Duration
 	// List versions taken per hour, per account.
 	MaxListPublishesPerAccount int
 	// Connections logged in at once, per key and per account; more are
@@ -175,6 +185,8 @@ func (c *Config) defaults() error {
 	set(&c.HelloTimeout, 5*time.Second)
 	set(&c.PingInterval, 25*time.Second)
 	set(&c.JoinTimeout, 10*time.Minute)
+	set(&c.NoAccountIdle, 10*time.Minute)
+	set(&c.WakeWindow, 10*time.Second)
 	set(&c.LockedFor, 60*24*time.Hour)
 	set(&c.NoticeRetention, 10*time.Minute)
 	set(&c.ChannelReplyTimeout, 30*time.Second)
@@ -202,6 +214,7 @@ func (c *Config) defaults() error {
 	seti(&c.MaxLookupsPerAccount, 20)
 	seti(&c.MaxLookupsPerAddr, 20)
 	seti(&c.MaxWaitsPerAddr, 4)
+	seti(&c.MaxWaits, 1024)
 	seti(&c.MaxListPublishesPerAccount, 30)
 	seti(&c.MaxConnsPerKey, 64)
 	seti(&c.MaxConnsPerAccount, 512)
@@ -231,6 +244,8 @@ type Server struct {
 	// Every logged-in connection.
 	conns map[*conn]struct{}
 	joins joins
+	// Nil without a push gateway.
+	waker *waker
 	// List versions taken this hour, by account.
 	listPublishes     map[string]*counter
 	lastPublishesTrim time.Time
@@ -245,7 +260,7 @@ func New(cfg Config) (*Server, error) {
 	if err := cfg.defaults(); err != nil {
 		return nil, err
 	}
-	return &Server{
+	s := &Server{
 		cfg:            cfg,
 		log:            cfg.Logger,
 		store:          cfg.Store,
@@ -255,7 +270,11 @@ func New(cfg Config) (*Server, error) {
 		joins:          newJoins(),
 		listPublishes:  map[string]*counter{},
 		namesPublishes: map[string]*counter{},
-	}, nil
+	}
+	if cfg.PushGateway != "" {
+		s.waker = newWaker(s)
+	}
+	return s, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -502,6 +521,7 @@ func (s *Server) admitByListLocked(c *conn, pub, id, nonce []byte, held uint64, 
 			return nil, badInstance
 		}
 		s.conns[c] = struct{}{}
+		s.armIdleLocked(c)
 		c.queue(&pb.Frame{Body: &pb.Frame_Welcome{Welcome: &pb.Welcome{
 			ProtocolVersion: pb.ProtocolVersion_PROTOCOL_VERSION_V1ALPHA2,
 			MaxFrameBytes:   uint32(s.cfg.MaxFrameBytes),
@@ -614,6 +634,9 @@ func (s *Server) disconnect(c *conn) {
 		return
 	}
 	delete(s.conns, c)
+	if c.idle != nil {
+		c.idle.Stop()
+	}
 	s.joins.dropLocked(s, c)
 	a := c.acct
 	if a == nil {

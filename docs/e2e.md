@@ -255,8 +255,10 @@ computer, a browser or another phone, joins the same way.
 
 1. The new device (a computer at `/pirc join`, or the join screen of a browser or phone) makes a
    one-time 256-bit secret and a lookup, and shows them as a **QR code and, under it, the same
-   value as text**, about 60 characters. The relay sees the lookup, only to pair the two devices,
-   and never the secret.
+   value as text**, about 60 characters. The lookup is 8 Crockford base32 characters, upper
+   case, made at random: 40 bits, which with the caps on lookups makes guessing one impractical.
+   The relay sees the lookup, only to pair the two devices, and never the secret. Only the
+   account's phone looks one up; another client's lookup is refused and the wait stays.
 2. The account's phone scans the code, or the person pastes the text into the app; on a phone
    that is in Termius or Blink, the text is copied from the terminal and pasted into PiRC.
 3. The phone starts **Noise `XXpsk3`** with the new device through the relay, with the secret as
@@ -309,7 +311,10 @@ logs in, is given the newest version, and is then refused, so that it learns of 
 - App Attest (iOS) or Play Integrity (Android) runs when a phone makes an account or joins one,
   and the relay checks a subscription per account. An account is free while any of its phones
   has a live subscription or trial, and the browsers on it are included. Accounts with no phone
-  pay later, by Stripe or a merchant of record.
+  pay later, by Stripe or a merchant of record. A joining phone's attestation is kept with the
+  join and stored for its key only when the account's phone publishes a list version that has the
+  key while the join is alive, so a join that fails leaves nothing behind. The relay passes at
+  most 8 steps of the join, each at most 65,535 bytes, and keeps none of them.
 - Against abuse: the hosted relay has a domain of its own, not `pirc.dev`; there are caps per
   account (section 3) and per address, join lookups among them; sign-ups can be closed, to invite
   codes only; an account can be deleted, only from the account's phone, as only it changes the

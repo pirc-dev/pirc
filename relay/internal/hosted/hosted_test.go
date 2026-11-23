@@ -627,17 +627,17 @@ func TestJoin(t *testing.T) {
 	lookup := func(id, l string) {
 		p.send(&pb.Frame{Body: &pb.Frame_JoinLookup{JoinLookup: &pb.JoinLookup{RequestId: id, Lookup: l}}})
 	}
-	wait(d, "K7QM")
-	wait(e, "K7QM")
+	wait(d, "K7QMK7QM")
+	wait(e, "K7QMK7QM")
 	if err := e.anError(); err.Code != pb1.ErrorCode_ERROR_CODE_INVALID {
 		t.Errorf("the same lookup twice: %v", err)
 	}
-	wait(e, "K7QU")
+	wait(e, "K7QUK7QU")
 	if err := e.anError(); err.Code != pb1.ErrorCode_ERROR_CODE_INVALID {
 		t.Errorf("not Crockford: %v", err)
 	}
 
-	lookup("l1", "K7QM")
+	lookup("l1", "K7QMK7QM")
 	pc := p.until("JoinPaired", func(f *pb.Frame) bool { return f.GetJoinPaired() != nil }).GetJoinPaired()
 	dc := d.until("JoinPaired", func(f *pb.Frame) bool { return f.GetJoinPaired() != nil }).GetJoinPaired()
 	if pc.RequestId != "l1" || pc.JoinId == "" || pc.JoinId != dc.JoinId {
@@ -663,20 +663,20 @@ func TestJoin(t *testing.T) {
 	}
 
 	// Each lookup pairs once.
-	lookup("l2", "K7QM")
+	lookup("l2", "K7QMK7QM")
 	if err := p.errorFor("l2"); err.Code != pb1.ErrorCode_ERROR_CODE_SESSION_NOT_FOUND {
 		t.Errorf("a lookup used: %v", err)
 	}
 	// A side that goes ends the join for the other.
-	wait(d, "AB12")
-	lookup("l3", "AB12")
+	wait(d, "AB12AB12")
+	lookup("l3", "AB12AB12")
 	p.until("JoinPaired", func(f *pb.Frame) bool { return f.GetJoinPaired() != nil })
 	d.ws.Close(websocket.StatusNormalClosure, "")
 	p.until("JoinEnded", func(f *pb.Frame) bool { return f.GetJoinEnded() != nil })
 	// Lookups are capped per account: this is the fourth.
-	lookup("l4", "ZZZZ")
+	lookup("l4", "ZZZZZZZZ")
 	p.errorFor("l4")
-	lookup("l5", "ZZZZ")
+	lookup("l5", "ZZZZZZZZ")
 	if err := p.errorFor("l5"); err.Code != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
 		t.Errorf("past the cap: %v", err)
 	}
@@ -685,12 +685,12 @@ func TestJoin(t *testing.T) {
 func TestJoinExpires(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.JoinTimeout = 200 * time.Millisecond })
 	d, _ := h.login(newDev(5), nil)
-	d.send(&pb.Frame{Body: &pb.Frame_JoinWait{JoinWait: &pb.JoinWait{Lookup: "K7QM"}}})
+	d.send(&pb.Frame{Body: &pb.Frame_JoinWait{JoinWait: &pb.JoinWait{Lookup: "K7QMK7QM"}}})
 	if err := d.anError(); err.Code != pb1.ErrorCode_ERROR_CODE_TIMEOUT {
 		t.Errorf("expiry: %v", err)
 	}
 	// The lookup is free again.
-	d.send(&pb.Frame{Body: &pb.Frame_JoinWait{JoinWait: &pb.JoinWait{Lookup: "K7QM"}}})
+	d.send(&pb.Frame{Body: &pb.Frame_JoinWait{JoinWait: &pb.JoinWait{Lookup: "K7QMK7QM"}}})
 	if err := d.anError(); err.Code != pb1.ErrorCode_ERROR_CODE_TIMEOUT {
 		t.Errorf("waiting again: %v", err)
 	}

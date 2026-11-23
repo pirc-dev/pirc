@@ -6,18 +6,16 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	pushgw "pirc.dev/relay/internal/gateway"
 	"pirc.dev/relay/internal/registry"
 )
 
@@ -187,20 +185,7 @@ func (w *waker) send(key string) {
 }
 
 func (w *waker) post(handle string) (int, error) {
-	body, _ := json.Marshal(map[string]string{"handle": handle})
 	ctx, cancel := context.WithTimeout(context.Background(), wakeTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.s.cfg.PushGateway+"/v1/wake", bytes.NewReader(body))
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", Software)
-	resp, err := w.client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-	return resp.StatusCode, nil
+	return pushgw.Wake(ctx, w.client, w.s.cfg.PushGateway, handle, Software)
 }

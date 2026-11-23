@@ -218,8 +218,9 @@ func (s *Server) announce(c *conn, an *pb.SessionAnnounce) *frameError {
 	}
 	se.ref, se.owner, se.announcedAt, se.announcements, se.notices = ref, c, s.cfg.Now(), ann, notices
 	s.updatedLocked(a, se)
-	// an.Push: waking phones comes with the push gateway (docs/design.md,
-	// step 14, stage 5, part 5).
+	if an.GetPush() && s.waker != nil {
+		s.waker.wakeLocked(a)
+	}
 	return nil
 }
 

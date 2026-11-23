@@ -2,7 +2,7 @@
 // signing up with version 1 of the list, logging in to the account,
 // publishing newer versions, a removed device told before its close, a
 // refused key retried rather than given up, a computer's sealed copy
-// opened by its client, and Noise IK through a channel.
+// opened by its client, Noise IK through a channel, and Noise XXpsk3 through a join.
 import { create } from "@bufbuild/protobuf";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -344,4 +344,59 @@ test("Noise IK through a channel: the handshake, then transport messages of 0 an
   assert.equal(computerSide.confirmed, true);
   a.phone.conn.stop();
   a.computer.conn.stop();
+});
+
+test("Noise XXpsk3 through a join: the account's phone looks up the new device's 8-character code, and the three messages and a transport message pass", async () => {
+  const noise = await loadNoise();
+  const a = await phoneAndComputer("join");
+  const fromPhone = taker(a.phone);
+  const joiner = connect(await generate(), EMPTY);
+  const fromJoiner = taker(joiner);
+  await joiner.until("ready", () => (joiner.conn.current.kind === "ready" ? true : undefined));
+  const lookup = "K7QMK7QM";
+  joiner.conn.send(create(FrameSchema, { body: { case: "joinWait", value: { lookup } } }));
+  // The relay holds the wait before it takes the lookup: a short lookup is refused.
+  a.phone.conn.send(create(FrameSchema, { body: { case: "joinLookup", value: { requestId: "short", lookup: "K7QM" } } }));
+  const refused = await fromPhone("an error", (f) => (f.body.case === "error" ? f.body.value : undefined));
+  assert.equal(refused.requestId, "short");
+  assert.equal(refused.code, ErrorCode.SESSION_NOT_FOUND);
+  await new Promise((r) => setTimeout(r, 100));
+  a.phone.conn.send(create(FrameSchema, { body: { case: "joinLookup", value: { requestId: "l", lookup } } }));
+  const paired = await fromPhone("JoinPaired", (f) => (f.body.case === "joinPaired" ? f.body.value : undefined));
+  const joinId = paired.joinId;
+  assert.equal((await fromJoiner("JoinPaired", (f) => (f.body.case === "joinPaired" ? f.body.value : undefined))).joinId, joinId);
+
+  const psk = new Uint8Array(32).fill(7);
+  const prologue = new TextEncoder().encode("join test");
+  const initiator = noise.xxpsk3Initiator({ staticKey: noise.staticKey(new Uint8Array(32).fill(1)), prologue, psk });
+  const responder = noise.xxpsk3Responder({ staticKey: noise.staticKey(new Uint8Array(32).fill(2)), prologue, psk });
+  const step = (c: typeof a.phone, message: Uint8Array) => assert.ok(c.conn.send(create(FrameSchema, { body: { case: "joinMessage", value: { joinId, step: message } } })));
+  const stepOf = (f: Frame) => (f.body.case === "joinMessage" ? f.body.value.step : undefined);
+
+  const m1 = await initiator.writeMessage();
+  assert.ok(m1.ok);
+  assert.equal(m1.message.length, 48);
+  step(a.phone, m1.message);
+  assert.ok((await responder.readMessage(await fromJoiner("message 1", stepOf))).ok);
+  const m2 = await responder.writeMessage();
+  assert.ok(m2.ok);
+  assert.equal(m2.message.length, 96);
+  step(joiner, m2.message);
+  assert.ok((await initiator.readMessage(await fromPhone("message 2", stepOf))).ok);
+  const m3 = await initiator.writeMessage();
+  assert.ok(m3.ok && m3.transport);
+  assert.equal(m3.message.length, 64);
+  step(a.phone, m3.message);
+  const r3 = await responder.readMessage(await fromJoiner("message 3", stepOf));
+  assert.ok(r3.ok && r3.transport);
+  assert.deepEqual(r3.transport.handshakeHash, m3.transport.handshakeHash);
+  const sent = m3.transport.send(new TextEncoder().encode("role and keys"));
+  assert.ok(sent.ok);
+  step(a.phone, sent.message);
+  const got = r3.transport.receive(await fromJoiner("transport", stepOf));
+  assert.ok(got.ok);
+  assert.equal(new TextDecoder().decode(got.plaintext), "role and keys");
+  a.phone.conn.stop();
+  a.computer.conn.stop();
+  joiner.conn.stop();
 });

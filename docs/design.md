@@ -2230,6 +2230,44 @@ built; steps 14 and 15 are not finished.
             reserved): who reads a session is inside its channel. The frame
             limit is 1 MiB by default, at least 512 KiB; the largest frame
             is `PublishNames`, about 330 KB.
+          The join's rules (5d):
+          - **The lookup** is 8 Crockford base32 characters, upper case,
+            made at random by the new device. Only the account's phone, by
+            its stored signing key as a client, looks one up; another
+            client's lookup is `PERMISSION_DENIED`, spends none of the
+            account's or address's lookups, and leaves the wait. Each
+            lookup pairs once.
+          - **What the relay holds**: for a wait, the lookup, the
+            connection, the attestation's result and the start; for a join,
+            its ID, the two connections, the steps passed, a timer and the
+            attestation's result, and nothing of any step.
+          - **Steps**: one Noise message each, at most 65,535 bytes (`TOO_LARGE`,
+            not counted), and at most 8 per join; the ninth ends the join
+            (`INVALID`).
+          - **Timeouts**: a wait ends with `TIMEOUT` after ten minutes, and
+            a join paired from it ten minutes after the wait began.
+          - **The attestation** of a phone joining is kept with the join and
+            written for its key only when the account's phone publishes a
+            version of the list that lists that key while the join is
+            alive, so that a join that fails leaves nothing stored.
+          - **Caps**, each a `Config` field: 4 waits per address and 1,024
+            on the server, 20 lookups an hour per account and per address,
+            and a connection logged in without an account and in no wait or
+            join is closed after ten minutes.
+
+          Waking phones (5e):
+          - `SessionAnnounce.push` wakes the account's phones through the
+            push gateway (`--push-gateway`, none by default, as the
+            self-hosted relay's): `POST {gateway}/v1/wake` with the
+            phone's handle, for each client on the account's newest list
+            that has a stored push handle and is connected under neither
+            its signing key nor its read-only key. Only the announcing
+            computer's account is woken, and nothing of the sealed copies,
+            the session or the account goes to the gateway. At most one
+            wake per phone every 10 seconds (`WakeWindow`), and one more at
+            the window's end if asked for meanwhile and the phone still
+            sleeps; 8 in flight. A handle the gateway answers 404 or 410
+            for is unregistered.
        6. **The computer**: its keys and list files, a channel per client,
           sealed announcements; `/pirc join` and `/pirc leave`.
        7. **Joining** from the app, the web app and the terminal.

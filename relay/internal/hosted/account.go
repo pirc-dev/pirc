@@ -245,6 +245,7 @@ func (s *Server) takeListLocked(a *account, next *accountList) *frameError {
 		return internal()
 	}
 	a.list = next
+	s.storeAttestationsLocked(a)
 	for o := range a.conns {
 		if o.device == nil || o.removed || next.listed(o.device) {
 			continue
@@ -344,8 +345,6 @@ func (s *Server) sendDevicesLocked(a *account, to map[*conn]struct{}) {
 func (s *Server) pushDevicesLocked(a *account) { s.sendDevicesLocked(a, a.watchers) }
 
 // setPush registers or, with "", unregisters this client's push handle.
-// Waking through the push gateway comes with the app's notifications
-// (docs/design.md, step 14, stage 5).
 func (s *Server) setPush(c *conn, handle string) *frameError {
 	if len(handle) > MaxPushHandleBytes {
 		return invalid("push handle too long")

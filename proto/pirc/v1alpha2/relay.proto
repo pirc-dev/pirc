@@ -215,7 +215,8 @@ message SessionAnnounce {
   pirc.v1alpha1.SessionRef session = 1;
   reserved 2, 3;
   reserved "keys", "payload";
-  // Wake the account's phones registered for push.
+  // Wake the account's phones registered for push and not connected,
+  // through the relay's push gateway if it has one.
   bool push = 4;
   // One per client on the list, to its box key.
   repeated SealedCopy announcements = 5;
@@ -365,21 +366,25 @@ message Done {
   string request_id = 1;
 }
 
-// New device to relay, logged in without an account: wait for a client to
-// type the code whose first four characters are `lookup`. The relay
-// answers JoinPaired when one does, or Error with RATE_LIMITED or INVALID
+// New device to relay, logged in without an account: wait for the
+// account's phone to look up `lookup`, which the code carries. The relay
+// answers JoinPaired when it does, or Error with RATE_LIMITED or INVALID
 // (a lookup already waiting). The wait ends after ten minutes, with Error
-// TIMEOUT, and a join paired from it ten minutes after the wait began.
+// TIMEOUT, and a join paired from it ten minutes after the wait began. A
+// connection logged in without an account that is in no wait or join is
+// closed after ten minutes.
 message JoinWait {
-  // Four Crockford base32 characters, upper case.
+  // Eight Crockford base32 characters, upper case: 40 bits, made at random
+  // by the new device.
   string lookup = 1;
   // A phone's (docs/e2e.md, section 7); unset for a host or a browser.
   Attestation attestation = 2;
 }
 
-// Client to relay: join the device waiting under `lookup`. Answered by
-// JoinPaired, or Error with SESSION_NOT_FOUND. Lookups are capped per
-// account and per address.
+// The account's phone to relay: join the device waiting under `lookup`.
+// Answered by JoinPaired, or Error with SESSION_NOT_FOUND; another client
+// gets PERMISSION_DENIED, which spends nothing and leaves the wait. Lookups
+// are capped per account and per address.
 message JoinLookup {
   string request_id = 1;
   string lookup = 2;
@@ -391,7 +396,8 @@ message JoinPaired {
   string join_id = 2;
 }
 
-// Either side: one step of the join, passed to the other side unread.
+// Either side: one step of the join, passed to the other side unread: at
+// most 65,535 bytes, and 8 steps in a join, the ninth ending it.
 message JoinMessage {
   string join_id = 1;
   bytes step = 2;

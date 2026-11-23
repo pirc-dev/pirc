@@ -1,23 +1,25 @@
-// Joining: the relay pairs the device that shows a code with the client
-// that types it, by the code's four lookup characters, and passes their
-// steps along unread. Each lookup pairs
-// once; a wait ends after the code's ten minutes, and the join with it.
+// Joining: the relay pairs the device that shows a code with the account's
+// phone that types it, by the code's eight lookup characters, and passes
+// their steps along unread. Each lookup pairs once; a wait ends after the
+// code's ten minutes, and the join with it.
 
 package hosted
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"regexp"
 	"time"
 
+	"github.com/coder/websocket"
 	pb1 "pirc.dev/relay/internal/pb/pirc/v1alpha1"
 	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
 
-// Four Crockford base32 characters, upper case.
-var lookupPattern = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}$`)
+// Eight Crockford base32 characters, upper case.
+var lookupPattern = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{8}$`)
 
 type joinWait struct {
 	lookup  string
@@ -27,11 +29,15 @@ type joinWait struct {
 	timer   *time.Timer
 }
 
+// A join holds no step. Its attestation is the joining phone's, kept
+// until the account's phone publishes a list that has the device (see
+// storeAttestationsLocked), so that a join that fails stores nothing.
 type join struct {
 	id             string
 	device, client *conn
 	steps          int
 	timer          *time.Timer
+	att            *Attested
 }
 
 // counter counts lookups in the hour since `since`.
@@ -90,7 +96,7 @@ func (j *joins) trimCounters(now time.Time) {
 
 func (s *Server) joinWait(ctx context.Context, c *conn, w *pb.JoinWait) *frameError {
 	if !lookupPattern.MatchString(w.GetLookup()) {
-		return invalid("a lookup is four Crockford base32 characters, upper case")
+		return invalid("a lookup is eight Crockford base32 characters, upper case")
 	}
 	var att *Attested
 	if w.GetAttestation() != nil {
@@ -109,8 +115,8 @@ func (s *Server) joinWait(ctx context.Context, c *conn, w *pb.JoinWait) *frameEr
 	if c.wait != nil || c.joinID != "" {
 		return invalid("already waiting for a join")
 	}
-	if j.waitsByAddr[c.addr] >= s.cfg.MaxWaitsPerAddr {
-		return rateLimited("too many joins waiting from this address")
+	if j.waitsByAddr[c.addr] >= s.cfg.MaxWaitsPerAddr || len(j.waits) >= s.cfg.MaxWaits {
+		return rateLimited("too many joins waiting")
 	}
 	if j.waits[w.GetLookup()] != nil {
 		return invalid("a join with this lookup is waiting")
@@ -148,6 +154,11 @@ func (s *Server) joinLookup(c *conn, l *pb.JoinLookup) *frameError {
 	if c.joinID != "" {
 		return invalid("already joining a device")
 	}
+	// Only the account's phone signs a device on; a refused lookup spends
+	// nothing and leaves the wait.
+	if c.role != pb.DeviceRole_DEVICE_ROLE_CLIENT || !bytes.Equal(c.key, c.acct.list.phoneKey) {
+		return denied("only the account's phone looks up a join")
+	}
 	if !count(j.lookupsByAcct, string(c.acct.id), s.cfg.MaxLookupsPerAccount, now) || !count(j.lookupsByAddr, c.addr, s.cfg.MaxLookupsPerAddr, now) {
 		return rateLimited("too many join lookups; try again in an hour")
 	}
@@ -158,7 +169,7 @@ func (s *Server) joinLookup(c *conn, l *pb.JoinLookup) *frameError {
 	s.unwaitLocked(w)
 	idb := make([]byte, 16)
 	rand.Read(idb)
-	jn := &join{id: hex.EncodeToString(idb), device: w.conn, client: c}
+	jn := &join{id: hex.EncodeToString(idb), device: w.conn, client: c, att: w.att}
 	left := s.cfg.JoinTimeout - now.Sub(w.started)
 	jn.timer = time.AfterFunc(max(left, 0), func() {
 		s.mu.Lock()
@@ -169,14 +180,44 @@ func (s *Server) joinLookup(c *conn, l *pb.JoinLookup) *frameError {
 	})
 	j.active[jn.id] = jn
 	w.conn.joinID, c.joinID = jn.id, jn.id
-	if w.att != nil {
-		if err := s.store.AddAttestation(c.acct.id, w.conn.key, w.att.Kind, w.att.Ident); err != nil {
-			s.log.Error("cannot store an attestation", "err", err)
-		}
-	}
 	c.queue(&pb.Frame{Body: &pb.Frame_JoinPaired{JoinPaired: &pb.JoinPaired{RequestId: l.GetRequestId(), JoinId: jn.id}}})
 	w.conn.queue(&pb.Frame{Body: &pb.Frame_JoinPaired{JoinPaired: &pb.JoinPaired{JoinId: jn.id}}})
 	return nil
+}
+
+// storeAttestationsLocked writes the attestation of each live join of a
+// whose device the list a now has lists, and forgets it. Under s.mu.
+func (s *Server) storeAttestationsLocked(a *account) {
+	for _, jn := range s.joins.active {
+		if jn.att == nil || jn.client.acct != a {
+			continue
+		}
+		if _, role := a.list.deviceFor(jn.device.key); role != pb.DeviceRole_DEVICE_ROLE_CLIENT && role != pb.DeviceRole_DEVICE_ROLE_HOST {
+			continue
+		}
+		if err := s.store.AddAttestation(a.id, jn.device.key, jn.att.Kind, jn.att.Ident); err != nil {
+			s.log.Error("cannot store an attestation", "err", err)
+			continue
+		}
+		jn.att = nil
+	}
+}
+
+// armIdleLocked closes c when it has been logged in without an account
+// and in no wait or join for NoAccountIdle. Under s.mu.
+func (s *Server) armIdleLocked(c *conn) {
+	c.idle = time.AfterFunc(s.cfg.NoAccountIdle, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if _, ok := s.conns[c]; !ok || c.acct != nil {
+			return
+		}
+		if c.wait == nil && c.joinID == "" {
+			c.close(websocket.StatusPolicyViolation, "idle")
+			return
+		}
+		s.armIdleLocked(c)
+	})
 }
 
 // other is the side of j that is not c; nil when c is not in it.
