@@ -4,8 +4,9 @@
 //   - IK, with the prologue built here from the account ID: the phone
 //     initiates, knowing the computer's channel key from the list. The IK
 //     responder, a computer's side, is here for the tests only.
-//   - XXpsk3 (section 6), with the caller's prologue and 32-byte PSK, for
-//     the tests only until a part needs it.
+//   - XXpsk3 (section 6), with the caller's prologue and 32-byte PSK: the
+//     account's phone initiates a join, and a phone joining an account
+//     answers it.
 //
 // Handshake messages carry no payload, so each has a fixed length: IK's
 // are 96 and 48 bytes, XXpsk3's 48, 96 and 64. A handshake and a transport
@@ -168,13 +169,11 @@ final class Noise {
   NoiseHandshake ikResponder({required SecureKey staticKey, required List<int> accountId}) =>
       _handshake(core.ik, false, staticKey, prologue: channelPrologue(accountId));
 
-  /// XXpsk3's initiator, with a 32-byte PSK. Tests only.
-  @visibleForTesting
+  /// XXpsk3's initiator, with a 32-byte PSK: the account's phone at a join.
   NoiseHandshake xxpsk3Initiator({required SecureKey staticKey, required List<int> prologue, required List<int> psk}) =>
       _handshake(core.xxpsk3, true, staticKey, prologue: _bytes(prologue, 'the prologue'), psk: _bytes(psk, 'the PSK'));
 
-  /// XXpsk3's responder, with a 32-byte PSK. Tests only.
-  @visibleForTesting
+  /// XXpsk3's responder, with a 32-byte PSK: a phone joining an account.
   NoiseHandshake xxpsk3Responder({required SecureKey staticKey, required List<int> prologue, required List<int> psk}) =>
       _handshake(core.xxpsk3, false, staticKey, prologue: _bytes(prologue, 'the prologue'), psk: _bytes(psk, 'the PSK'));
 

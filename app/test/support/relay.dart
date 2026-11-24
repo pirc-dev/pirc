@@ -64,3 +64,34 @@ Future<T> stateOf<T extends ConnectionState>(Stream<ConnectionState> states) =>
       if (s is! T) throw StateError('expected $T, got $s${s is Refused ? ': ${s.reason}' : ''}');
       return s;
     });
+
+// The Go relay in its hosted mode (built with the tag hosted), with the
+// test attestation, as test/harness.ts's startHostedRelay starts it.
+class HostedRelay {
+  HostedRelay._(this.origin, this._proc);
+
+  final String origin;
+  final Process _proc;
+
+  static Future<HostedRelay> start(Directory dir) async {
+    final bin = '${dir.path}/pirc-relay-hosted';
+    final built = await Process.run('go', ['build', '-tags', 'hosted', '-o', bin, './cmd/pirc-relay'], workingDirectory: '../relay');
+    if (built.exitCode != 0) throw StateError('go build: ${built.stderr}');
+    final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    await probe.close();
+    final origin = 'ws://127.0.0.1:$port';
+    final proc = await Process.start(bin, ['serve-hosted', '--plaintext', '--listen', '127.0.0.1:$port', '--origin', origin, '--test-attestation', '--data-dir', '${dir.path}/hosted']);
+    proc.stdout.drain<void>();
+    final listening = Completer<void>();
+    final log = StringBuffer();
+    proc.stderr.transform(const SystemEncoding().decoder).listen((s) {
+      log.write(s);
+      if (!listening.isCompleted && log.toString().contains('msg=listening')) listening.complete();
+    });
+    await listening.future.timeout(const Duration(seconds: 20), onTimeout: () => throw StateError('the hosted relay did not start:\n$log'));
+    return HostedRelay._(origin, proc);
+  }
+
+  void kill() => _proc.kill();
+}

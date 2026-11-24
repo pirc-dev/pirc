@@ -2385,6 +2385,31 @@ built; steps 14 and 15 are not finished.
             prologue, offers made to exact bytes and checked with the
             reason for each refusal, so that the app's Dart is held to the
             same bytes.
+
+          The app's sides (7b, `app/lib/e2e/join.dart`,
+          `app/lib/hosted/link.dart`, `app/lib/hosted/join.dart`; 7c, the
+          screens in `app/lib/ui/hosted_join_screens.dart`, reached from the
+          hosted account's settings once part 8 gives the app one):
+          - **The account's phone adds a device** (`AddDevice`): the code
+            scanned or pasted, looked up, XXpsk3 as the initiator, and the
+            device's offer checked in the role it gives. A device already on
+            the list, or one past the caps, is refused there. Nothing is
+            signed until the person confirms, on a screen that says what the
+            device will be able to do by role ("A computer: you will be able
+            to control it from here"; "A new browser or app: it will have
+            full control of all 4 of your computers"; "Another phone: …")
+            and asks them to go on only if they hold, or sit at, the device
+            showing the code. Then the version that adds it is published
+            and, after `Done`, sent with version 1 and the phone's offer.
+            Cancelling, or leaving the screen, ends the join at both sides.
+          - **A second phone joins** (`PhoneJoin`): as `DeviceJoin`, with all
+            five keys as a client and its attestation in `JoinWait`, the
+            code shown as a QR code and text, ten minutes on its own clock.
+          - **Tested across the languages**: the app's phone adds a
+            computer and a browser running the TypeScript over the Go
+            relay, and a second phone running its own Dart; a declined join,
+            a wrong secret, an unknown code, a list holding the phone with
+            other keys, a code past its time.
        8. **The app and the notification extension**: sign-up (the phone
           signs the first version), the list, channels, notices from the
           read-only key on both platforms, additions and removals shown,
