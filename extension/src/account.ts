@@ -209,7 +209,7 @@ export class ListFolder {
   private held: HeldList | undefined;
   // Files already found wanting, so each is reported once.
   private refused = new Set<string>();
-  private readonly identity: string | undefined;
+  readonly identity: string | undefined;
   private left = false;
 
   constructor(
@@ -253,6 +253,11 @@ export class ListFolder {
     if (r.result !== "accepted") return r.result === "refused" || r.result === "unsupported" ? `${r.result} (${r.reason})` : r.result;
     if (r.counter !== counter) return `holds version ${r.counter}`;
     return { counter, bytes, body: r.list };
+  }
+
+  // Whether these bytes are a version this account's phone signed, as `counter`.
+  private signedHere(b: Uint8Array, counter: bigint): boolean {
+    return typeof this.check(b, counter) !== "string";
   }
 
   /** Reads the folder for a version newer than the one held; true if it found one. */
@@ -304,7 +309,7 @@ export class ListFolder {
       } catch {
         // Not kept: an older version this computer skipped.
       }
-      if (mine && !sameBytes(mine, bytes)) return { result: "conflict", counter: r.counter };
+      if (mine && !sameBytes(mine, bytes) && this.signedHere(mine, r.counter)) return { result: "conflict", counter: r.counter };
       return { result: "old", counter: r.counter };
     }
     const tmp = join(this.lists, `.tmp-${process.pid}-${randomBytes(4).toString("hex")}`);
@@ -313,13 +318,34 @@ export class ListFolder {
       linkSync(tmp, path);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      if (!sameBytes(new Uint8Array(readFileSync(path)), bytes)) return { result: "conflict", counter: r.counter };
+      const there = new Uint8Array(readFileSync(path));
+      // Two versions under one counter, both this account's phone's: a
+      // conflict. A file there that is not (another account's, written by
+      // a process that had not yet seen this folder replace its own) is
+      // replaced.
+      if (!sameBytes(there, bytes)) {
+        if (this.signedHere(there, r.counter)) return { result: "conflict", counter: r.counter };
+        renameSync(tmp, path);
+        this.report(`account list ${r.counter} was not this account's; replaced`);
+        flushFolder(this.lists);
+        this.held = { counter: r.counter, bytes, body: r.list };
+        return { result: "newer", list: this.held };
+      }
     } finally {
-      unlinkSync(tmp);
+      // Gone already when it was renamed into place.
+      unlinkSafe(tmp);
     }
     flushFolder(this.lists);
     this.held = { counter: r.counter, bytes, body: r.list };
     return { result: "newer", list: this.held };
+  }
+}
+
+function unlinkSafe(p: string): void {
+  try {
+    unlinkSync(p);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
 }
 

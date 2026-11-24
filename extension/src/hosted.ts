@@ -11,7 +11,7 @@ import { HostedConnection, type HostedState } from "@pirc/relay-client/hosted";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
 import { randomBytes } from "node:crypto";
 
-import { keysOf, ListFolder, listsSelf, readInfo, readSecrets, selfDevice, type AccountInfo, type AccountKeys, type HeldList, type Offered } from "./account.ts";
+import { folderIdentity, keysOf, ListFolder, listsSelf, readInfo, readSecrets, selfDevice, type AccountInfo, type AccountKeys, type HeldList, type Offered } from "./account.ts";
 import { Channel, Channels, FRAME_MAX, type ChannelHost } from "./channel.ts";
 import type { Live } from "./live.ts";
 
@@ -56,7 +56,7 @@ export class Hosted implements ChannelHost {
   readonly staticKey: SodiumStaticKey;
   private readonly conn: HostedConnection;
   private readonly channels: Channels;
-  private readonly lists: ListFolder;
+  readonly lists: ListFolder;
   private readonly self;
   private status: HostedStatus = { kind: "stopped" };
   private rescan: ReturnType<typeof setInterval> | undefined;
@@ -93,6 +93,7 @@ export class Hosted implements ChannelHost {
   /** The account in `dir`, read and checked; throws, saying what is wrong. */
   static async open(dir: string, sink: HostedSink, opts: { rescanMs?: number } = {}): Promise<Hosted> {
     const [e2e, noise] = await Promise.all([loadE2e(), loadNoise()]);
+    const before = folderIdentity(dir);
     const info = readInfo(dir);
     const keys = keysOf(readSecrets(dir), (secret) => {
       const k = noise.staticKey(secret);
@@ -100,7 +101,13 @@ export class Hosted implements ChannelHost {
       k.dispose();
       return pub;
     });
-    return new Hosted(e2e, noise, info, keys, dir, sink, opts.rescanMs ?? RESCAN_MS);
+    const h = new Hosted(e2e, noise, info, keys, dir, sink, opts.rescanMs ?? RESCAN_MS);
+    // The folder the list folder took as this account's is the one read.
+    if (before === undefined || h.lists.identity !== before) {
+      h.staticKey.dispose();
+      throw new Error("the account folder changed while it was read; /pirc reconnect");
+    }
+    return h;
   }
 
   get signingKey(): Uint8Array {

@@ -216,7 +216,7 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
   for (const d of [p, a, b]) d.conn.stop();
 });
 
-test("another process leaves the account: this one stops, left, and closes its connection", async () => {
+test("another process leaves the account: this one stops, left", async () => {
   // The account from the test before, with the computer back on the list.
   const p = device("phone", accountId);
   await p.ready();

@@ -20,8 +20,8 @@ message ChannelFrame {
     ListState list_state = 2;
     // Either way, after list_state: a session's messages.
     SessionFrame session = 3;
-    // Either way: how many Noise messages this side has taken on the
-    // channel so far, sent once it has taken 8, or 128 KiB, since its last.
+    // Either way: how many Noise transport messages (after the handshake)
+    // this side has taken on the channel so far, sent once it has taken 8, or 128 KiB, since its last.
     // Each side keeps at most 16 messages and 256 KiB beyond the other's
     // count in flight, not counting `received` itself, which is sent
     // outside that window and is not counted back. So the relay's queue

@@ -222,7 +222,7 @@ test("a channel waiting for its list ends after 30 seconds", async (t) => {
   assert.equal(a.closed(), ErrorCode.TIMEOUT);
 });
 
-test("flow: at most 32 messages in flight; received lets more go; the queue's cap ends the channel", async () => {
+test("flow: at most 16 messages in flight; received lets more go; the queue's cap ends the channel", async () => {
   const r = rig([{ counter: 2n, bytes: v2 }]);
   const a = await r.open("alice", { counts: false });
   a.client.sendList(v2);

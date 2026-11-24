@@ -120,3 +120,18 @@ test("another process leaves, or joins another account: the folder is no longer 
   assert.equal(f.ours(), false);
   assert.equal(f.offer(v2).result, "gone");
 });
+
+test("a file under a counter that is not this account's phone's is replaced, not a conflict", () => {
+  const { dir } = accountFolder([{ counter: 1n, bytes: v1 }, { counter: 2n, bytes: version(2n, [phone, computer]) }]);
+  const f = new ListFolder(dir, e2e, info(), () => {});
+  f.scan();
+  // As a process of an account this folder replaced could leave behind.
+  writeFileSync(join(dir, "lists", "3"), version(3n, [phone, computer], new Uint8Array(32).fill(4)));
+  const v3 = version(3n, [phone, computer, alice]);
+  assert.equal(f.offer(v3).result, "newer");
+  assert.deepEqual(new Uint8Array(readFileSync(join(dir, "lists", "3"))), v3);
+  assert.deepEqual(readdirSync(join(dir, "lists")).sort(), ["1", "2", "3"]);
+  // Under the "old" path too: a stray file does not make a conflict.
+  writeFileSync(join(dir, "lists", "2"), version(2n, [phone], new Uint8Array(32).fill(4)));
+  assert.equal(f.offer(version(2n, [phone, computer])).result, "old");
+});
