@@ -212,6 +212,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
           // approve.
           const [url, token] = rest;
           if (!url || rest.length > 2) return ctx.ui.notify(USAGE, "error");
+          if (proc.host.inAccount()) return ctx.ui.notify("pirc: this computer is in a hosted account; /pirc leave first", "error");
           try {
             relayURL(url);
             saveRelay(url);

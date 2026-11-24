@@ -10,7 +10,7 @@
 // Several pi processes share the folder and no lock: a version is written
 // aside, flushed, then linked to its name, which fails if the name exists,
 // so no process can undo or tear another's write.
-import { createPrivateKey, createPublicKey, randomBytes, sign, type KeyObject } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, type KeyObject } from "node:crypto";
 import { closeSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -124,8 +124,9 @@ function writeFlushed(path: string, data: Uint8Array | string, mode: number): vo
 
 /**
  * Writes a whole account folder at `dir`, replacing any there: made aside,
- * then renamed into place, so a crash leaves the old account or the new
- * one. For the join, and tests.
+ * then renamed into place. A crash leaves the old account, the new one, or
+ * (between the two renames) neither, with the old one kept aside as
+ * `.account-*.old`. For the join, and tests.
  */
 export function writeAccount(dir: string, s: Secrets, info: AccountInfo, lists: { counter: bigint; bytes: Uint8Array }[]): void {
   const parent = dirname(dir);
@@ -163,6 +164,26 @@ export function removeAccount(dir: string): void {
   rmSync(gone, { recursive: true, force: true });
 }
 
+/**
+ * What makes the folder at `dir` one account: a hash of its keys and
+ * account.json as they are now, or undefined if either is gone. A process
+ * that opened one account stops once this changes: /pirc leave or a new
+ * /pirc join in another process of this computer.
+ */
+export function folderIdentity(dir: string): string | undefined {
+  try {
+    const h = createHash("sha256");
+    for (const f of ["keys", "account.json"]) {
+      const b = readFileSync(join(dir, f));
+      h.update(String(b.length)).update(":").update(b);
+    }
+    return h.digest("hex");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT" || (e as NodeJS.ErrnoException).code === "ENOTDIR") return undefined;
+    throw e;
+  }
+}
+
 export interface HeldList {
   counter: bigint;
   bytes: Uint8Array;
@@ -174,6 +195,8 @@ export type Offered =
   | { result: "old"; counter: bigint }
   // The phone signed two versions with one counter.
   | { result: "conflict"; counter: bigint }
+  // The folder is no longer the account this process opened.
+  | { result: "gone" }
   | { result: "refused"; reason: string };
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -186,13 +209,32 @@ export class ListFolder {
   private held: HeldList | undefined;
   // Files already found wanting, so each is reported once.
   private refused = new Set<string>();
+  private readonly identity: string | undefined;
+  private left = false;
 
   constructor(
     private readonly dir: string,
     private readonly e2e: E2e,
     private readonly info: AccountInfo,
     private readonly report: (msg: string) => void,
-  ) {}
+  ) {
+    this.identity = folderIdentity(dir);
+  }
+
+  /** Whether the folder is still the account this one opened; once not, never again. */
+  ours(): boolean {
+    if (this.left) return false;
+    let now: string | undefined;
+    try {
+      now = folderIdentity(this.dir);
+    } catch (e) {
+      this.report(`account folder: ${(e as Error).message}`);
+      return true;
+    }
+    if (now !== undefined && now === this.identity) return true;
+    this.left = true;
+    return false;
+  }
 
   get newest(): HeldList | undefined {
     return this.held;
@@ -215,6 +257,7 @@ export class ListFolder {
 
   /** Reads the folder for a version newer than the one held; true if it found one. */
   scan(): boolean {
+    if (!this.ours()) return false;
     let names: string[];
     try {
       names = readdirSync(this.lists);
@@ -250,6 +293,7 @@ export class ListFolder {
 
   /** A version from the relay or a client: stored and taken if newer. */
   offer(bytes: Uint8Array): Offered {
+    if (!this.ours()) return { result: "gone" };
     const r = this.e2e.checkList({ bytes, phoneKey: this.info.phoneKey, mode: "later", accountId: this.info.accountId, highest: this.held?.counter ?? 0n });
     if (r.result === "refused" || r.result === "unsupported") return { result: "refused", reason: `${r.result} (${r.reason})` };
     const path = join(this.lists, String(r.counter));

@@ -15,8 +15,10 @@ import { keysOf, ListFolder, listsSelf, readInfo, readSecrets, selfDevice, type 
 import { Channel, Channels, FRAME_MAX, type ChannelHost } from "./channel.ts";
 import type { Live } from "./live.ts";
 
-// The folder is read again this often, for a version another process stored.
-const RESCAN_MS = 5 * 60_000;
+// The folder is read again this often: for a version another process
+// stored, and to stop soon after another process left the account or
+// joined another.
+const RESCAN_MS = 10_000;
 // What a session's message may take inside a channel's frame.
 export const HOSTED_PAYLOAD_BYTES = FRAME_MAX - 4096;
 
@@ -27,7 +29,9 @@ export type HostedStatus =
   // The newest list no longer has this computer.
   | { kind: "removed" }
   // The account's phone signed two versions with one counter.
-  | { kind: "conflict"; counter: bigint };
+  | { kind: "conflict"; counter: bigint }
+  // Another process of this computer left the account, or joined another.
+  | { kind: "left" };
 
 /** What the process gives the hosted link. */
 export interface HostedSink {
@@ -66,6 +70,7 @@ export class Hosted implements ChannelHost {
     readonly keys: AccountKeys,
     dir: string,
     private readonly sink: HostedSink,
+    private readonly rescanMs: number,
   ) {
     this.accountId = info.accountId;
     this.staticKey = noise.staticKey(keys.channelSecret);
@@ -86,7 +91,7 @@ export class Hosted implements ChannelHost {
   }
 
   /** The account in `dir`, read and checked; throws, saying what is wrong. */
-  static async open(dir: string, sink: HostedSink): Promise<Hosted> {
+  static async open(dir: string, sink: HostedSink, opts: { rescanMs?: number } = {}): Promise<Hosted> {
     const [e2e, noise] = await Promise.all([loadE2e(), loadNoise()]);
     const info = readInfo(dir);
     const keys = keysOf(readSecrets(dir), (secret) => {
@@ -95,7 +100,7 @@ export class Hosted implements ChannelHost {
       k.dispose();
       return pub;
     });
-    return new Hosted(e2e, noise, info, keys, dir, sink);
+    return new Hosted(e2e, noise, info, keys, dir, sink, opts.rescanMs ?? RESCAN_MS);
   }
 
   get signingKey(): Uint8Array {
@@ -113,7 +118,7 @@ export class Hosted implements ChannelHost {
   start(): void {
     this.lists.scan();
     if (!this.check()) return;
-    this.rescan = setInterval(() => this.refreshList(), RESCAN_MS);
+    this.rescan = setInterval(() => this.refreshList(), this.rescanMs);
     this.rescan.unref?.();
     this.conn.start();
   }
@@ -130,16 +135,18 @@ export class Hosted implements ChannelHost {
     this.sink.onStatus(s);
   }
 
-  // Stops for good on a removal or a conflict; false then.
+  // Stops for good on a removal, a conflict, or the folder no longer this
+  // account; false then.
   private check(conflict?: bigint): boolean {
     if (this.over) return false;
     const newest = this.lists.newest;
-    if (conflict === undefined && newest && listsSelf(newest.body, this.self)) return true;
+    const ours = this.lists.ours();
+    if (ours && conflict === undefined && newest && listsSelf(newest.body, this.self)) return true;
     this.over = true;
     clearInterval(this.rescan);
     this.channels.closeAll(ErrorCode.PERMISSION_DENIED, true);
     this.conn.stop();
-    this.setStatus(conflict !== undefined ? { kind: "conflict", counter: conflict } : { kind: "removed" });
+    this.setStatus(!ours ? { kind: "left" } : conflict !== undefined ? { kind: "conflict", counter: conflict } : { kind: "removed" });
     return false;
   }
 
@@ -148,6 +155,7 @@ export class Hosted implements ChannelHost {
     if (s.kind !== "ready") this.channels.closeAll(ErrorCode.SESSION_GONE, false);
     switch (s.kind) {
       case "ready":
+        if (!this.check()) return;
         if (s.welcome.list.length) this.take(this.lists.offer(s.welcome.list), false);
         if (this.over) return;
         this.setStatus({ kind: "ready" });
@@ -173,6 +181,7 @@ export class Hosted implements ChannelHost {
   private take(o: Offered, fromClient: boolean): Offered {
     if (o.result === "refused") this.sink.log(`a list was refused: ${o.reason}`);
     if (o.result === "conflict") this.check(o.counter);
+    if (o.result === "gone") this.check();
     if (o.result !== "newer") return o;
     this.newer(o.list);
     if (fromClient && !this.over) {
@@ -193,6 +202,7 @@ export class Hosted implements ChannelHost {
   refreshList(): void {
     if (this.over) return;
     if (this.lists.scan()) this.newer(this.lists.newest!);
+    else this.check();
   }
 
   newestList(): HeldList | undefined {
@@ -224,8 +234,12 @@ export class Hosted implements ChannelHost {
       return ch.close(ErrorCode.INVALID);
     }
     const client = ch.client!;
+    // To the channel it came on while that lasts, else to the client's
+    // newest: a repeat of a request still pending, sent on a new channel
+    // after the old one closed, is not run again, and its answer goes there.
     this.sink.request(s.sessionId, client.signingKey, m, (reply) => {
-      ch.sendSession({ $typeName: "pirc.v1alpha2.SessionFrame", sessionId: s.sessionId, body: { case: "message", value: toBinary(SessionMessageSchema, reply) } });
+      const to = ch.state === "ready" ? ch : this.channels.newestFor(client.signingKey);
+      to?.sendSession({ $typeName: "pirc.v1alpha2.SessionFrame", sessionId: s.sessionId, body: { case: "message", value: toBinary(SessionMessageSchema, reply) } });
     });
   }
 

@@ -2303,17 +2303,32 @@ built; steps 14 and 15 are not finished.
             list when newer), then the session's whole
             `SessionAnnouncement`, then the session's messages, each naming
             its session. A frame is cut into Noise messages, a flag byte
-            then at most 65,518 bytes, and is at most 1 MiB and 4 KiB. The
-            client counts the messages it takes (`received`, at least every
-            8), and the process keeps at most 32 messages and 768 KiB in
-            flight beyond that, under the relay's per-channel cap, holding up
-            to 4 MiB more before it ends the channel (`RATE_LIMITED`). At
-            most 16 channels wait for a client's list, and 128 in all; one
-            waiting 30 seconds is closed.
+            then at most 65,518 bytes, and is at most 1 MiB and 4 KiB. Flow
+            is the same both ways: each side counts the messages it takes
+            (`received`, once it has taken 8 or 128 KiB), and keeps at most
+            16 messages and 256 KiB in flight beyond the other's count,
+            under the relay's per-channel cap; a client keeps the sum over
+            its channels under its connection's cap by holding its counts
+            back. The process holds up to 4 MiB more before it ends the
+            channel (`RATE_LIMITED`). A reply goes to the channel its
+            request came on, or, once that has closed, to the client's
+            newest, so a repeat sent on a new channel while the first is
+            still pending gets its answer. At most 16 channels wait for a
+            client's list, and 128 in all; one waiting 30 seconds is
+            closed.
           - **A newer list**, from the relay or a client's first frame
             (which is then published to the relay), closes the channels of
             clients no longer on it and seals every session again. The
-            folder is also read before each channel and every five minutes.
+            folder is also read before each channel and every ten seconds.
+          - **Another process leaving or joining**: each process keeps a
+            hash of the `keys` and `account.json` it opened, and checks it
+            before every list it stores, at each login and with each read of
+            the folder. Once it differs or is gone, the process stops
+            ("left the account"), closes its channels and writes nothing more
+            there, so `/pirc leave` or a new `/pirc join` in one pi reaches
+            the computer's others within ten seconds. A `/reload` into code
+            from before this cannot stop the hosted connection the newer
+            code had; it lasts until pi exits.
           - **Sealing**: the announcement (the session's name, or its first
             prompt; its folder; the model's name; `host.json`'s label; the
             notice's text) to each client, the notice to each phone, the
@@ -2328,7 +2343,8 @@ built; steps 14 and 15 are not finished.
             fresh keys, a 32-byte secret and a lookup, waits under the
             lookup, and shows, until the join ends, that whoever uses the
             code gets full control of the machine and that it works once
-            for ten minutes, then the QR code (level M, drawn as
+            for ten minutes (on the wall clock as well as a timer, which
+            does not run while the machine sleeps), then the QR code (level M, drawn as
             `pirc-relay`'s are) and the text.
           - **The text**: `PIRC1`, the lookup, then the secret in Crockford
             base32, upper case: 65 characters. It is read in either case,
@@ -2349,6 +2365,7 @@ built; steps 14 and 15 are not finished.
             and the code is spent. On success the account folder is written
             whole, replacing any before it, `host.json`'s `relay` is set to
             the marker, and the computer says which phone approved it.
+          - `/pirc enrol` is refused while the computer is in an account.
           - **`/pirc leave`**, at pi's terminal only: the account folder is
             deleted and `host.json` keeps the marker, so no older PiRC
             connects anywhere in its place; the phone is asked to remove

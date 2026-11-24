@@ -7,7 +7,7 @@ import type { Handshake, Noise, Transport } from "@pirc/e2e/noise";
 import { SessionAnnouncementSchema, SessionMessageSchema, type SessionAnnouncement, type SessionMessage } from "@pirc/protocol";
 import { ChannelFrameSchema, type ChannelFrame } from "@pirc/protocol/v1alpha2";
 
-import { ACK_EVERY, Joiner, pieces } from "../src/channel.ts";
+import { ACK_BYTES, ACK_MESSAGES, Joiner, pieces } from "../src/channel.ts";
 
 type Received = { sessionId: string; message: SessionMessage } | { sessionId: string; announcement: SessionAnnouncement };
 
@@ -16,7 +16,11 @@ export class ChannelClient {
   private transport: Transport | undefined;
   private joiner = new Joiner();
   private taken = 0n;
+  private since = 0;
+  private sinceBytes = 0;
   readonly frames: ChannelFrame[] = [];
+  /** The computer's counts of this client's messages. */
+  readonly counted: bigint[] = [];
 
   constructor(
     noise: Noise,
@@ -25,7 +29,8 @@ export class ChannelClient {
     accountId: Uint8Array,
     /** Sends one Noise message toward the computer. */
     private readonly out: (message: Uint8Array) => void,
-    private readonly ackEvery = ACK_EVERY,
+    /** False to never count, for tests of the window. */
+    private readonly counts = true,
   ) {
     this.handshake = noise.ikInitiator({ staticKey: noise.staticKey(channelSecret), responderKey: computerChannelKey, accountId });
   }
@@ -47,10 +52,21 @@ export class ChannelClient {
     const r = this.transport.receive(m);
     if (!r.ok) throw new Error(`receive: ${r.reason}`);
     this.taken++;
+    const whole = r.plaintext[0] === 1;
     const f = this.joiner.push(r.plaintext);
     if (f === "invalid") throw new Error("a bad piece");
-    if (f) this.frames.push(fromBinary(ChannelFrameSchema, f));
-    if (this.ackEvery && this.taken % BigInt(this.ackEvery) === 0n) this.send(create(ChannelFrameSchema, { body: { case: "received", value: this.taken } }));
+    const frame = f ? fromBinary(ChannelFrameSchema, f) : undefined;
+    if (frame && frame.body.case === "received" && whole) {
+      this.counted.push(frame.body.value);
+      return;
+    }
+    if (frame) this.frames.push(frame);
+    this.since++;
+    this.sinceBytes += m.length;
+    if (this.counts && (this.since >= ACK_MESSAGES || this.sinceBytes >= ACK_BYTES)) {
+      this.since = this.sinceBytes = 0;
+      this.send(create(ChannelFrameSchema, { body: { case: "received", value: this.taken } }));
+    }
   }
 
   get received(): bigint {

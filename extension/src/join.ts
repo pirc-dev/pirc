@@ -8,7 +8,7 @@
 // for ten minutes on this computer's clock.
 import { create, fromBinary, type MessageInitShape } from "@bufbuild/protobuf";
 import { joinPrologue, joinText, makeOffer, newLookup, ROLE_CLIENT, SECRET_BYTES, type DeviceKeys, type E2e } from "@pirc/e2e";
-import type { Handshake, Noise, Transport } from "@pirc/e2e/noise";
+import type { Handshake, Noise, SodiumStaticKey, Transport } from "@pirc/e2e/noise";
 import { FrameSchema, JoinAcceptSchema, type Frame, type JoinAccept } from "@pirc/protocol/v1alpha2";
 import { HostedConnection, type OpenSocket } from "@pirc/relay-client/hosted";
 import { encode } from "uqr";
@@ -34,6 +34,8 @@ export interface JoinDeps {
   log(msg: string): void;
   /** For tests: how long the code works, JOIN_MS otherwise. */
   joinMs?: number;
+  /** The wall clock in milliseconds, Date.now by default. */
+  now?(): number;
 }
 
 const sameDevice = (a: DeviceKeys, b: DeviceKeys) =>
@@ -59,6 +61,8 @@ export class ComputerJoin {
   private settle: { resolve(j: Joined): void; reject(e: Error): void } | undefined;
   private chain: Promise<void> = Promise.resolve();
   private over = false;
+  private deadline = 0;
+  private staticKey: SodiumStaticKey | undefined;
   readonly done: Promise<Joined>;
 
   constructor(private readonly d: JoinDeps) {
@@ -80,8 +84,9 @@ export class ComputerJoin {
       open: d.open,
       onFrame: (f) => this.onFrame(f),
       onState: (s) => {
-        if (this.over) return;
-        if (s.kind === "ready") {
+        if (this.over || this.expired()) return;
+        if (s.kind === "refused") this.fail(`the relay refused: ${s.reason}`);
+        else if (s.kind === "ready") {
           // A connection lost after the phone paired loses the join.
           if (this.joinId) return this.fail("the connection to the relay was lost; run /pirc join again");
           this.send({ case: "joinWait", value: { lookup: this.lookup } });
@@ -93,7 +98,10 @@ export class ComputerJoin {
 
   /** Waits under the lookup; the code works for ten minutes. */
   start(): Promise<Joined> {
-    this.timer = setTimeout(() => this.fail("the code expired after ten minutes; run /pirc join again"), this.d.joinMs ?? JOIN_MS);
+    const ms = this.d.joinMs ?? JOIN_MS;
+    // On the wall clock too: a timer does not run while the machine sleeps.
+    this.deadline = this.now() + ms;
+    this.timer = setTimeout(() => this.fail("the code expired after ten minutes; run /pirc join again"), ms);
     this.timer.unref?.();
     this.conn.start();
     return this.done;
@@ -101,6 +109,17 @@ export class ComputerJoin {
 
   cancel(): void {
     this.fail("cancelled");
+  }
+
+  private now(): number {
+    return this.d.now ? this.d.now() : Date.now();
+  }
+
+  // Ends the join once its ten minutes are over; true then.
+  private expired(): boolean {
+    if (this.now() < this.deadline) return false;
+    this.fail("the code expired after ten minutes; run /pirc join again");
+    return true;
   }
 
   private send(body: MessageInitShape<typeof FrameSchema>["body"]): void {
@@ -112,6 +131,7 @@ export class ComputerJoin {
     clearTimeout(this.timer);
     if (this.joinId) this.send({ case: "joinEnded", value: { joinId: this.joinId } });
     this.transport?.close();
+    this.staticKey?.dispose();
     this.conn.stop();
   }
 
@@ -122,7 +142,7 @@ export class ComputerJoin {
   }
 
   private onFrame(f: Frame): void {
-    if (this.over) return;
+    if (this.over || this.expired()) return;
     const b = f.body;
     switch (b.case) {
       case "error":
@@ -130,7 +150,8 @@ export class ComputerJoin {
       case "joinPaired":
         if (this.joinId) return this.fail("the relay paired the join twice");
         this.joinId = b.value.joinId;
-        this.handshake = this.d.noise.xxpsk3Responder({ staticKey: this.d.noise.staticKey(this.secrets.channel), prologue: joinPrologue(this.lookup), psk: this.secret });
+        this.staticKey = this.d.noise.staticKey(this.secrets.channel);
+        this.handshake = this.d.noise.xxpsk3Responder({ staticKey: this.staticKey, prologue: joinPrologue(this.lookup), psk: this.secret });
         return;
       case "joinMessage":
         if (b.value.joinId !== this.joinId || !this.joinId) return this.fail("a step of another join");
@@ -143,7 +164,7 @@ export class ComputerJoin {
   }
 
   private async onStep(step: Uint8Array): Promise<void> {
-    if (this.over) return;
+    if (this.over || this.expired()) return;
     const n = this.step++;
     if (n === 0) {
       const r1 = await this.handshake!.readMessage(step);
@@ -194,7 +215,8 @@ export class ComputerJoin {
     const accountId = first.hash;
     const newest = this.d.e2e.checkList({ bytes: a.list, phoneKey: phone.signingKey, mode: "later", accountId, highest: 1n, self: this.self });
     if (newest.result !== "accepted") return `the list was refused (${newest.result === "refused" || newest.result === "unsupported" ? newest.reason : newest.result})`;
-    const name = a.phoneName.length <= NAME_MAX_BYTES ? new TextDecoder("utf-8", { fatal: false }).decode(a.phoneName) : "";
+    // Shown at the terminal: no control characters.
+    const name = a.phoneName.length <= NAME_MAX_BYTES ? new TextDecoder("utf-8", { fatal: false }).decode(a.phoneName).replace(/[\p{Cc}\p{Cf}]/gu, "") : "";
     return {
       secrets: this.secrets,
       info: { accountId, phoneKey: phone.signingKey, origin: this.d.origin },

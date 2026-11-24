@@ -15,12 +15,17 @@ export const FRAME_MAX = (1 << 20) + 4096;
 const LAST = 1;
 const MORE = 0;
 
-// The relay closes a channel past 64 frames or 1 MiB queued toward one end.
-// The client counts every 8 messages it takes, so the window holds more
-// than 8 of the largest.
-export const WINDOW_MESSAGES = 32;
-export const WINDOW_BYTES = 768 * 1024;
-export const ACK_EVERY = 8;
+// Flow, the same both ways (channel.proto): each side keeps at most 16 Noise
+// messages and 256 KiB in flight beyond what the other has counted with
+// `received`, and counts once it has taken 8 messages or 128 KiB since its
+// last count. `received` itself is sent outside the window and not counted.
+// The relay closes a channel past 64 frames or 1 MiB queued toward one end,
+// and a connection past 256 frames or 4 MiB: a client holds its counts back
+// to keep the sum over its channels under that.
+export const WINDOW_MESSAGES = 16;
+export const WINDOW_BYTES = 256 * 1024;
+export const ACK_MESSAGES = 8;
+export const ACK_BYTES = 128 * 1024;
 // What one channel may hold back before it gives up on a slow client.
 export const QUEUE_BYTES = 4 << 20;
 // Responder states: those still waiting for the client's list, and all.
@@ -47,6 +52,11 @@ export function pieces(frame: Uint8Array): Uint8Array[] {
 export class Joiner {
   private parts: Uint8Array[] = [];
   private size = 0;
+
+  /** Whether no frame is part way. */
+  get empty(): boolean {
+    return this.parts.length === 0;
+  }
 
   push(piece: Uint8Array): Uint8Array | undefined | "invalid" {
     if (piece.length < 1 || (piece[0] !== LAST && piece[0] !== MORE)) return "invalid";
@@ -98,13 +108,19 @@ export class Channel {
   // In order: incoming Noise messages wait for the handshake.
   private chain: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setTimeout> | undefined;
-  // Pieces waiting for the window, and the sizes of those in flight.
+  // Pieces waiting for the window; every message sent and not yet counted
+  // by the client, with its size, 0 for a count of ours.
   private queue: Uint8Array[] = [];
   private queued = 0;
   private inFlight: number[] = [];
   private inFlightBytes = 0;
+  private inFlightMessages = 0;
   private sent = 0n;
   private acked = 0n;
+  // The client's messages taken, and those since our last count.
+  private taken = 0n;
+  private sinceMessages = 0;
+  private sinceBytes = 0;
 
   constructor(
     readonly id: bigint,
@@ -119,11 +135,13 @@ export class Channel {
       if (message1.length !== IK_MESSAGE_1_BYTES) return this.close(ErrorCode.INVALID);
       this.host.refreshList();
       this.handshake = this.host.noise.ikResponder({ staticKey: this.host.staticKey, accountId: this.host.accountId });
-      const r1 = await this.handshake.readMessage(message1);
+      const hs = this.handshake;
+      const r1 = await hs.readMessage(message1);
+      if ((this.state as State) === "closed") return;
       if (!r1.ok) return this.close(ErrorCode.PERMISSION_DENIED);
-      const r2 = await this.handshake.writeMessage();
+      const r2 = await hs.writeMessage();
+      if ((this.state as State) === "closed") return r2.ok ? r2.transport?.close() : undefined;
       if (!r2.ok || !r2.transport) return this.close(ErrorCode.INTERNAL);
-      if (this.state === "closed") return;
       this.transport = r2.transport;
       this.handshake = undefined;
       this.state = "waiting";
@@ -146,46 +164,75 @@ export class Channel {
       if (!t) return this.close(ErrorCode.INVALID);
       const r = t.receive(m);
       if (!r.ok) return this.close(ErrorCode.PERMISSION_DENIED);
+      this.taken++;
+      const whole = this.joiner.empty && r.plaintext[0] === LAST;
       const frame = this.joiner.push(r.plaintext);
       if (frame === "invalid") return this.close(ErrorCode.INVALID);
-      if (frame) this.frame(frame);
+      const count = frame ? this.frame(frame) || !whole : true;
+      // A count of the client's is not counted back.
+      if (count && this.state === "ready") {
+        this.sinceMessages++;
+        this.sinceBytes += m.length;
+        if (this.sinceMessages >= ACK_MESSAGES || this.sinceBytes >= ACK_BYTES) this.count();
+      }
     });
   }
 
-  private frame(bytes: Uint8Array): void {
+  // Tells the client how many of its messages were taken.
+  private count(): void {
+    this.sinceMessages = 0;
+    this.sinceBytes = 0;
+    const [p] = pieces(toBinary(ChannelFrameSchema, create(ChannelFrameSchema, { body: { case: "received", value: this.taken } })));
+    this.transmit(p, false);
+  }
+
+  // Acts on a whole frame; false for a count of the client's.
+  private frame(bytes: Uint8Array): boolean {
     let f: ChannelFrame;
     try {
       f = fromBinary(ChannelFrameSchema, bytes);
     } catch {
-      return this.close(ErrorCode.INVALID);
+      this.close(ErrorCode.INVALID);
+      return true;
     }
     const b = f.body;
     if (this.state === "waiting") {
       // The list first; nothing is sent before it checks out.
-      if (b.case !== "list") return this.close(ErrorCode.PERMISSION_DENIED);
+      const deny = () => (this.close(ErrorCode.PERMISSION_DENIED), true);
+      if (b.case !== "list") return deny();
       const offered = this.host.offerList(b.value);
-      if (offered.result === "refused" || offered.result === "conflict") return this.close(ErrorCode.PERMISSION_DENIED);
+      if (offered.result === "refused" || offered.result === "conflict" || offered.result === "gone") return deny();
       const newest = this.host.newestList();
-      if (!newest || !this.host.listed()) return this.close(ErrorCode.PERMISSION_DENIED);
+      if (!newest || !this.host.listed()) return deny();
       const client = clientByChannelKey(newest.body, this.transport!.remoteStatic ?? new Uint8Array(0));
-      if (!client) return this.close(ErrorCode.PERMISSION_DENIED);
+      if (!client) return deny();
       const clientCounter = offered.result === "newer" ? offered.list.counter : offered.counter;
       this.client = client;
       this.state = "ready";
       clearTimeout(this.timer);
       this.send(create(ChannelFrameSchema, { body: { case: "listState", value: { counter: newest.counter, list: newest.counter > clientCounter ? newest.bytes : new Uint8Array(0) } } }));
       this.host.ready(this);
-      return;
+      return true;
     }
-    if (this.state !== "ready") return;
-    if (b.case === "received") return this.ack(b.value);
-    if (b.case === "session" && b.value.sessionId) return this.host.session(this, b.value);
-    this.close(ErrorCode.INVALID);
+    if (this.state !== "ready") return true;
+    if (b.case === "received") {
+      this.ack(b.value);
+      return false;
+    }
+    if (b.case === "session" && b.value.sessionId) this.host.session(this, b.value);
+    else this.close(ErrorCode.INVALID);
+    return true;
   }
 
   private ack(n: bigint): void {
     if (n < this.acked || n > this.sent) return this.close(ErrorCode.INVALID);
-    for (; this.acked < n; this.acked++) this.inFlightBytes -= this.inFlight.shift()!;
+    for (; this.acked < n; this.acked++) {
+      const size = this.inFlight.shift()!;
+      if (size > 0) {
+        this.inFlightBytes -= size;
+        this.inFlightMessages--;
+      }
+    }
     this.pump();
   }
 
@@ -210,17 +257,25 @@ export class Channel {
   }
 
   private pump(): void {
-    while (this.queue.length && this.inFlight.length < WINDOW_MESSAGES && this.inFlightBytes + this.queue[0].length <= WINDOW_BYTES) {
+    while (this.state === "ready" && this.queue.length && this.inFlightMessages < WINDOW_MESSAGES && this.inFlightBytes + this.queue[0].length <= WINDOW_BYTES) {
       const p = this.queue.shift()!;
       this.queued -= p.length;
-      const r = this.transport!.send(p);
-      if (!r.ok) return this.close(ErrorCode.INTERNAL);
-      this.inFlight.push(r.message.length);
+      this.transmit(p, true);
+    }
+  }
+
+  // Encrypts and sends one piece; windowed unless it is a count of ours.
+  private transmit(p: Uint8Array, windowed: boolean): void {
+    const r = this.transport!.send(p);
+    if (!r.ok) return this.close(ErrorCode.INTERNAL);
+    this.inFlight.push(windowed ? r.message.length : 0);
+    if (windowed) {
       this.inFlightBytes += r.message.length;
-      this.sent++;
-      if (!this.host.sendFrame(create(FrameSchema, { body: { case: "channelMessage", value: { channelId: this.id, message: r.message } } }))) {
-        return this.close(ErrorCode.SESSION_GONE, false);
-      }
+      this.inFlightMessages++;
+    }
+    this.sent++;
+    if (!this.host.sendFrame(create(FrameSchema, { body: { case: "channelMessage", value: { channelId: this.id, message: r.message } } }))) {
+      this.close(ErrorCode.SESSION_GONE, false);
     }
   }
 
@@ -278,6 +333,13 @@ export class Channels {
       return true;
     }
     return false;
+  }
+
+  /** The client's newest ready channel, by its signing key. */
+  newestFor(signingKey: Uint8Array): Channel | undefined {
+    let found: Channel | undefined;
+    for (const ch of this.all.values()) if (ch.state === "ready" && ch.client && sameKey(ch.client.signingKey, signingKey) && (!found || ch.id > found.id)) found = ch;
+    return found;
   }
 
   /** Closes the channels of clients the newest list no longer has. */

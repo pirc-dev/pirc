@@ -81,8 +81,8 @@ await p.ready();
 let counter = 1n;
 let request = 0;
 
-function computerJoin(joinMs?: number) {
-  const cj = new ComputerJoin({ origin: relay.origin, e2e, noise, open: wsSocket, random: (n) => new Uint8Array(randomBytes(n)), log: () => {}, joinMs });
+function computerJoin(joinMs?: number, now?: () => number) {
+  const cj = new ComputerJoin({ origin: relay.origin, e2e, noise, open: wsSocket, random: (n) => new Uint8Array(randomBytes(n)), log: () => {}, joinMs, now });
   running.push({ stop: () => cj.cancel() });
   return cj;
 }
@@ -204,8 +204,34 @@ test("refused: a wrong secret, a list without this computer, a phone's offer tha
   }
 });
 
-test("the code expires on the computer's own clock", async () => {
+test("the code expires on the computer's own clock: by its timer, and by the wall clock after a sleep", async () => {
   const cj = computerJoin(200);
   await assert.rejects(cj.start(), /expired/);
+
+  // The timer has not fired (as after a sleep), but the wall clock has
+  // passed ten minutes when the phone pairs: refused.
+  let clock = Date.now();
+  const late = computerJoin(undefined, () => clock);
+  const done = late.start();
+  const settled = done.then(
+    () => assert.fail("joined after its time"),
+    (e: Error) => assert.match(e.message, /expired/),
+  );
+  await new Promise((r) => setTimeout(r, 200));
+  clock += 10 * 60_000;
+  await phoneJoins(late.text, { publish: false }).catch(() => undefined);
+  await settled;
+});
+
+test("a wrong secret spends the code: the right one then finds nothing", async () => {
+  const cj = computerJoin();
+  const done = cj.start().catch((e: Error) => e);
+  await phoneJoins(cj.text, { secret: new Uint8Array(32).fill(1), publish: false });
+  assert.match(((await done) as Error).message, /did not match/);
+  const code = readJoinText(cj.text)!;
+  const id = `l${++request}`;
+  p.conn.send(create(FrameSchema, { body: { case: "joinLookup", value: { requestId: id, lookup: code.lookup } } }));
+  const err = await p.next("the lookup refused", (f) => (f.body.case === "error" && f.body.value.requestId === id ? f.body.value : f.body.case === "joinPaired" && f.body.value.requestId === id ? null : undefined));
+  assert.ok(err, "not paired again");
 });
 

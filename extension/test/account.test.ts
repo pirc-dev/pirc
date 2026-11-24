@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { load } from "@pirc/e2e";
 import { load as loadNoise } from "@pirc/e2e/noise";
 
-import { hasAccount, keysOf, ListFolder, listsSelf, readInfo, readSecrets, removeAccount, selfDevice } from "../src/account.ts";
+import { hasAccount, keysOf, ListFolder, listsSelf, newSecrets, readInfo, readSecrets, removeAccount, selfDevice, writeAccount } from "../src/account.ts";
 import { accountFolder, accountId, alice, bob, computer, computerSecrets, info, other, phone, v1, version } from "./account-fixture.ts";
 
 const e2e = await load();
@@ -99,4 +99,24 @@ test("leaving removes the folder", () => {
   assert.equal(existsSync(dir), false);
   removeAccount(dir);
   void accountId;
+});
+
+test("another process leaves, or joins another account: the folder is no longer ours, and nothing is written into it", () => {
+  const v2 = version(2n, [phone, computer]);
+  const { dir } = accountFolder([{ counter: 1n, bytes: v1 }, { counter: 2n, bytes: v2 }]);
+  const mine = new ListFolder(dir, e2e, info(), () => {});
+  mine.scan();
+  assert.equal(mine.ours(), true);
+  // Another account replaces the folder at the same path.
+  writeAccount(dir, newSecrets(), { ...info(), accountId: new Uint8Array(32).fill(1) }, []);
+  assert.equal(mine.ours(), false);
+  assert.deepEqual(mine.offer(version(3n, [phone, computer, alice])), { result: "gone" });
+  assert.deepEqual(readdirSync(join(dir, "lists")), [], "not written into the new account");
+  assert.equal(mine.scan(), false);
+  // Once not ours, never again, even if the old files came back.
+  const left = accountFolder([{ counter: 2n, bytes: v2 }]);
+  const f = new ListFolder(left.dir, e2e, info(), () => {});
+  removeAccount(left.dir);
+  assert.equal(f.ours(), false);
+  assert.equal(f.offer(v2).result, "gone");
 });

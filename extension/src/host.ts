@@ -309,8 +309,10 @@ export class Host implements Sink {
       ]);
       try {
         const joined = await j.start();
-        writeAccount(accountDir(configPath()), joined.secrets, joined.info, joined.lists);
+        // The marker first: should writing the account then fail, no
+        // older PiRC follows host.json to a relay meanwhile.
         saveRelay(HOSTED_MARKER);
+        writeAccount(accountDir(configPath()), joined.secrets, joined.info, joined.lists);
         this.connect();
         ui.notify(`pirc: joined the account, approved by '${joined.phoneName || "the account's phone"}'. If your phone does not show this computer now, run /pirc leave.`, "info");
       } catch (e) {
@@ -326,6 +328,10 @@ export class Host implements Sink {
       this.fail("join", e);
       ui.notify(`pirc: not joined: ${(e as Error).message}`, "error");
     });
+  }
+
+  inAccount(): boolean {
+    return hasAccount(accountDir(configPath()));
   }
 
   // /pirc leave: the account folder goes; host.json keeps the marker, so
@@ -422,6 +428,8 @@ export class Host implements Sink {
           return "pirc: off";
         case "removed":
           return "pirc: removed from the account";
+        case "left":
+          return "pirc: left the account, or joined another, in another pi on this computer; /pirc reconnect takes the account as it now is";
         case "conflict":
           return `pirc: the account's phone signed two lists numbered ${h.counter}; run /pirc leave and join again`;
         default:

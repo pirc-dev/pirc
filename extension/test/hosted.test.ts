@@ -10,7 +10,7 @@ import { after, test } from "node:test";
 import { create } from "@bufbuild/protobuf";
 import { load as loadE2e } from "@pirc/e2e";
 import { load as loadNoise } from "@pirc/e2e/noise";
-import { SessionAnnouncementSchema, SessionMessageSchema, type SessionMessage } from "@pirc/protocol";
+import { ErrorCode, SessionAnnouncementSchema, SessionMessageSchema, type SessionMessage } from "@pirc/protocol";
 import { DeviceRole, FrameSchema, type Frame } from "@pirc/protocol/v1alpha2";
 import { HostedConnection, type Signer } from "@pirc/relay-client/hosted";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
@@ -19,6 +19,7 @@ import { boxSecrets, notificationSecret, openNotice, readOnlyPair, signingPair }
 import { Harness, startHostedRelay } from "../../test/harness.ts";
 import { Hosted, type HostedStatus } from "../src/hosted.ts";
 import type { Live } from "../src/live.ts";
+import { removeAccount } from "../src/account.ts";
 import { accountFolder, accountId, alice, bob, channelSecret, computer, phone, v1, version } from "./account-fixture.ts";
 import { ChannelClient } from "./channel-client.ts";
 
@@ -75,8 +76,9 @@ function device(name: string, account: Uint8Array, as: Signer = signer(name)) {
   return { conn, frames, next, ready: () => until(`${name} ready`, () => (conn.current.kind === "ready" ? conn.current.welcome : undefined)) };
 }
 
-const v2 = version(2n, [phone, computer, alice]);
-const v3 = version(3n, [phone, computer, bob]);
+const v2 = version(2n, [phone, computer, alice, bob]);
+// Bob removed, given to the computer by alice before the relay has it.
+const v3 = version(3n, [phone, computer, alice]);
 const SESSION = "0194f3e2-7c1a-7000-8000-000000000002";
 
 test("a computer in an account: sealed announcements, a channel, a removal", async () => {
@@ -129,7 +131,7 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
     return undefined;
   });
   const slot = { accountId, computerKey: computer.signingKey, sessionId: new TextEncoder().encode(SESSION) };
-  const opened = e2e.openAnnouncement({ sealed: entry.sealed, slot, recipientSecretKey: boxSecrets("alice").box, list: { counter: 2n, devices: [phone, computer, alice] }, highest: null, now: BigInt(Date.now()) });
+  const opened = e2e.openAnnouncement({ sealed: entry.sealed, slot, recipientSecretKey: boxSecrets("alice").box, list: { counter: 2n, devices: [phone, computer, alice, bob] }, highest: null, now: BigInt(Date.now()) });
   assert.equal(opened.result, "accepted");
   assert.deepEqual(opened.result === "accepted" && opened.body, { sessionName: "fix the build", folder: "/work", model: "Model One", computerName: "build box", notice: "May I run the tests?" });
 
@@ -146,30 +148,37 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
     assert.equal(o.result, "accepted");
     return o.result === "accepted" ? o.ordering : -1n;
   };
-  const noticeOrdering = await notice({ counter: 2n, devices: [phone, computer, alice] }, 1);
+  const noticeOrdering = await notice({ counter: 2n, devices: [phone, computer, alice, bob] }, 1);
   assert.equal(noticeOrdering, announcement.notice!.number);
 
   // A channel: IK through the relay, the list first, then the session.
-  let channelId = 0n;
-  const client = new ChannelClient(noise, channelSecret("alice"), computer.channelKey, accountId, (m) =>
-    a.conn.send(create(FrameSchema, { body: { case: "channelMessage", value: { channelId, message: m } } })),
-  );
-  a.conn.send(create(FrameSchema, { body: { case: "openChannel", value: { requestId: "o1", hostKey: computer.signingKey, instanceId: "i1", message: await client.message1() } } }));
-  channelId = await a.next("ChannelOpened", (f) => (f.body.case === "channelOpened" ? f.body.value.channelId : undefined));
-  let delivered = 0;
-  const deliverAll = async () => {
-    const msgs = a.frames.filter((f) => f.body.case === "channelMessage" && f.body.value.channelId === channelId);
-    for (; delivered < msgs.length; delivered++) await client.take((msgs[delivered].body.value as { message: Uint8Array }).message);
-  };
-  const wait = async (what: string, ok: () => boolean) => {
-    const deadline = Date.now() + 5000;
-    while (!ok()) {
-      if (Date.now() > deadline) throw new Error(`waiting for ${what}`);
-      await deliverAll();
-      await new Promise((r) => setTimeout(r, 20));
-    }
-  };
-  await wait("message 2", () => a.frames.some((f) => f.body.case === "channelMessage") && delivered > 0);
+  let opens = 0;
+  async function channel(d: typeof a, name: string) {
+    let channelId = 0n;
+    const client = new ChannelClient(noise, channelSecret(name), computer.channelKey, accountId, (m) =>
+      d.conn.send(create(FrameSchema, { body: { case: "channelMessage", value: { channelId, message: m } } })),
+    );
+    const id = `o${++opens}`;
+    d.conn.send(create(FrameSchema, { body: { case: "openChannel", value: { requestId: id, hostKey: computer.signingKey, instanceId: "i1", message: await client.message1() } } }));
+    channelId = await d.next("ChannelOpened", (f) => (f.body.case === "channelOpened" && f.body.value.requestId === id ? f.body.value.channelId : undefined));
+    let delivered = 0;
+    const deliverAll = async () => {
+      const msgs = d.frames.filter((f) => f.body.case === "channelMessage" && f.body.value.channelId === channelId);
+      for (; delivered < msgs.length; delivered++) await client.take((msgs[delivered].body.value as { message: Uint8Array }).message);
+    };
+    const wait = async (what: string, ok: () => boolean) => {
+      const deadline = Date.now() + 5000;
+      while (!ok()) {
+        if (Date.now() > deadline) throw new Error(`waiting for ${what}`);
+        await deliverAll();
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    };
+    await wait("message 2", () => delivered > 0);
+    const closed = () => d.frames.find((f) => f.body.case === "closeChannel" && f.body.value.channelId === channelId)?.body.value as { code: ErrorCode } | undefined;
+    return { client, wait, closed };
+  }
+  const { client, wait } = await channel(a, "alice");
   client.sendList(v2);
   await wait("the announcement", () => client.sessions().some((s) => "announcement" in s));
   assert.equal(client.frames[0].body.case, "listState");
@@ -179,29 +188,52 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
   await wait("the reply", () => client.sessions().some((s) => "message" in s));
   assert.equal(requests.length, 1);
 
-  // The phone replaces alice with bob: the relay closes her channel, and
-  // the computer stores version 3 and seals for bob.
-  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p3", list: v3 } } }));
-  await p.next("Done", (f) => (f.body.case === "done" ? f : undefined));
-  await until("version 3 at the computer", () => (hosted!.listCounter === 3n ? true : undefined));
-  await until("alice's channel closed", () => (a.frames.some((f) => f.body.case === "closeChannel" && f.body.value.channelId === channelId) || a.conn.current.kind !== "ready" ? true : undefined));
+  // Bob has a channel; alice brings version 3, without bob, before the
+  // relay has it. The computer stores it, closes bob's channel itself,
+  // gives the version to the relay, and seals again for the new list.
   const b = device("bob", accountId);
   await b.ready();
-  b.conn.send(create(FrameSchema, { body: { case: "subscribeSessions", value: {} } }));
-  const forBob = await b.next("bob's copy", (f) => {
-    if (f.body.case === "sessionList") return f.body.value.sessions.find((s) => s.sealed.length > 0);
-    if (f.body.case === "sessionUpdated" && f.body.value.entry?.sealed.length) return f.body.value.entry;
-    return undefined;
-  });
+  const bc = await channel(b, "bob");
+  bc.client.sendList(v2);
+  await bc.wait("bob's announcement", () => bc.client.sessions().some((s) => "announcement" in s));
+  const a2 = await channel(a, "alice");
+  a2.client.sendList(v3);
+  await a2.wait("alice's second channel", () => a2.client.frames.length > 0);
+  assert.equal(hosted!.listCounter, 3n);
+  await until("bob's channel closed by the computer", () => bc.closed());
+  assert.equal(bc.closed()!.code, ErrorCode.PERMISSION_DENIED);
+  const late = device("alice", accountId);
+  await until("the relay has version 3", () => (late.conn.current.kind === "ready" && late.conn.current.welcome.listCounter === 3n ? true : undefined));
+  late.conn.stop();
   // Sealed again for the new list, the notice keeps its value: it is not a new one.
-  assert.equal(await notice({ counter: 3n, devices: [phone, computer, bob] }, 2), noticeOrdering);
-  const bobOpened = e2e.openAnnouncement({ sealed: forBob.sealed, slot, recipientSecretKey: boxSecrets("bob").box, list: { counter: 3n, devices: [phone, computer, bob] }, highest: null, now: BigInt(Date.now()) });
-  assert.equal(bobOpened.result, "accepted");
+  assert.equal(await notice({ counter: 3n, devices: [phone, computer, alice] }, 2), noticeOrdering);
 
   // Version 4 drops the computer: it stops, removed.
-  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p4", list: version(4n, [phone, bob]) } } }));
+  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p4", list: version(4n, [phone, alice]) } } }));
   await until("removed", () => (hosted!.current.kind === "removed" ? true : undefined));
   assert.ok(statuses.some((s) => s.kind === "removed"));
   hosted.stop();
   for (const d of [p, a, b]) d.conn.stop();
+});
+
+test("another process leaves the account: this one stops, left, and closes its connection", async () => {
+  // The account from the test before, with the computer back on the list.
+  const p = device("phone", accountId);
+  await p.ready();
+  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p5", list: version(5n, [phone, computer, alice]) } } }));
+  await p.next("Done", (f) => (f.body.case === "done" ? f : undefined));
+  const { dir } = accountFolder([{ counter: 1n, bytes: v1 }, { counter: 5n, bytes: version(5n, [phone, computer, alice]) }], relay.origin);
+  const statuses: string[] = [];
+  const sink = (n: string) => ({ instanceId: n, computerName: "c", lives: () => [], announce: () => {}, request: () => {}, onStatus: (s: HostedStatus) => statuses.push(`${n} ${s.kind}`), log: () => {}, fail: () => {} });
+  const one = await Hosted.open(dir, sink("one"), { rescanMs: 100 });
+  const two = await Hosted.open(dir, sink("two"), { rescanMs: 100 });
+  running.push(one, two);
+  one.start();
+  two.start();
+  await until("both ready", () => (one.current.kind === "ready" && two.current.kind === "ready" ? true : undefined));
+  // One leaves (host.ts: stop, then remove the folder); the other notices.
+  one.stop();
+  removeAccount(dir);
+  await until("two left", () => (two.current.kind === "left" ? true : undefined));
+  p.conn.stop();
 });

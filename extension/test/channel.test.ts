@@ -8,7 +8,7 @@ import { ErrorCode, SessionMessageSchema } from "@pirc/protocol";
 import { ChannelFrameSchema, FrameSchema, type Frame, type SessionFrame } from "@pirc/protocol/v1alpha2";
 
 import { keysOf, ListFolder, listsSelf, selfDevice } from "../src/account.ts";
-import { Channels, FRAME_MAX, Joiner, MAX_WAITING, PIECE_DATA_MAX, pieces, QUEUE_BYTES, WINDOW_MESSAGES, type Channel, type ChannelHost } from "../src/channel.ts";
+import { Channels, FRAME_MAX, Joiner, MAX_WAITING, PIECE_DATA_MAX, pieces, QUEUE_BYTES, WINDOW_BYTES, WINDOW_MESSAGES, type Channel, type ChannelHost } from "../src/channel.ts";
 import { accountFolder, accountId, alice, bob, channelSecret, computer, computerSecrets, info, phone, v1, version } from "./account-fixture.ts";
 import { ChannelClient } from "./channel-client.ts";
 
@@ -69,11 +69,11 @@ function rig(lists: { counter: bigint; bytes: Uint8Array }[]) {
   const channels = new Channels(host);
   let next = 1n;
   // A client opening a channel; its messages delivered as the process sends them.
-  async function open(name: string, opts: { ackEvery?: number; list?: Uint8Array; secret?: Uint8Array } = {}) {
+  async function open(name: string, opts: { counts?: boolean; list?: Uint8Array; secret?: Uint8Array } = {}) {
     const id = next++;
     const client = new ChannelClient(noise, opts.secret ?? channelSecret(name), computer.channelKey, accountId, (m) => {
       channels.onFrame(create(FrameSchema, { body: { case: "channelMessage", value: { channelId: id, message: m } } }));
-    }, opts.ackEvery);
+    }, opts.counts ?? true);
     let seen = sent.length;
     const deliver = async () => {
       for (; seen < sent.length; seen++) {
@@ -224,7 +224,7 @@ test("a channel waiting for its list ends after 30 seconds", async (t) => {
 
 test("flow: at most 32 messages in flight; received lets more go; the queue's cap ends the channel", async () => {
   const r = rig([{ counter: 2n, bytes: v2 }]);
-  const a = await r.open("alice", { ackEvery: 0 });
+  const a = await r.open("alice", { counts: false });
   a.client.sendList(v2);
   await r.settle();
   const ch = r.ready[0];
@@ -242,14 +242,14 @@ test("flow: at most 32 messages in flight; received lets more go; the queue's ca
   await r.settle();
   assert.equal(a.closed(), ErrorCode.INVALID);
 
-  const b = await r.open("alice", { ackEvery: 0 });
+  const b = await r.open("alice", { counts: false });
   b.client.sendList(v2);
   await r.settle();
   const chb = r.ready[1];
   const piece = new Uint8Array(PIECE_DATA_MAX - 100);
   let sent = 0;
   while (chb.sendSession({ $typeName: "pirc.v1alpha2.SessionFrame", sessionId: "s", body: { case: "message", value: piece } })) sent += piece.length;
-  assert.ok(sent > QUEUE_BYTES - 2 * piece.length && sent < QUEUE_BYTES + 768 * 1024 + piece.length, `${sent}`);
+  assert.ok(sent > QUEUE_BYTES - 2 * piece.length && sent < QUEUE_BYTES + WINDOW_BYTES + piece.length, `${sent}`);
   assert.equal(b.closed(), ErrorCode.RATE_LIMITED);
 });
 
@@ -280,4 +280,40 @@ test("the relay's CloseChannel ends it without an answer; a lost connection ends
   r.channels.closeAll(ErrorCode.SESSION_GONE, false);
   assert.equal(b.closed(), undefined);
   assert.equal(r.channels.size, 0);
+});
+
+test("the computer counts the client's messages, 8 at a time, and not the client's counts", async () => {
+  const r = rig([{ counter: 2n, bytes: v2 }]);
+  const a = await r.open("alice", { counts: false });
+  a.client.sendList(v2);
+  await r.settle();
+  for (let i = 0; i < 7; i++) a.client.request("s", create(SessionMessageSchema, {}));
+  await r.settle();
+  await a.deliver();
+  assert.deepEqual(a.client.counted, [8n], "the list and 7 requests");
+  // Counts of the client's own are taken but not counted back.
+  for (let i = 0; i < 20; i++) a.client.send(create(ChannelFrameSchema, { body: { case: "received", value: 1n } }));
+  await r.settle();
+  await a.deliver();
+  assert.deepEqual(a.client.counted, [8n]);
+  a.client.request("s", create(SessionMessageSchema, {}));
+  for (let i = 0; i < 7; i++) a.client.request("s", create(SessionMessageSchema, {}));
+  await r.settle();
+  await a.deliver();
+  assert.deepEqual(a.client.counted, [8n, 36n]);
+});
+
+test("a reply goes to the client's newest channel when the one it came on has closed", async () => {
+  const r = rig([{ counter: 2n, bytes: v2 }]);
+  const a = await r.open("alice");
+  a.client.sendList(v2);
+  await r.settle();
+  const first = r.ready[0];
+  const b = await r.open("alice");
+  b.client.sendList(v2);
+  await r.settle();
+  assert.equal(r.channels.newestFor(alice.signingKey), r.ready[1], "the newer of two");
+  first.close(ErrorCode.SESSION_GONE, false);
+  assert.equal(r.channels.newestFor(alice.signingKey), r.ready[1]);
+  assert.equal(r.channels.newestFor(bob.signingKey), undefined);
 });

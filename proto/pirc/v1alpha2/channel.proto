@@ -20,10 +20,14 @@ message ChannelFrame {
     ListState list_state = 2;
     // Either way, after list_state: a session's messages.
     SessionFrame session = 3;
-    // Client to computer: how many Noise messages it has taken on this
-    // channel so far, sent at least every 8. The computer keeps at most 32
-    // messages and 768 KiB beyond that count in flight, so the relay's
-    // queue toward the client stays under its cap.
+    // Either way: how many Noise messages this side has taken on the
+    // channel so far, sent once it has taken 8, or 128 KiB, since its last.
+    // Each side keeps at most 16 messages and 256 KiB beyond the other's
+    // count in flight, not counting `received` itself, which is sent
+    // outside that window and is not counted back. So the relay's queue
+    // for one channel stays under its cap (1 MiB, 64 frames); a client
+    // keeps the sum over its channels under its connection's cap (4 MiB,
+    // 256 frames) by holding its counts back.
     uint64 received = 4;
   }
 }
