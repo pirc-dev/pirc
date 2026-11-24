@@ -117,7 +117,10 @@ Ed25519 verify; `e2e/sealed.json` a computer's sealing of a session's
 announcement and notice, to exact bytes with the nonces given, and their
 opening (section 5); `e2e/names.json` opening the devices' names, and the
 phone's names maker to exact bytes (section 3); `e2e/channel.json` Noise
-for a channel and a join (sections 4 and 6; see "Noise" below). They are written from fixed seeds by
+for a channel and a join (sections 4 and 6; see "Noise" below);
+`e2e/join.json` a join's text, made and read, its prologue, and each
+side's offer of its keys, made to exact bytes and checked (section 6),
+run by `e2e/test/join.test.ts`. They are written from fixed seeds by
 `e2e/test/gen.ts` alone, never by hand, and `sh/check.sh` fails if they
 differ from what it writes; the runners' checks of each file's shape are
 a second guard. To write them:

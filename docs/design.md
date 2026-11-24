@@ -2371,6 +2371,20 @@ built; steps 14 and 15 are not finished.
             connects anywhere in its place; the phone is asked to remove
             the computer too.
        7. **Joining** from the app, the web app and the terminal.
+
+          The new device's side, shared (7a, `relay-client/join.ts`):
+          - **One joining side for every device**: `DeviceJoin` takes the
+            device's role and keys, its channel key as a Noise static key
+            and a signing function, so a computer (`/pirc join`, which
+            makes its keys with libsodium) and a browser (whose signing and
+            channel keys stay in WebCrypto, not exportable) run the same
+            steps. The list it takes must hold it in its own role: a
+            browser listed as a computer, or a computer as a client, is
+            refused.
+          - **`cases/e2e/join.json`**: the text made and read, the
+            prologue, offers made to exact bytes and checked with the
+            reason for each refusal, so that the app's Dart is held to the
+            same bytes.
        8. **The app and the notification extension**: sign-up (the phone
           signs the first version), the list, channels, notices from the
           read-only key on both platforms, additions and removals shown,

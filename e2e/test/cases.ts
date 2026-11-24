@@ -243,3 +243,19 @@ export function namesExpectOf(r: NamesResult): NamesExpect {
   }
   return r.result === "later" ? { result: r.result } : { result: r.result, reason: r.reason };
 }
+
+/** cases/e2e/join.json: a join's text, its prologue, and the offers (docs/e2e.md, section 6). */
+export type JoinCase =
+  | { check: "join-text"; about: string; lookup: string; secret: string; text: string }
+  | { check: "read-join-text"; about: string; input: string; expect: { lookup: string; secret: string } | null }
+  | { check: "join-prologue"; about: string; lookup: string; bytes: string }
+  | { check: "make-offer"; about: string; device: DeviceJson; seed: string; handshakeHash: string; bytes: string }
+  | {
+      check: "check-offer";
+      about: string;
+      offer: string;
+      role: number;
+      remoteStatic: string;
+      handshakeHash: string;
+      expect: { result: "accepted"; device: DeviceJson } | { result: "refused"; reason: string };
+    };

@@ -1,5 +1,5 @@
-// Writes cases/e2e/framed.json, list.json, sealed.json, names.json and
-// channel.json from fixed seeds. With --check it writes nothing, and fails
+// Writes cases/e2e/framed.json, list.json, sealed.json, names.json,
+// channel.json and join.json from fixed seeds. With --check it writes nothing, and fails
 // if a file would change.
 //
 //   node --experimental-transform-types --no-warnings e2e/test/gen.ts [--check]
@@ -39,6 +39,8 @@ import {
   NAME_MAX_BYTES,
   NAMES_CONTEXT,
   NOTICE_CONTEXT,
+  ROLE_CLIENT,
+  ROLE_COMPUTER,
   type AnnouncementText,
   type Kind,
   type ListInput,
@@ -49,6 +51,8 @@ import {
   type Slot,
 } from "../index.ts";
 import { channelPrologue, CHANNEL_CONTEXT, load as loadNoise } from "../noise.ts";
+import { checkOffer, joinPrologue, joinText, JOIN_CONTEXT, makeOffer, readJoinText, type OfferResult } from "../join.ts";
+import { DeviceSchema, JoinOfferSchema } from "@pirc/protocol/v1alpha2";
 import { Handshake, IK, MAX_MESSAGE, MAX_PLAINTEXT, XXPSK3, type Reason, type StaticKey, type Transport } from "../noise-core.ts";
 import { openSealed, sealWithNonces } from "../sealed.ts";
 import {
@@ -65,6 +69,7 @@ import {
   type CaseFile,
   type Expect,
   type FramedCase,
+  type JoinCase,
   type ListCase,
   type NamesCase,
   type SealedCase,
@@ -1684,9 +1689,92 @@ async function channelCases(): Promise<ChannelCase[]> {
   return out;
 }
 
+
+// --------------------------------------------------------------- join.json
+
+function joinCases(): JoinCase[] {
+  const out: JoinCase[] = [];
+  const secret = Uint8Array.from({ length: 32 }, (_, i) => i);
+  const text = joinText("VTPVXVT2", secret);
+  // The text by hand: the prefix, the lookup, the secret's 52 characters.
+  must(text === "PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG", "the join text by hand");
+  out.push({ check: "join-text", about: "the prefix, the lookup, the secret in Crockford base32, upper case", lookup: "VTPVXVT2", secret: hex(secret), text });
+  const ones = new Uint8Array(32).fill(0xff);
+  out.push({ check: "join-text", about: "every bit set: the last character's 4 spare bits zero", lookup: "ZZZZZZZZ", secret: hex(ones), text: joinText("ZZZZZZZZ", ones) });
+  const want = { lookup: "VTPVXVT2", secret: hex(secret) };
+  const read = (about: string, input: string, expect: { lookup: string; secret: string } | null) => {
+    const got = readJoinText(input);
+    must(JSON.stringify(got ? { lookup: got.lookup, secret: hex(got.secret) } : null) === JSON.stringify(expect), `read-join-text: ${about}`);
+    out.push({ check: "read-join-text", about, input, expect });
+  };
+  read("the text as made", text, want);
+  read("lower case", text.toLowerCase(), want);
+  read("spaces, hyphens and a line end ignored", ` ${text.slice(0, 20)}-${text.slice(20, 40)} ${text.slice(40)}\n`, want);
+  read("a link carrying it after #", `https://pirc.dev/join#${text}`, want);
+  read("only what follows the last #", `#PIRC1#${text}`, want);
+  read("one character short", text.slice(1), null);
+  read("one character over", `${text}0`, null);
+  read("another prefix", `PIRC2${text.slice(5)}`, null);
+  read("the secret's spare bits set", `${text.slice(0, 64)}Z`, null);
+  read("U, outside the alphabet", `${text.slice(0, 10)}U${text.slice(11)}`, null);
+  read("O is not read as 0", text.replace("0", "O"), null);
+  read("empty", "", null);
+
+  const p = joinPrologue("VTPVXVT2");
+  // By hand: the context, then the version as an 8-byte part, then the lookup.
+  must(hex(p) === hex(concat(utf8(JOIN_CONTEXT), Uint8Array.of(0, 8, 0, 0, 0, 0, 0, 0, 0, 1, 8), utf8("VTPVXVT2"))), "the prologue by hand");
+  out.push({ check: "join-prologue", about: "framed(context, the join's version 1, the lookup)", lookup: "VTPVXVT2", bytes: hex(p) });
+
+  // A handshake hash is 64 bytes (SHA-512).
+  const hh64 = concat(sha256(utf8("a handshake hash")), sha256(utf8("its second half")));
+  const C = device("joining computer", ROLE_COMPUTER, false);
+  const P = device("joining phone", ROLE_CLIENT, true);
+  const B = device("joining browser", ROLE_CLIENT, false);
+  const signer = (name: string) => (m: Uint8Array) => sodium.crypto_sign_detached(m, sodium.crypto_sign_seed_keypair(seed(`${name} signing`)).privateKey);
+  const offers: Record<string, Uint8Array> = {};
+  for (const [name, d] of [["joining computer", C], ["joining phone", P], ["joining browser", B]] as const) {
+    const bytes = makeOffer(d, hh64, signer(name));
+    offers[name] = bytes;
+    out.push({ check: "make-offer", about: `a ${name.slice(8)}'s offer, signed by its signing key's seed`, device: deviceJson(d), seed: hex(seed(`${name} signing`)), handshakeHash: hex(hh64), bytes: hex(bytes) });
+  }
+  const offerCheck = (about: string, offer: Uint8Array, role: number, remote: Uint8Array, h: Uint8Array, wantResult: "accepted" | string) => {
+    const r: OfferResult = checkOffer(sodium, { offer, role, remoteStatic: remote, handshakeHash: h });
+    must(r.result === "accepted" ? wantResult === "accepted" : r.reason === wantResult, `check-offer: ${about}`);
+    out.push({
+      check: "check-offer",
+      about,
+      offer: hex(offer),
+      role,
+      remoteStatic: hex(remote),
+      handshakeHash: hex(h),
+      expect: r.result === "accepted" ? { result: "accepted", device: deviceJson(r.device) } : { result: "refused", reason: r.reason },
+    });
+  };
+  const forged = (d: Dev, sign: (m: Uint8Array) => Uint8Array) => toBinary(JoinOfferSchema, create(JoinOfferSchema, { device: create(DeviceSchema, d), signature: sign(EMPTY) }));
+  offerCheck("a computer's offer, as a computer", offers["joining computer"], ROLE_COMPUTER, C.channelKey, hh64, "accepted");
+  offerCheck("a phone's offer, as a client", offers["joining phone"], ROLE_CLIENT, P.channelKey, hh64, "accepted");
+  offerCheck("a browser's offer, as a client", offers["joining browser"], ROLE_CLIENT, B.channelKey, hh64, "accepted");
+  offerCheck("a computer's offer where a client is expected", offers["joining computer"], ROLE_CLIENT, C.channelKey, hh64, "role");
+  offerCheck("a phone's offer where a computer is expected", offers["joining phone"], ROLE_COMPUTER, P.channelKey, hh64, "role");
+  offerCheck("a channel key other than the one the handshake proved", offers["joining computer"], ROLE_COMPUTER, P.channelKey, hh64, "channel-key");
+  offerCheck("signed over another handshake", offers["joining computer"], ROLE_COMPUTER, C.channelKey, sha256(utf8("another")), "signature");
+  offerCheck("signed by another key", makeOffer(C, hh64, signer("someone else")), ROLE_COMPUTER, C.channelKey, hh64, "signature");
+  offerCheck("not an offer", Uint8Array.of(0xff), ROLE_COMPUTER, C.channelKey, hh64, "parse");
+  offerCheck("no device", toBinary(JoinOfferSchema, create(JoinOfferSchema, { signature: new Uint8Array(64) })), ROLE_COMPUTER, C.channelKey, hh64, "parse");
+  offerCheck("a box key of 31 bytes", forged({ ...C, boxKey: C.boxKey.subarray(1) }, signer("joining computer")), ROLE_COMPUTER, C.channelKey, hh64, "key");
+  offerCheck("a computer with a read-only key", forged({ ...C, readOnlyKey: P.readOnlyKey }, signer("joining computer")), ROLE_COMPUTER, C.channelKey, hh64, "key");
+  offerCheck("a phone's read-only key without its notification key", makeOffer({ ...P, notificationKey: EMPTY }, hh64, signer("joining phone")), ROLE_CLIENT, P.channelKey, hh64, "key");
+  offerCheck("an unknown role", makeOffer({ ...C, role: 3 }, hh64, signer("joining computer")), 3, C.channelKey, hh64, "role");
+  const signed = offers["joining phone"];
+  const tampered = toBinary(JoinOfferSchema, create(JoinOfferSchema, { device: create(DeviceSchema, { ...P, boxKey: C.boxKey }), signature: signed.subarray(signed.length - 64) }));
+  offerCheck("a key changed after signing", tampered, ROLE_CLIENT, P.channelKey, hh64, "signature");
+  offerCheck("a signature of 63 bytes", toBinary(JoinOfferSchema, create(JoinOfferSchema, { device: create(DeviceSchema, C), signature: new Uint8Array(63) })), ROLE_COMPUTER, C.channelKey, hh64, "signature");
+  return out;
+}
+
 // ------------------------------------------------------------- writing
 
-const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile<SealedCase> | CaseFile<NamesCase> | ChannelFile> = {
+const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile<SealedCase> | CaseFile<NamesCase> | CaseFile<JoinCase> | ChannelFile> = {
   "framed.json": {
     about: "framed(context, parts...) and the 8-byte number in a part (docs/e2e.md, section 2). A case with throws is refused: the context, or the number, is the caller's mistake.",
     cases: framedCases(),
@@ -1706,6 +1794,10 @@ const files: Record<string, CaseFile<FramedCase> | CaseFile<ListCase> | CaseFile
   "channel.json": {
     about: "Noise for a channel and a join (docs/e2e.md, sections 4 and 6): IK's prologue, to its bytes; IK and XXpsk3 run step by step between parties with fixed keys, each write and send to exact bytes, each failure with its reason, and every call of a party giving dead after it.",
     cases: await channelCases(),
+  },
+  "join.json": {
+    about: "A join's shared pieces (docs/e2e.md, section 6): the text a new device shows, made and read; XXpsk3's prologue; each side's offer of its keys, made to exact bytes and checked, with the reason for each refusal.",
+    cases: joinCases(),
   },
 };
 

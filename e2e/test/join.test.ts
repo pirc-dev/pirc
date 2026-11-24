@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { create, toBinary } from "@bufbuild/protobuf";
@@ -7,6 +8,7 @@ import sodium from "libsodium-wrappers-sumo";
 
 import { base32, checkOffer, fromBase32, JOIN_TEXT_CHARS, joinPrologue, joinText, makeOffer, readJoinText } from "../join.ts";
 import { ROLE_CLIENT, ROLE_COMPUTER } from "../list.ts";
+import { CASES_DIR, deviceJson, deviceKeys, hex, unhex, type CaseFile, type JoinCase } from "./cases.ts";
 import { device, signingPair } from "./make.ts";
 
 await sodium.ready;
@@ -73,4 +75,39 @@ test("an offer: signed over the handshake, its channel key the one proved, of th
   const signed = makeOffer(P, hh, sign("joining phone"));
   const tampered = toBinary(JoinOfferSchema, create(JoinOfferSchema, { device: create(DeviceSchema, { ...P, boxKey: C.boxKey }), signature: signed.subarray(signed.length - 64) }));
   assert.deepEqual(check(tampered, ROLE_CLIENT, P.channelKey), { result: "refused", reason: "signature" });
+});
+
+test("cases/e2e/join.json", () => {
+  const file = JSON.parse(readFileSync(new URL("join.json", CASES_DIR), "utf8")) as CaseFile<JoinCase>;
+  assert.deepEqual(Object.keys(file).sort(), ["about", "cases"]);
+  const seen = new Set<string>();
+  for (const c of file.cases) {
+    seen.add(c.check);
+    switch (c.check) {
+      case "join-text":
+        assert.equal(joinText(c.lookup, unhex(c.secret)), c.text, c.about);
+        break;
+      case "read-join-text": {
+        const r = readJoinText(c.input);
+        assert.deepEqual(r ? { lookup: r.lookup, secret: hex(r.secret) } : null, c.expect, c.about);
+        break;
+      }
+      case "join-prologue":
+        assert.equal(hex(joinPrologue(c.lookup)), c.bytes, c.about);
+        break;
+      case "make-offer": {
+        const kp = sodium.crypto_sign_seed_keypair(unhex(c.seed));
+        assert.equal(hex(makeOffer(deviceKeys(c.device), unhex(c.handshakeHash), (m) => sodium.crypto_sign_detached(m, kp.privateKey))), c.bytes, c.about);
+        break;
+      }
+      case "check-offer": {
+        const r = checkOffer(sodium, { offer: unhex(c.offer), role: c.role, remoteStatic: unhex(c.remoteStatic), handshakeHash: unhex(c.handshakeHash) });
+        assert.deepEqual(r.result === "accepted" ? { result: r.result, device: deviceJson(r.device) } : r, c.expect, c.about);
+        break;
+      }
+      default:
+        assert.fail(`unknown check ${(c as { check: string }).check}`);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ["check-offer", "join-prologue", "join-text", "make-offer", "read-join-text"]);
 });

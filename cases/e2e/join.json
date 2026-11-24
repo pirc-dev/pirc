@@ -1,0 +1,370 @@
+{
+ "about": "A join's shared pieces (docs/e2e.md, section 6): the text a new device shows, made and read; XXpsk3's prologue; each side's offer of its keys, made to exact bytes and checked, with the reason for each refusal.",
+ "cases": [
+  {
+   "check": "join-text",
+   "about": "the prefix, the lookup, the secret in Crockford base32, upper case",
+   "lookup": "VTPVXVT2",
+   "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "text": "PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG"
+  },
+  {
+   "check": "join-text",
+   "about": "every bit set: the last character's 4 spare bits zero",
+   "lookup": "ZZZZZZZZ",
+   "secret": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "text": "PIRC1ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZG"
+  },
+  {
+   "check": "read-join-text",
+   "about": "the text as made",
+   "input": "PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": {
+    "lookup": "VTPVXVT2",
+    "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+   }
+  },
+  {
+   "check": "read-join-text",
+   "about": "lower case",
+   "input": "pirc1vtpvxvt2000g40r40m30e209185gr38e1w8124gk2gahc5rr34d1p70x3rfg",
+   "expect": {
+    "lookup": "VTPVXVT2",
+    "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+   }
+  },
+  {
+   "check": "read-join-text",
+   "about": "spaces, hyphens and a line end ignored",
+   "input": " PIRC1VTPVXVT2000G40R-40M30E209185GR38E1W8 124GK2GAHC5RR34D1P70X3RFG\n",
+   "expect": {
+    "lookup": "VTPVXVT2",
+    "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+   }
+  },
+  {
+   "check": "read-join-text",
+   "about": "a link carrying it after #",
+   "input": "https://pirc.dev/join#PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": {
+    "lookup": "VTPVXVT2",
+    "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+   }
+  },
+  {
+   "check": "read-join-text",
+   "about": "only what follows the last #",
+   "input": "#PIRC1#PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": {
+    "lookup": "VTPVXVT2",
+    "secret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+   }
+  },
+  {
+   "check": "read-join-text",
+   "about": "one character short",
+   "input": "IRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "one character over",
+   "input": "PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG0",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "another prefix",
+   "input": "PIRC2VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "the secret's spare bits set",
+   "input": "PIRC1VTPVXVT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFZ",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "U, outside the alphabet",
+   "input": "PIRC1VTPVXUT2000G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "O is not read as 0",
+   "input": "PIRC1VTPVXVT2O00G40R40M30E209185GR38E1W8124GK2GAHC5RR34D1P70X3RFG",
+   "expect": null
+  },
+  {
+   "check": "read-join-text",
+   "about": "empty",
+   "input": "",
+   "expect": null
+  },
+  {
+   "check": "join-prologue",
+   "about": "framed(context, the join's version 1, the lookup)",
+   "lookup": "VTPVXVT2",
+   "bytes": "706972632d6532652d7632206a6f696e00080000000000000001085654505658565432"
+  },
+  {
+   "check": "make-offer",
+   "about": "a computer's offer, signed by its signing key's seed",
+   "device": {
+    "role": 1,
+    "signingKey": "bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac88",
+    "channelKey": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+    "boxKey": "78566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a342",
+    "readOnlyKey": "",
+    "notificationKey": ""
+   },
+   "seed": "13209583e0cb421da41987b8122dcd123530da6440811ef170ec078449895c1d",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "bytes": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212407f65945f66702a4908e19828aa2d0a12be7ca4d0fe37c48fbe5d7e3802be4d617552bdbda570a6c5e64c3763939948d394e7ab8a53f54ef2b2a744c4205d2803"
+  },
+  {
+   "check": "make-offer",
+   "about": "a phone's offer, signed by its signing key's seed",
+   "device": {
+    "role": 2,
+    "signingKey": "a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d",
+    "channelKey": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+    "boxKey": "d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b67",
+    "readOnlyKey": "7f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca5",
+    "notificationKey": "c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a7376"
+   },
+   "seed": "95fcf169bd55e09e5dfa04adb3c1ce30d51b6996914f4d8b9950bc0f27edb905",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "bytes": "0aac0108021220a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d1a20f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e7961022220d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b672a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca53220c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a73761240044810dc76d3e71b5d78cd72b9076a27903b5a9fa93214a34757d1fbf7c3caa49c36ed46d88827e17acad71d1f373c59a325a082d21f17abc6d1434af446260d"
+  },
+  {
+   "check": "make-offer",
+   "about": "a browser's offer, signed by its signing key's seed",
+   "device": {
+    "role": 2,
+    "signingKey": "2bc0f788f53e41f0c5923a67afd04aed9b8632be6f92aabbb855847d1e3e33f6",
+    "channelKey": "976e4925e00db1ac7ec9cc348633fb7950ffc2906bc2409698b8f0f77ba3437b",
+    "boxKey": "cf6022e9ff217aa3d997efd1d36a88b782d18a8efe1558edcf70dc6684bd9650",
+    "readOnlyKey": "",
+    "notificationKey": ""
+   },
+   "seed": "a4ffb229f1be4601cb4d1cc1521f5d28b58cfd5eeb35559d9e4b98ef5a87978d",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "bytes": "0a68080212202bc0f788f53e41f0c5923a67afd04aed9b8632be6f92aabbb855847d1e3e33f61a20976e4925e00db1ac7ec9cc348633fb7950ffc2906bc2409698b8f0f77ba3437b2220cf6022e9ff217aa3d997efd1d36a88b782d18a8efe1558edcf70dc6684bd96501240b76e55c69d2b187db7e8e2fe764bdb069fda0c41c831acd807516f80386c0710fcabecc6c1bfdf4bc943ecb2751ffa886cea37704d2287453894c049e001030f"
+  },
+  {
+   "check": "check-offer",
+   "about": "a computer's offer, as a computer",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212407f65945f66702a4908e19828aa2d0a12be7ca4d0fe37c48fbe5d7e3802be4d617552bdbda570a6c5e64c3763939948d394e7ab8a53f54ef2b2a744c4205d2803",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "accepted",
+    "device": {
+     "role": 1,
+     "signingKey": "bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac88",
+     "channelKey": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+     "boxKey": "78566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a342",
+     "readOnlyKey": "",
+     "notificationKey": ""
+    }
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a phone's offer, as a client",
+   "offer": "0aac0108021220a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d1a20f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e7961022220d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b672a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca53220c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a73761240044810dc76d3e71b5d78cd72b9076a27903b5a9fa93214a34757d1fbf7c3caa49c36ed46d88827e17acad71d1f373c59a325a082d21f17abc6d1434af446260d",
+   "role": 2,
+   "remoteStatic": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "accepted",
+    "device": {
+     "role": 2,
+     "signingKey": "a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d",
+     "channelKey": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+     "boxKey": "d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b67",
+     "readOnlyKey": "7f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca5",
+     "notificationKey": "c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a7376"
+    }
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a browser's offer, as a client",
+   "offer": "0a68080212202bc0f788f53e41f0c5923a67afd04aed9b8632be6f92aabbb855847d1e3e33f61a20976e4925e00db1ac7ec9cc348633fb7950ffc2906bc2409698b8f0f77ba3437b2220cf6022e9ff217aa3d997efd1d36a88b782d18a8efe1558edcf70dc6684bd96501240b76e55c69d2b187db7e8e2fe764bdb069fda0c41c831acd807516f80386c0710fcabecc6c1bfdf4bc943ecb2751ffa886cea37704d2287453894c049e001030f",
+   "role": 2,
+   "remoteStatic": "976e4925e00db1ac7ec9cc348633fb7950ffc2906bc2409698b8f0f77ba3437b",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "accepted",
+    "device": {
+     "role": 2,
+     "signingKey": "2bc0f788f53e41f0c5923a67afd04aed9b8632be6f92aabbb855847d1e3e33f6",
+     "channelKey": "976e4925e00db1ac7ec9cc348633fb7950ffc2906bc2409698b8f0f77ba3437b",
+     "boxKey": "cf6022e9ff217aa3d997efd1d36a88b782d18a8efe1558edcf70dc6684bd9650",
+     "readOnlyKey": "",
+     "notificationKey": ""
+    }
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a computer's offer where a client is expected",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212407f65945f66702a4908e19828aa2d0a12be7ca4d0fe37c48fbe5d7e3802be4d617552bdbda570a6c5e64c3763939948d394e7ab8a53f54ef2b2a744c4205d2803",
+   "role": 2,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "role"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a phone's offer where a computer is expected",
+   "offer": "0aac0108021220a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d1a20f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e7961022220d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b672a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca53220c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a73761240044810dc76d3e71b5d78cd72b9076a27903b5a9fa93214a34757d1fbf7c3caa49c36ed46d88827e17acad71d1f373c59a325a082d21f17abc6d1434af446260d",
+   "role": 1,
+   "remoteStatic": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "role"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a channel key other than the one the handshake proved",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212407f65945f66702a4908e19828aa2d0a12be7ca4d0fe37c48fbe5d7e3802be4d617552bdbda570a6c5e64c3763939948d394e7ab8a53f54ef2b2a744c4205d2803",
+   "role": 1,
+   "remoteStatic": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "channel-key"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "signed over another handshake",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212407f65945f66702a4908e19828aa2d0a12be7ca4d0fe37c48fbe5d7e3802be4d617552bdbda570a6c5e64c3763939948d394e7ab8a53f54ef2b2a744c4205d2803",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "ae448ac86c4e8e4dec645729708ef41873ae79c6dff84eff73360989487f08e5",
+   "expect": {
+    "result": "refused",
+    "reason": "signature"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "signed by another key",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a34212402d3047facab8cdc6ad4d7b9f059dc58d5e4339efaf22a4233e290da7ea22e4ae329f1fbf84470b502dd98cafceff2efeedd11fb644024dfd8c7ed9a3d2532d00",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "signature"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "not an offer",
+   "offer": "ff",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "parse"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "no device",
+   "offer": "124000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "parse"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a box key of 31 bytes",
+   "offer": "0a6708011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005221f566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a342124041b1bcc1ecc79771e3f0acc9a44e320263a97e3e9e061a8328c1f7824f3c1affc783554b35e7e443be4751c8e862b274cb6483ff7df407964ad45a4fca2f220b",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "key"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a computer with a read-only key",
+   "offer": "0a8a0108011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a3422a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca5124041b1bcc1ecc79771e3f0acc9a44e320263a97e3e9e061a8328c1f7824f3c1affc783554b35e7e443be4751c8e862b274cb6483ff7df407964ad45a4fca2f220b",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "key"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a phone's read-only key without its notification key",
+   "offer": "0a8a0108021220a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d1a20f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e7961022220d9f285fa68ed6fffc5207c09c5d01f2709883c46199b6f2818a7264f01a99b672a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca512401796bd09f3e9b337dd155763bf39e671fc55fc14e8c5901848c98f9f433a433da413e3918386ebff4d66e980802dc35a863ecd0184e1cad49cf33524879c3e0b",
+   "role": 2,
+   "remoteStatic": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "key"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "an unknown role",
+   "offer": "0a6808031220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a3421240306500e297bab1bc26d0edb1a03c90bfeb12634aa4ff1bcf38e32372ac9f056922e6d745872776b57f8bc8873b0b619860c11f4175d2ad3b354950325f3f0a01",
+   "role": 3,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "role"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a key changed after signing",
+   "offer": "0aac0108021220a04743e591cd7bb25452608bc2f4483f26feb9623b464ab4eb72c7a2f1b3938d1a20f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a3422a207f1fe7b5132d6266f5ad968d4e1b0368491a3398c1865daf141313e5494fbca53220c1f742769bf7bd788f1960a344a71977d2cecb1be670dcc8ded58972588a73761240044810dc76d3e71b5d78cd72b9076a27903b5a9fa93214a34757d1fbf7c3caa49c36ed46d88827e17acad71d1f373c59a325a082d21f17abc6d1434af446260d",
+   "role": 2,
+   "remoteStatic": "f4efc271872a32f4d8ed4a57511112ab6eaaa9abf07a629bf065fab16e796102",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "signature"
+   }
+  },
+  {
+   "check": "check-offer",
+   "about": "a signature of 63 bytes",
+   "offer": "0a6808011220bd502e0dab0ca765e5fa9e6607cac022be62d144c26cdee42e7068ef5ab1ac881a208de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005222078566dd1392aabd040f9ea747c0677a2707adf50a141fc39d9f4b746e014a342123f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "role": 1,
+   "remoteStatic": "8de59d5921c2eb26b4e340a0967964b3c33e8a98bec737afa5160ae4b6a1e005",
+   "handshakeHash": "b99d0c1c8c97838b262a79d9de18d616ba8276a8a7fdda3b99a95a99e650e5e1278da1b09c30b56ff3f1781960a6d18ccda538397eac77d3429fd5080f62b1d2",
+   "expect": {
+    "result": "refused",
+    "reason": "signature"
+   }
+  }
+ ]
+}
