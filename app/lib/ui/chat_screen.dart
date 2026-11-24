@@ -1250,7 +1250,7 @@ class _Composer extends StatefulWidget {
   State<_Composer> createState() => _ComposerState();
 }
 
-class _ComposerState extends State<_Composer> {
+class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   // Each turn starts on Steer.
   var _steer = true;
   var _wasWorking = false;
@@ -1260,19 +1260,80 @@ class _ComposerState extends State<_Composer> {
   // once images are attached, and again when the model changes.
   bool _blind = false;
   String? _askedFor;
+  // Whether the clipboard holds an image, for Paste in the box's menu: asked
+  // as the box is focused, as the app comes back, and as the clipboard
+  // changes, since the menu itself cannot wait for an answer.
+  final _focus = FocusNode();
+  var _clipImages = false;
+  StreamSubscription<void>? _clip;
 
   @override
   void initState() {
     super.initState();
     widget.text.addListener(_changed);
     widget.images.addListener(_changed);
+    WidgetsBinding.instance.addObserver(this);
+    _focus.addListener(() {
+      if (_focus.hasFocus) _askClipboard();
+    });
+    listenToClipboard();
+    _clip = clipboardChanged.stream.listen((_) => _askClipboard());
+    _askClipboard();
   }
 
   @override
   void dispose() {
     widget.text.removeListener(_changed);
     widget.images.removeListener(_changed);
+    WidgetsBinding.instance.removeObserver(this);
+    _clip?.cancel();
+    _focus.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _askClipboard();
+  }
+
+  Future<void> _askClipboard() async {
+    final has = await clipboardHasImages();
+    if (mounted && has != _clipImages) setState(() => _clipImages = has);
+  }
+
+  // Images pasted, or put in by the keyboard: in the box, as chosen ones are.
+  Future<void> _put(Future<({List<StoredImage> images, String? problem})> Function(int room) get) async {
+    final room = imagesMax - widget.images.value.length;
+    if (room <= 0) return setState(() => _problem = 'At most $imagesMax images in a message.');
+    setState(() => _problem = null);
+    final r = await get(room);
+    if (!mounted) return;
+    final all = [...widget.images.value, ...r.images];
+    widget.images.value = all.take(imagesMax).toList();
+    final problem = r.problem ?? (all.length > imagesMax ? 'At most $imagesMax images in a message.' : null);
+    if (problem != null) setState(() => _problem = problem);
+  }
+
+  // The box's menu, with Paste for an image when the clipboard has one:
+  // "Paste Image" beside the text's own Paste when it has both.
+  Widget _menu(BuildContext context, EditableTextState state) {
+    final items = [...state.contextMenuButtonItems];
+    if (_clipImages) {
+      final text = items.indexWhere((i) => i.type == ContextMenuButtonType.paste);
+      final image = ContextMenuButtonItem(
+        label: text < 0 ? 'Paste' : 'Paste Image',
+        onPressed: () {
+          ContextMenuController.removeAny();
+          _put(pasteImages);
+        },
+      );
+      if (text < 0) {
+        items.insert(0, image);
+      } else {
+        items.insert(text + 1, image);
+      }
+    }
+    return CupertinoAdaptiveTextSelectionToolbar.buttonItems(anchors: state.contextMenuAnchors, buttonItems: items);
   }
 
   void _changed() => setState(() {});
@@ -1397,6 +1458,16 @@ class _ComposerState extends State<_Composer> {
                   Expanded(
                     child: CupertinoTextField(
                       controller: widget.text,
+                      focusNode: _focus,
+                      contextMenuBuilder: _menu,
+                      // Android's keyboards put images in this way.
+                      contentInsertionConfiguration: ContentInsertionConfiguration(
+                        allowedMimeTypes: imageTypes,
+                        onContentInserted: (c) {
+                          final data = c.data;
+                          if (data != null) _put((_) => insertedImage(data));
+                        },
+                      ),
                       placeholder: busy ? 'Steer, or queue a follow-up' : 'Message',
                       placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
                       style: look.text(size: 16, height: 1.35, spacing: 0),

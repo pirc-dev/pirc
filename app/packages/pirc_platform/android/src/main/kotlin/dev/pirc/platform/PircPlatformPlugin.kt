@@ -19,13 +19,18 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
     private var screen: Screen? = null
     private var links: Links? = null
     private var store: Store? = null
+    private var clipboard: Clipboard? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val context = binding.applicationContext
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/keys").apply { setMethodCallHandler(KeyStore(context) { activity }) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/prefs").apply { setMethodCallHandler(Prefs(context)) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/files").apply { setMethodCallHandler(Files(context)) }
-        channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/clipboard").apply { setMethodCallHandler(Clipboard(context)) }
+        channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/clipboard").apply {
+            val c = Clipboard(context, this)
+            clipboard = c
+            setMethodCallHandler(c)
+        }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/about").apply { setMethodCallHandler(About(context)) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/attest").apply { setMethodCallHandler(Attest(context)) }
         val sc = Screen { activity }
@@ -56,6 +61,8 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
         channels.clear()
         store?.close()
         store = null
+        clipboard?.close()
+        clipboard = null
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {

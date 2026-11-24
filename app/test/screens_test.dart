@@ -15,6 +15,7 @@ import 'package:flutter/material.dart' show DefaultMaterialLocalizations, Licens
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 
 import 'package:pirc/app/app.dart';
@@ -1322,6 +1323,78 @@ void main() {
     expect(find.bySemanticsLabel('Remove image'), findsNothing, reason: 'sent, gone from the box');
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: prompt.requestId)));
   }, skip: !drawsGoldens);
+
+  group('an image pasted into the box', () {
+    // The phone's clipboard, holding [held]; null: text only.
+    void clipboard(WidgetTester tester, List<Uint8List>? held) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(clipboardChannel, (call) async => switch (call.method) {
+            'hasImages' => held != null,
+            'images' => held ?? <Uint8List>[],
+            _ => null,
+          });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(clipboardChannel, null));
+    }
+
+    Future<void> menu(WidgetTester tester) async {
+      await tester.tap(find.byType(CupertinoTextField));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.longPress(find.byType(CupertinoTextField));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Paste in the box\'s menu when the clipboard has an image; it goes in, and is sent', (tester) async {
+      clipboard(tester, [picture]);
+      final model = await docs(tester);
+      await menu(tester);
+      expect(find.text('Paste'), findsOneWidget);
+      await tester.tap(find.text('Paste'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Remove image'), findsOneWidget);
+      sent.clear();
+      await tester.tap(find.byKey(const ValueKey('send')));
+      await tester.pump();
+      final prompt = asked().prompt;
+      expect((prompt.images.length, prompt.images.single.mimeType), (1, 'image/png'));
+      await answer(tester, model, SessionMessage(accepted: Accepted(requestId: prompt.requestId)));
+    });
+
+    testWidgets('text alone on the clipboard: no Paste for an image', (tester) async {
+      clipboard(tester, null);
+      await docs(tester);
+      await menu(tester);
+      expect(find.text('Paste Image'), findsNothing);
+      expect(find.bySemanticsLabel('Remove image'), findsNothing);
+    });
+
+    testWidgets('something not a picture: said why, nothing added', (tester) async {
+      clipboard(tester, [Uint8List.fromList(utf8.encode('not a picture'))]);
+      await docs(tester);
+      await menu(tester);
+      await tester.tap(find.text('Paste'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Remove image'), findsNothing);
+      expect(find.text('That picture could not be read.'), findsOneWidget);
+    });
+
+    testWidgets("a large screenshot made to fit pi's side", (tester) async {
+      final big = img.encodePng(img.Image(width: 3000, height: 1200));
+      final fitted = (await tester.runAsync(() => fit(big)))!;
+      final d = (await tester.runAsync(() async => ui.ImageDescriptor.encoded(await ui.ImmutableBuffer.fromUint8List(fitted))))!;
+      expect((d.width, d.height, imageType(fitted)), (2000, 800, 'image/png'));
+      expect(identical(await tester.runAsync(() => fit(picture)), picture), isTrue, reason: 'one that fits, as it is');
+      // A photo-like one, too big as a PNG even made smaller: a JPEG.
+      final noise = img.Image(width: 2400, height: 2400);
+      var seed = 1;
+      for (final px in noise) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        px.setRgb(seed & 0xff, (seed >> 8) & 0xff, (seed >> 16) & 0xff);
+      }
+      final photo = (await tester.runAsync(() => fit(img.encodePng(noise))))!;
+      expect((imageType(photo), photo.length <= imageBytesMax), ('image/jpeg', true));
+    });
+  });
 
   testWidgets('a photo taken with the camera, made to fit and sent; one refused, said why', (tester) async {
     final was = ImagePickerPlatform.instance;
