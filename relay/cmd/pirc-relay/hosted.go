@@ -6,6 +6,7 @@
 //
 //	go build -tags hosted ./cmd/pirc-relay
 //	pirc-relay serve-hosted --origin wss://relay.example (--tls-cert F --tls-key F | --plaintext) [--push-gateway URL] [--test-attestation | stores' flags]
+//	pirc-relay backup-hosted [--data-dir DIR] OUT
 //
 // Its accounts are in hosted.db in the data directory, which a self-hosted
 // relay's registry may share: the two are apart. Besides serve's network
@@ -31,7 +32,26 @@ import (
 	"pirc.dev/relay/internal/server"
 )
 
-func init() { extraCommands["serve-hosted"] = serveHosted }
+func init() {
+	extraCommands["serve-hosted"] = serveHosted
+	extraCommands["backup-hosted"] = backupHosted
+}
+
+// backupHosted writes a consistent, checked copy of the data directory's
+// hosted.db to OUT while the relay runs (hosted.Backup): the hosted
+// mode's only state on disk.
+//
+//	pirc-relay backup-hosted [--data-dir DIR] OUT
+func backupHosted(args []string) error {
+	fs, dataDir := flags("backup-hosted")
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: pirc-relay backup-hosted [--data-dir DIR] OUT")
+	}
+	return hosted.Backup(*dataDir, fs.Arg(0))
+}
 
 func serveHosted(args []string) error {
 	fs, dataDir := flags("serve-hosted")

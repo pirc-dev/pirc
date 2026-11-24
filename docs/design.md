@@ -1904,7 +1904,9 @@ built; steps 14 and 15 are not finished.
     3. **Where it runs.** On a shared server at first, a dedicated one
        later (5). It runs release tags only, not the main branch, with an
        off-site backup every hour and an outside check that alerts when it
-       stops answering. Its availability is best effort, and the terms say
+       stops answering. The backup is `pirc-relay backup-hosted OUT`, run
+       beside the running relay: a consistent copy of `hosted.db`, the
+       hosted mode's only state on disk, checked before it replaces OUT. Its availability is best effort, and the terms say
        so.
     4. **Terms and privacy.** The hosted relay's terms and its privacy
        policy are written from templates, without legal review; the
