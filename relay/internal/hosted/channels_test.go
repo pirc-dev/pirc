@@ -72,12 +72,18 @@ func TestChannels(t *testing.T) {
 			t.Errorf("to the process: %d bytes", len(m.Message))
 		}
 	}
-	for i := 0; i < 300; i++ {
-		sa.b.send(msgFrame(id, binary.BigEndian.AppendUint64(filled(0, 16), uint64(i))))
-	}
-	for i := 0; i < 300; i++ {
-		if m := gotMessage(sa.hc); binary.BigEndian.Uint64(m.Message[16:]) != uint64(i) {
-			t.Fatalf("message %d came as %d", i, binary.BigEndian.Uint64(m.Message[16:]))
+	// In order, in batches of half the channel's cap of queued frames: a
+	// burst past it closes the channel when the process reads slower than
+	// the client writes, as on a loaded machine (TestChannelQueueCapSmallMessages).
+	batch := h.srv.cfg.MaxChannelQueuedFrames / 2
+	for i := 0; i < 300; i += batch {
+		for j := i; j < min(i+batch, 300); j++ {
+			sa.b.send(msgFrame(id, binary.BigEndian.AppendUint64(filled(0, 16), uint64(j))))
+		}
+		for j := i; j < min(i+batch, 300); j++ {
+			if m := gotMessage(sa.hc); binary.BigEndian.Uint64(m.Message[16:]) != uint64(j) {
+				t.Fatalf("message %d came as %d", j, binary.BigEndian.Uint64(m.Message[16:]))
+			}
 		}
 	}
 	// Past each bound, refused; the channel stays.
