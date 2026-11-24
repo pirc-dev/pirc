@@ -43,7 +43,7 @@ mkdir -p "$out"
 out=$(cd "$out" && pwd)
 
 # The third-party code the bundles carry, as NOTICE lists it.
-js_dirs=(bufbuild-protobuf ws)
+js_dirs=(bufbuild-protobuf libsodium-js ws)
 
 # The MIT licence alone, for a part under it: the root LICENSE without its
 # paragraph on which directories it covers, which means nothing outside

@@ -21,7 +21,7 @@ const ENTRIES: Record<string, string> = {
 
 // The third-party packages the extension's bundle carries, as NOTICE lists
 // them.
-const PACKAGES = ["@bufbuild/protobuf@2.16.0", "ws@8.22.0"];
+const PACKAGES = ["@bufbuild/protobuf@2.16.0", "libsodium-sumo@0.8.4", "libsodium-wrappers-sumo@0.8.4", "ws@8.22.0"];
 
 const [what, version, outfile] = process.argv.slice(2);
 const entry = ENTRIES[what ?? ""];

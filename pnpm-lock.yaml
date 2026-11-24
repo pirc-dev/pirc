@@ -44,6 +44,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.16.0
         version: 2.16.0
+      '@pirc/e2e':
+        specifier: workspace:*
+        version: link:../e2e
       '@pirc/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -2280,6 +2280,46 @@ built; steps 14 and 15 are not finished.
             for is unregistered.
        6. **The computer**: its keys and list files, a channel per client,
           sealed announcements; `/pirc join` and `/pirc leave`.
+          In a hosted account (6a, `extension/src/account.ts`,
+          `channel.ts`, `hosted.ts`):
+          - **Files**: an `account` folder beside `host.json`, only on a
+            computer that has joined: `keys` (an Ed25519 seed and two
+            X25519 secrets, a fresh set for each account, so two accounts,
+            or a self-hosted relay and the hosted one, see unrelated keys),
+            `account.json` (the account ID, the phone's key, the relay's
+            origin) and `lists/<counter>`, written as `e2e.md` section 3
+            says. A version is checked each time it is read, and one that
+            fails is reported and skipped. A list without this computer
+            stops it ("removed from the account"); two versions with one
+            counter stop it too, and say so.
+          - **Connecting**: the account's files decide, never `host.json`'s
+            `relay`, and not at all while `PIRC_RELAY` is set. It logs in
+            with `Hello.instance_id` the process's, and empty `label` and
+            `software`.
+          - **A channel** (`channel.proto`): the process is IK's
+            responder; the client's first frame is its list, checked and
+            stored before the client is looked for, and nothing is sent
+            before that; the answer is `ListState` (the counter, and the
+            list when newer), then the session's whole
+            `SessionAnnouncement`, then the session's messages, each naming
+            its session. A frame is cut into Noise messages, a flag byte
+            then at most 65,518 bytes, and is at most 1 MiB and 4 KiB. The
+            client counts the messages it takes (`received`, at least every
+            8), and the process keeps at most 32 messages and 768 KiB in
+            flight beyond that, under the relay's per-channel cap, holding up
+            to 4 MiB more before it ends the channel (`RATE_LIMITED`). At
+            most 16 channels wait for a client's list, and 128 in all; one
+            waiting 30 seconds is closed.
+          - **A newer list**, from the relay or a client's first frame
+            (which is then published to the relay), closes the channels of
+            clients no longer on it and seals every session again. The
+            folder is also read before each channel and every five minutes.
+          - **Sealing**: the announcement (the session's name, or its first
+            prompt; its folder; the model's name; `host.json`'s label; the
+            notice's text) to each client, the notice to each phone, the
+            announcement's ordering value the time or one past the last, the
+            notice's its own number, so that sealing it again for a newer
+            list does not raise it again.
        7. **Joining** from the app, the web app and the terminal.
        8. **The app and the notification extension**: sign-up (the phone
           signs the first version), the list, channels, notices from the

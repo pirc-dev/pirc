@@ -1,0 +1,49 @@
+// What a channel between a client and a pi process carries, inside Noise
+// IK's transport (docs/e2e.md, section 4). The relay sees none of it.
+//
+// A ChannelFrame is cut into Noise messages: each plaintext is one byte, 1
+// for a frame's last piece and 0 for a piece with more to come, then at
+// most 65,518 bytes of the frame. A frame is at most 1 MiB and 4 KiB; a
+// larger one, or any other first byte, ends the channel.
+syntax = "proto3";
+
+package pirc.v1alpha2;
+
+message ChannelFrame {
+  oneof body {
+    // Client to computer, the channel's first frame and only then: the
+    // client's newest list, as signed bytes. The computer stores it if it
+    // is newer, and only then checks that the client is on its newest
+    // list; it sends nothing before that.
+    bytes list = 1;
+    // Computer to client, once, the answer to `list`.
+    ListState list_state = 2;
+    // Either way, after list_state: a session's messages.
+    SessionFrame session = 3;
+    // Client to computer: how many Noise messages it has taken on this
+    // channel so far, sent at least every 8. The computer keeps at most 32
+    // messages and 768 KiB beyond that count in flight, so the relay's
+    // queue toward the client stays under its cap.
+    uint64 received = 4;
+  }
+}
+
+message ListState {
+  // The computer's newest list's counter.
+  uint64 counter = 1;
+  // That list's signed bytes, only when its counter is above the client's.
+  bytes list = 2;
+}
+
+message SessionFrame {
+  // Every request names its session; a process answers one it does not
+  // run with SESSION_GONE.
+  string session_id = 1;
+  oneof body {
+    // A pirc.v1alpha1.SessionMessage, as a self-hosted relay routes it.
+    bytes message = 2;
+    // Computer to client: a pirc.v1alpha1.SessionAnnouncement, the
+    // session's whole state, when the channel is ready and on every change.
+    bytes announcement = 3;
+  }
+}

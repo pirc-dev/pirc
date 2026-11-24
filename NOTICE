@@ -73,6 +73,10 @@ The pi extension (a JavaScript bundle):
   - ws 8.22.0, Copyright (c) 2011 Einar Otto Stangvik, (c) 2013 Arnout
     Kazemier and contributors, (c) 2016 Luigi Pinca and contributors. MIT:
     third_party/ws/
+  - libsodium-wrappers-sumo and libsodium-sumo 0.8.4 (libsodium.js),
+    Copyright (c) 2015-2026 Ahmad Ben Mrad, Frank Denis and Ryan Lester,
+    with the libsodium it carries, Copyright (c) 2013-2026 Frank Denis.
+    ISC: third_party/libsodium-js/
 
 The web app (its server's JavaScript bundle and its page): far more
 packages, so each build lists those it carries, with every licence in

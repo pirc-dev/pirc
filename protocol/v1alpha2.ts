@@ -4,3 +4,4 @@
 // bodies a hosted account's devices sign or seal; e2e/ checks the list.
 export * from "./gen/pirc/v1alpha2/relay_pb.ts";
 export * from "./gen/pirc/v1alpha2/account_pb.ts";
+export * from "./gen/pirc/v1alpha2/channel_pb.ts";

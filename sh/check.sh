@@ -39,10 +39,11 @@ if [ -n "$agpl" ]; then
   exit 1
 fi
 
-step "release builds: the relay and the gateway link only the modules NOTICE lists"
+step "release builds: the relay, the gateway and the extension carry only what NOTICE lists"
 built=$(mktemp -d)
 sh/build.sh relay "$built/relay" >/dev/null
 sh/build.sh gateway "$built/gateway" >/dev/null
+sh/build.sh extension "$built/extension" >/dev/null
 rm -rf "$built"
 
 step "tsc"

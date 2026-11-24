@@ -8,7 +8,9 @@ import { appendFileSync } from "node:fs";
 import { errorReply, ErrorCode, FrameSchema, hex, messageRequestId, sameBytes, SessionMessageSchema, type Answer, type Frame, type Place, type Question, type SessionMessage, type SessionRef } from "@pirc/protocol";
 import { loadOrCreateKey, RelayConnection, type ConnectionState, type DeviceKey } from "@pirc/relay-client";
 
-import { loadConfig, saveRemoved, type HostConfig } from "./config.ts";
+import { accountDir, hasAccount } from "./account.ts";
+import { configPath, loadConfig, saveRemoved, type HostConfig } from "./config.ts";
+import { Hosted, HOSTED_PAYLOAD_BYTES, type HostedStatus } from "./hosted.ts";
 import { errorText, Live, REQUESTS, type NoticeMemo, type Sink } from "./live.ts";
 import { LAUNCH_ENV, LauncherChoice, type Launcher } from "./launch.ts";
 import { piRangeNote } from "./pi.ts";
@@ -35,6 +37,8 @@ interface Predecessor {
   live?: { sessionId: string; lastSeq: bigint; notice?: NoticeMemo; dispose(): void };
   suspended?: { sessionId: string; lastSeq: bigint; notice?: NoticeMemo; dispose(): void };
   conn?: { stop(): void };
+  // Absent from versions before hosted accounts.
+  hosted?: { stop(): void };
 }
 
 // The longest a predecessor's connection is kept, for this host to take its
@@ -48,6 +52,12 @@ export class Host implements Sink {
   private config: HostConfig | undefined;
   private key: DeviceKey | undefined;
   private conn: RelayConnection | undefined;
+  // In a hosted account (account.ts) instead of conn.
+  private hosted: Hosted | undefined;
+  private hostedStatus: HostedStatus | undefined;
+  // Each connect() counts, so a hosted account still opening is dropped
+  // when another connect() came since.
+  private connects = 0;
   private state: ConnectionState = { kind: "stopped" };
   private live: Live | undefined;
   // A session paused by a reload, until it starts again.
@@ -133,6 +143,7 @@ export class Host implements Sink {
       old.live = old.suspended = undefined;
       for (const live of lives) live?.dispose();
       old.conn?.stop();
+      old.hosted?.stop();
     } catch (e) {
       this.fail("previous version", e);
     }
@@ -180,12 +191,12 @@ export class Host implements Sink {
     } else {
       if (this.suspended) this.endSession(this.suspended);
       if (this.live) this.endSession(this.live);
-      this.live = new Live(pi, ctx, this, () => this.key?.publicKey ?? new Uint8Array(), this.instanceId, ev.reason, this.previousSessionId, this.versions, this.seqs.get(id), this.notices.get(id));
+      this.live = new Live(pi, ctx, this, () => this.hosted?.signingKey ?? this.key?.publicKey ?? new Uint8Array(), this.instanceId, ev.reason, this.previousSessionId, this.versions, this.seqs.get(id), this.notices.get(id));
     }
     this.suspended = undefined;
     this.log(`session ${id} (${ev.reason})`);
     void this.places.refresh();
-    if (!this.conn) this.connect();
+    if (!this.conn && !this.hosted) this.connect();
     else if (this.state.kind === "ready") this.announce(this.live);
     this.showStatus();
   }
@@ -205,6 +216,8 @@ export class Host implements Sink {
     this.endSession(live);
     if (reason === "quit") {
       this.conn?.stop();
+      this.hosted?.stop();
+      this.hosted = undefined;
       this.releasePredecessor();
     }
   }
@@ -213,14 +226,20 @@ export class Host implements Sink {
     this.seqs.set(live.sessionId, live.lastSeq);
     this.notices.set(live.sessionId, live.notice);
     live.dispose();
-    this.conn?.send(create(FrameSchema, { body: { case: "sessionEnd", value: { session: live.ref } } }));
+    if (this.hosted) this.hosted.end(live);
+    else this.conn?.send(create(FrameSchema, { body: { case: "sessionEnd", value: { session: live.ref } } }));
   }
 
   // (Re)connects with the current configuration; token, when given, is a
   // registration token from /pirc enrol.
   connect(token?: string): void {
+    const n = ++this.connects;
     this.conn?.stop();
     this.conn = undefined;
+    this.hosted?.stop();
+    this.hosted = undefined;
+    this.hostedStatus = undefined;
+    this.state = { kind: "stopped" };
     let config: HostConfig;
     try {
       config = loadConfig();
@@ -229,6 +248,14 @@ export class Host implements Sink {
       return this.showStatus();
     }
     this.config = config;
+    let joined: boolean;
+    try {
+      joined = hasAccount(accountDir(configPath()));
+    } catch (e) {
+      this.fail("account", e);
+      return this.showStatus();
+    }
+    if (joined) return this.connectHosted(n, config);
     if (!config.relay || config.removed) return this.showStatus();
     try {
       this.key = loadOrCreateKey(config.keyFile);
@@ -256,6 +283,53 @@ export class Host implements Sink {
     this.conn.start();
   }
 
+  // A computer in a hosted account: never the relay host.json names, and
+  // not while PIRC_RELAY is set, since every install on this machine,
+  // older ones included, reads it (docs/e2e.md, section 9).
+  private connectHosted(n: number, config: HostConfig): void {
+    if (process.env.PIRC_RELAY !== undefined) {
+      this.hostedStatus = { kind: "refused", reason: "PIRC_RELAY is set: unset it, since every PiRC on this machine reads it, older ones too" };
+      return this.showStatus();
+    }
+    this.hostedStatus = { kind: "connecting" };
+    const dir = accountDir(configPath());
+    Hosted.open(dir, {
+      instanceId: this.instanceId,
+      computerName: config.label,
+      lives: () => [this.live, this.suspended].filter((l): l is Live => l !== undefined),
+      announce: (live) => this.announce(live),
+      request: (sessionId, clientKey, m, deliver) => this.request(sessionId, clientKey, m, deliver),
+      onStatus: (s) => this.onHostedStatus(s),
+      log: (m) => this.log(m),
+      fail: (where, e) => this.fail(where, e),
+    }).then(
+      (h) => {
+        if (n !== this.connects) return h.stop();
+        this.hosted = h;
+        h.start();
+      },
+      (e) => {
+        if (n !== this.connects) return;
+        this.fail("account", e);
+        this.hostedStatus = { kind: "refused", reason: `the account files: ${(e as Error).message}` };
+        this.showStatus();
+      },
+    );
+    this.showStatus();
+  }
+
+  private onHostedStatus(s: HostedStatus): void {
+    this.hostedStatus = s;
+    this.log(`hosted ${s.kind}${"reason" in s ? `: ${s.reason}` : ""}`);
+    this.state = s.kind === "ready" ? { kind: "ready", maxFrameBytes: HOSTED_PAYLOAD_BYTES + 512 } : s.kind === "connecting" ? { kind: "connecting" } : { kind: "offline", reason: s.kind };
+    if (s.kind === "ready") {
+      if (this.live) this.announce(this.live);
+      if (this.suspended) this.announce(this.suspended);
+      void this.places.refresh();
+    }
+    this.showStatus();
+  }
+
   private onState(s: ConnectionState): void {
     this.state = s;
     this.log(`relay ${s.kind}${"reason" in s ? `: ${s.reason}` : ""}`);
@@ -279,6 +353,23 @@ export class Host implements Sink {
   }
 
   statusText(): string {
+    const h = this.hostedStatus;
+    if (h) {
+      switch (h.kind) {
+        case "ready":
+          return "pirc: online";
+        case "connecting":
+          return "pirc: connecting";
+        case "stopped":
+          return "pirc: off";
+        case "removed":
+          return "pirc: removed from the account";
+        case "conflict":
+          return `pirc: the account's phone signed two lists numbered ${h.counter}; run /pirc leave and join again`;
+        default:
+          return `pirc: ${h.kind}`;
+      }
+    }
     const s = this.state;
     if (!this.config?.relay) return "pirc: not enrolled";
     // host.json's relay set to the hosted relay's marker (config.ts,
@@ -304,7 +395,12 @@ export class Host implements Sink {
   statusReport(): string {
     const lines = [this.statusText()];
     const c = this.config;
-    if (c) {
+    const h = this.hosted;
+    if (this.hostedStatus) {
+      lines.push(`account ${accountDir(configPath())}`);
+      if (h) lines.push(`relay ${h.info.origin}`, `key ${Buffer.from(h.signingKey).toString("base64url")}`, `list version ${h.listCounter}`);
+      if ("reason" in this.hostedStatus) lines.push(`relay said: ${this.hostedStatus.reason}`);
+    } else if (c) {
       lines.push(`config ${c.path}`);
       if (c.relay) lines.push(`relay ${c.relay}`);
       lines.push(`key ${c.keyFile}${this.key ? ` (${Buffer.from(this.key.publicKey).toString("base64url")})` : ""}`);
@@ -335,8 +431,9 @@ export class Host implements Sink {
   // The footer shows only what needs attention: online, the usual state,
   // takes no line.
   private showStatus(): void {
+    const online = this.hostedStatus ? this.hostedStatus.kind === "ready" : this.state.kind === "ready" && this.config?.relay && !this.config.removed;
     try {
-      this.live?.ctx.ui.setStatus("pirc", this.state.kind === "ready" && this.config?.relay && !this.config.removed ? undefined : this.statusText());
+      this.live?.ctx.ui.setStatus("pirc", online ? undefined : this.statusText());
     } catch {
       // The context went stale; the next session shows it.
     }
@@ -365,7 +462,9 @@ export class Host implements Sink {
   }
 
   broadcast(live: Live, m: SessionMessage): void {
-    if (live === this.live) this.routed(live.ref, new Uint8Array(), m);
+    if (live !== this.live) return;
+    if (this.hosted) this.hosted.broadcast(live.sessionId, m);
+    else this.routed(live.ref, new Uint8Array(), m);
   }
 
   reply(live: Live, clientKey: Uint8Array, m: SessionMessage): void {
@@ -380,7 +479,8 @@ export class Host implements Sink {
     const push = number !== undefined && number > live.notice.pushed;
     let sent: boolean | undefined;
     try {
-      sent = this.conn?.send(create(FrameSchema, {
+      if (this.hosted) sent = this.hosted.announce(live, push);
+      else sent = this.conn?.send(create(FrameSchema, {
         body: { case: "sessionAnnounce", value: { session: live.ref, payload: live.announcementBytes(), push } },
       }));
     } catch (e) {
@@ -409,6 +509,7 @@ export class Host implements Sink {
   }
 
   maxPayloadBytes(): number {
+    if (this.hosted) return HOSTED_PAYLOAD_BYTES;
     return this.state.kind === "ready" ? this.state.maxFrameBytes - 512 : 1 << 20;
   }
 
@@ -433,20 +534,29 @@ export class Host implements Sink {
     // The relay routes only this connection's sessions here; anything
     // else is not ours to answer.
     if (!session || !this.key || !sameBytes(session.hostKey, this.key.publicKey)) return;
-    const is = (l: Live | undefined): l is Live => l !== undefined && session.sessionId === l.sessionId && session.instanceId === l.instanceId;
-    if (is(this.suspended)) {
-      this.routed(session, clientKey, errorReply(messageRequestId(m), ErrorCode.BUSY, "pi is reloading; try again shortly"));
+    if (session.instanceId !== this.instanceId) {
+      this.routed(session, clientKey, errorReply(messageRequestId(m), ErrorCode.SESSION_GONE, "session is no longer live in this process"));
+      return;
+    }
+    this.request(session.sessionId, clientKey, m, (reply) => this.routed(session, clientKey, reply));
+  }
+
+  // A client's request for a session: run, or answered from the replies
+  // kept for repeats; deliver sends the answer to that client.
+  private request(sessionId: string, clientKey: Uint8Array, m: SessionMessage, deliver: (reply: SessionMessage) => void): void {
+    if (this.suspended?.sessionId === sessionId) {
+      deliver(errorReply(messageRequestId(m), ErrorCode.BUSY, "pi is reloading; try again shortly"));
       return;
     }
     const live = this.live;
-    if (!is(live)) {
-      this.routed(session, clientKey, errorReply(messageRequestId(m), ErrorCode.SESSION_GONE, "session is no longer live in this process"));
+    if (live?.sessionId !== sessionId) {
+      deliver(errorReply(messageRequestId(m), ErrorCode.SESSION_GONE, "session is no longer live in this process"));
       return;
     }
     const idem = isChange(m.body.case) ? `${live.sessionId}/${hex(clientKey)}/${messageRequestId(m)}` : undefined;
     const seen = idem && this.replies.get(idem);
     if (seen === "pending") return;
-    if (seen) return this.reply(live, clientKey, seen);
+    if (seen) return deliver(seen);
     if (idem) this.remember(idem, "pending");
     let answered = false;
     const respond = (reply: SessionMessage) => {
@@ -457,7 +567,7 @@ export class Host implements Sink {
         if (failed) this.replies.delete(idem);
         else this.remember(idem, reply);
       }
-      this.reply(live, clientKey, reply);
+      deliver(reply);
     };
     // A client's request is activity: the names may have changed.
     void this.places.refresh();

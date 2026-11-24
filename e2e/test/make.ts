@@ -7,7 +7,8 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { DeviceSchema, ListBodySchema } from "@pirc/protocol/v1alpha2";
 import sodium from "libsodium-wrappers-sumo";
 
-import { framed, LIST_CONTEXT, type DeviceKeys } from "../index.ts";
+import { framed, LIST_CONTEXT, type DeviceKeys, type NoticeText, type OpenInput, type OpenResult } from "../index.ts";
+import { openSealed } from "../sealed.ts";
 
 await sodium.ready;
 
@@ -143,4 +144,20 @@ export function boxSecrets(name: string): { box: Uint8Array; channel: Uint8Array
     box: sodium.crypto_box_seed_keypair(seed(`${name} box`)).privateKey,
     channel: sodium.crypto_box_seed_keypair(seed(`${name} channel`)).privateKey,
   };
+}
+
+/** A phone's read-only key pair (device()'s readOnlyKey), with a signer. */
+export function readOnlyPair(name: string): { publicKey: Uint8Array; sign(message: Uint8Array): Uint8Array } {
+  const kp = sodium.crypto_sign_seed_keypair(seed(`${name} read-only`));
+  return { publicKey: kp.publicKey, sign: (m) => sodium.crypto_sign_detached(m, kp.privateKey) };
+}
+
+/** A phone's notification secret key (device()'s notificationKey). */
+export function notificationSecret(name: string): Uint8Array {
+  return sodium.crypto_box_seed_keypair(seed(`${name} notification`)).privateKey;
+}
+
+/** Opens a notice as a phone's notification extension does, for tests in TypeScript. */
+export function openNotice(input: OpenInput): OpenResult<NoticeText> {
+  return openSealed(sodium, "notice", input) as OpenResult<NoticeText>;
 }
