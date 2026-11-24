@@ -77,6 +77,8 @@ The pi extension (a JavaScript bundle):
     Copyright (c) 2015-2026 Ahmad Ben Mrad, Frank Denis and Ryan Lester,
     with the libsodium it carries, Copyright (c) 2013-2026 Frank Denis.
     ISC: third_party/libsodium-js/
+  - uqr 0.1.3, Copyright (c) Project Nayuki, (c) 2023 Anthony Fu. MIT:
+    third_party/uqr/
 
 The web app (its server's JavaScript bundle and its page): far more
 packages, so each build lists those it carries, with every licence in

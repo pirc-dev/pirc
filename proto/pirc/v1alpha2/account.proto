@@ -75,3 +75,31 @@ message Notice {
   bytes computer_name = 2;
   bytes notice = 3;
 }
+
+// A join (docs/e2e.md, section 6), after Noise XXpsk3 with the one-time
+// secret as the pre-shared key and framed("pirc-e2e-v2 join", the join's
+// version 1, the lookup) as the prologue, the account's phone the
+// initiator. Each of these is one transport message, a step of the join.
+//
+// First the new device's offer, then the phone's accept. The signature is
+// over framed("pirc-e2e-v2 join", the role as 8 bytes, the signing,
+// channel, box, read-only and notification keys (empty where the device
+// has none), the handshake's final hash), by the device's signing key; the
+// channel key must be the static key the handshake proved.
+message JoinOffer {
+  Device device = 1;
+  bytes signature = 2;
+}
+
+// The phone to the new device, once the person confirmed, and once the
+// relay has taken `list` (PublishList answered Done), so the device can
+// log in at once: the phone's own offer, version 1 of the list (whose body
+// hashes to the account ID, and whose one device is the phone as offered),
+// the version that adds the new device, and the phone's name, as UTF-8, at
+// most 200 bytes, for the device to say who approved it.
+message JoinAccept {
+  JoinOffer phone = 1;
+  bytes first = 2;
+  bytes list = 3;
+  bytes phone_name = 4;
+}

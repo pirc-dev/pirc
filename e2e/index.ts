@@ -7,11 +7,29 @@
 // libsodium.
 import sodium from "libsodium-wrappers-sumo";
 
+import { checkOffer, type OfferResult } from "./join.ts";
 import { checkList, type ListInput, type ListResult } from "./list.ts";
 import { openNames, type NamesInput, type NamesResult } from "./names.ts";
 import { openAnnouncement, seal, type AnnouncementText, type OpenInput, type OpenResult, type SealInput, type Sealed } from "./sealed.ts";
 
 export { framed, framedNumber } from "./framed.ts";
+export {
+  base32,
+  fromBase32,
+  JOIN_CONTEXT,
+  JOIN_TEXT_CHARS,
+  JOIN_TEXT_PREFIX,
+  JOIN_VERSION,
+  joinPrologue,
+  joinText,
+  makeOffer,
+  newLookup,
+  offerSigned,
+  readJoinText,
+  SECRET_BYTES,
+  type OfferRefusedReason,
+  type OfferResult,
+} from "./join.ts";
 export {
   LIST_CONTEXT,
   LIST_MAX_BYTES,
@@ -55,6 +73,8 @@ export interface E2e {
   openAnnouncement(input: OpenInput): OpenResult<AnnouncementText>;
   /** The devices' names, sealed by the account's phone, opened with this client's box secret key. */
   openNames(input: NamesInput): NamesResult;
+  /** The other side's offer at a join, checked (join.ts). */
+  checkOffer(input: Parameters<typeof checkOffer>[1]): OfferResult;
 }
 
 let loaded: Promise<E2e> | undefined;
@@ -70,6 +90,7 @@ export function load(): Promise<E2e> {
       seal: (input: SealInput) => seal(sodium, input),
       openAnnouncement: (input: OpenInput) => openAnnouncement(sodium, input),
       openNames: (input: NamesInput) => openNames(sodium, input),
+      checkOffer: (input: Parameters<typeof checkOffer>[1]) => checkOffer(sodium, input),
     }),
     (e: unknown) => {
       loaded = undefined;

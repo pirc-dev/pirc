@@ -8,8 +8,14 @@ import { appendFileSync } from "node:fs";
 import { errorReply, ErrorCode, FrameSchema, hex, messageRequestId, sameBytes, SessionMessageSchema, type Answer, type Frame, type Place, type Question, type SessionMessage, type SessionRef } from "@pirc/protocol";
 import { loadOrCreateKey, RelayConnection, type ConnectionState, type DeviceKey } from "@pirc/relay-client";
 
-import { accountDir, hasAccount } from "./account.ts";
-import { configPath, loadConfig, saveRemoved, type HostConfig } from "./config.ts";
+import { load as loadE2e } from "@pirc/e2e";
+import { load as loadNoise } from "@pirc/e2e/noise";
+import { wsSocket } from "@pirc/relay-client/hosted-ws";
+import { randomBytes } from "node:crypto";
+
+import { accountDir, hasAccount, removeAccount, writeAccount } from "./account.ts";
+import { configPath, HOSTED_MARKER, loadConfig, saveRelay, saveRemoved, type HostConfig } from "./config.ts";
+import { ComputerJoin, qrLines } from "./join.ts";
 import { Hosted, HOSTED_PAYLOAD_BYTES, type HostedStatus } from "./hosted.ts";
 import { errorText, Live, REQUESTS, type NoticeMemo, type Sink } from "./live.ts";
 import { LAUNCH_ENV, LauncherChoice, type Launcher } from "./launch.ts";
@@ -55,6 +61,7 @@ export class Host implements Sink {
   // In a hosted account (account.ts) instead of conn.
   private hosted: Hosted | undefined;
   private hostedStatus: HostedStatus | undefined;
+  private joining: ComputerJoin | undefined;
   // Each connect() counts, so a hosted account still opening is dropped
   // when another connect() came since.
   private connects = 0;
@@ -256,6 +263,8 @@ export class Host implements Sink {
       return this.showStatus();
     }
     if (joined) return this.connectHosted(n, config);
+    // Left a hosted account: nothing to connect to.
+    if (config.relay?.startsWith("pirc-e2e:")) return this.showStatus();
     if (!config.relay || config.removed) return this.showStatus();
     try {
       this.key = loadOrCreateKey(config.keyFile);
@@ -281,6 +290,55 @@ export class Host implements Sink {
       return this.showStatus();
     }
     this.conn.start();
+  }
+
+  // /pirc join, at pi's terminal: the code shown in a widget until the
+  // join ends; on success the account folder replaces any before it.
+  join(origin: string, ui: { setWidget(key: string, lines: string[] | undefined): void; notify(message: string, type: "info" | "warning" | "error"): void }): void {
+    if (process.env.PIRC_RELAY !== undefined) return ui.notify("pirc: unset PIRC_RELAY first: every PiRC on this machine reads it, older ones too", "error");
+    this.joining?.cancel();
+    const run = async () => {
+      const [e2e, noise] = await Promise.all([loadE2e(), loadNoise()]);
+      const j = new ComputerJoin({ origin, e2e, noise, open: wsSocket, random: (n) => new Uint8Array(randomBytes(n)), log: (m) => this.log(m) });
+      this.joining = j;
+      ui.setWidget("pirc-join", [
+        "PiRC: scan this with the account's phone, or paste the text below into PiRC there.",
+        "Whoever uses it gets full control of this machine. It works once, for ten minutes.",
+        ...qrLines(j.text),
+        j.text,
+      ]);
+      try {
+        const joined = await j.start();
+        writeAccount(accountDir(configPath()), joined.secrets, joined.info, joined.lists);
+        saveRelay(HOSTED_MARKER);
+        this.connect();
+        ui.notify(`pirc: joined the account, approved by '${joined.phoneName || "the account's phone"}'. If your phone does not show this computer now, run /pirc leave.`, "info");
+      } catch (e) {
+        if (this.joining === j) ui.notify(`pirc: not joined: ${(e as Error).message}`, "error");
+      } finally {
+        if (this.joining === j) {
+          this.joining = undefined;
+          ui.setWidget("pirc-join", undefined);
+        }
+      }
+    };
+    run().catch((e) => {
+      this.fail("join", e);
+      ui.notify(`pirc: not joined: ${(e as Error).message}`, "error");
+    });
+  }
+
+  // /pirc leave: the account folder goes; host.json keeps the marker, so
+  // no older PiRC connects anywhere in its place.
+  leave(): string {
+    this.joining?.cancel();
+    const dir = accountDir(configPath());
+    if (!hasAccount(dir)) return "pirc: this computer is in no hosted account";
+    this.hosted?.stop();
+    this.hosted = undefined;
+    removeAccount(dir);
+    this.connect();
+    return "pirc: left the account. Remove this computer on the account's phone too.";
   }
 
   // A computer in a hosted account: never the relay host.json names, and

@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { randomBytes } from "node:crypto";
 
 import { relayURL } from "@pirc/relay-client";
+import { hostedOrigin } from "@pirc/relay-client/hosted";
 
 import { saveRelay } from "./config.ts";
 import { claimLoad, packageRoot } from "./copies.ts";
@@ -42,7 +43,9 @@ const LOAD = typeof PIRC_VERSION === "string" ? PIRC_VERSION : `dev ${randomByte
 const KEY = Symbol.for("pirc.extension");
 const proc = ((globalThis as Record<symbol, unknown>)[KEY] ??= {}) as ProcessState;
 
-const USAGE = "usage: /pirc [status | enrol <relay-url> [token] | reconnect]";
+const USAGE = "usage: /pirc [status | enrol <relay-url> [token] | join [relay-origin] | leave | reconnect]";
+// The hosted relay /pirc join joins by default.
+const HOSTED_ORIGIN = "wss://hosted-test.pirc.dev";
 
 export default async function (pi: ExtensionAPI): Promise<void> {
   // Another install of PiRC that pi loaded first runs instead (copies.ts),
@@ -196,7 +199,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   }
 
   pi.registerCommand("pirc", {
-    description: "PiRC: status, enrol <relay-url> [token], reconnect",
+    description: "PiRC: status, enrol <relay-url> [token], join [relay-origin], leave, reconnect",
     handler: async (args, ctx) => {
       const [sub = "status", ...rest] = args.trim().split(/\s+/).filter(Boolean);
       switch (sub) {
@@ -219,6 +222,26 @@ export default async function (pi: ExtensionAPI): Promise<void> {
           ctx.ui.notify(`pirc: enrolling with ${url}; /pirc status shows the result`, "info");
           return;
         }
+        case "join": {
+          // Only at pi's own terminal: the code gives control of this machine.
+          if (!ctx.hasUI || rest.length > 1) return ctx.ui.notify(ctx.hasUI ? USAGE : "pirc: /pirc join runs only in pi's terminal", "error");
+          let origin: string;
+          try {
+            origin = hostedOrigin(rest[0] ?? HOSTED_ORIGIN);
+          } catch (err) {
+            return ctx.ui.notify(`pirc: ${(err as Error).message}`, "error");
+          }
+          proc.host.join(origin, ctx.ui);
+          return;
+        }
+        case "leave":
+          if (!ctx.hasUI || rest.length) return ctx.ui.notify(ctx.hasUI ? USAGE : "pirc: /pirc leave runs only in pi's terminal", "error");
+          try {
+            ctx.ui.notify(proc.host.leave(), "info");
+          } catch (err) {
+            ctx.ui.notify(`pirc: ${(err as Error).message}`, "error");
+          }
+          return;
         case "reconnect":
           proc.host.connect();
           ctx.ui.notify("pirc: reconnecting", "info");

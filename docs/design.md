@@ -2320,6 +2320,39 @@ built; steps 14 and 15 are not finished.
             announcement's ordering value the time or one past the last, the
             notice's its own number, so that sealing it again for a newer
             list does not raise it again.
+          Joining and leaving (6b, `extension/src/join.ts`, `e2e/join.ts`,
+          `JoinOffer` and `JoinAccept` in `account.proto`):
+          - **`/pirc join [relay-origin]`**, at pi's terminal only and not
+            while `PIRC_RELAY` is set, joins the hosted relay
+            (`wss://hosted-test.pirc.dev` until stage 6 moves it). It makes
+            fresh keys, a 32-byte secret and a lookup, waits under the
+            lookup, and shows, until the join ends, that whoever uses the
+            code gets full control of the machine and that it works once
+            for ten minutes, then the QR code (level M, drawn as
+            `pirc-relay`'s are) and the text.
+          - **The text**: `PIRC1`, the lookup, then the secret in Crockford
+            base32, upper case: 65 characters. It is read in either case,
+            ignoring spaces and hyphens and anything up to a `#`, so a link
+            can carry it after `#`.
+          - **The steps**: XXpsk3 with the phone as initiator, the secret as
+            the pre-shared key and framed(`pirc-e2e-v2 join`, version 1,
+            the lookup) as the prologue (three steps); the computer's
+            `JoinOffer` (fourth); the phone's `JoinAccept` (fifth), sent once
+            the relay has taken the version that adds the computer. An offer
+            is the device and a signature over framed(`pirc-e2e-v2 join`,
+            the role, the five keys, the handshake's final hash), and its
+            channel key must be the static key the handshake proved. The
+            computer takes the accept only if the phone's offer checks out,
+            version 1 is signed by that phone and holds it as offered, and
+            the newer version is signed by it for that account and holds
+            this computer exactly. A wrong secret fails at the third step,
+            and the code is spent. On success the account folder is written
+            whole, replacing any before it, `host.json`'s `relay` is set to
+            the marker, and the computer says which phone approved it.
+          - **`/pirc leave`**, at pi's terminal only: the account folder is
+            deleted and `host.json` keeps the marker, so no older PiRC
+            connects anywhere in its place; the phone is asked to remove
+            the computer too.
        7. **Joining** from the app, the web app and the terminal.
        8. **The app and the notification extension**: sign-up (the phone
           signs the first version), the list, channels, notices from the
