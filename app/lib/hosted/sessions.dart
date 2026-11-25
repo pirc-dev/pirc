@@ -149,6 +149,9 @@ class HostedSessions implements ChannelEvents {
     if (s is! HostedReady) {
       _ready = false;
       _abandoned.clear();
+      // A removed key is given the newest list, then refused: this phone
+      // learns of its removal from that list, which it may hold already.
+      if (s is HostedRefused && !account.listed) return _removedNow();
       _closeAll('the connection went', tell: false);
       relayState(switch (s) {
         HostedConnecting() => const RelayView(state: 'connecting'),
@@ -167,9 +170,10 @@ class HostedSessions implements ChannelEvents {
 
   Future<void> _welcomed(v2.Welcome w) async {
     if (w.list.isNotEmpty) await _take(w.list, fromRelay: true);
+    if (_disposed || _removed) return;
     // Removed by a version taken before this login, by this app before it
     // stopped or by the notification extension.
-    if (!_removed && !account.listed) _removedNow();
+    if (!account.listed) return _removedNow();
     if (!_connected) return;
     // The relay is behind this phone: it is given the newer version.
     if (w.listCounter < account.newest.counter) _publish(account.newest.bytes);
@@ -218,6 +222,7 @@ class HostedSessions implements ChannelEvents {
         final e = f.error;
         if (e.requestId.isEmpty) return debugPrint('hosted: relay: ${e.message}');
         _pushIds.remove(e.requestId);
+        _abandoned.remove(e.requestId);
         for (final p in _processes.values) {
           final ch = p.channel;
           if (ch != null && ch.requestId == e.requestId && ch.id == null) ch.refused('the relay: ${e.message}');
@@ -241,6 +246,10 @@ class HostedSessions implements ChannelEvents {
   Future<void> _take(List<int> bytes, {required bool fromRelay}) async {
     final t = await account.take(bytes);
     if (t is TakenRefused) debugPrint('hosted: a list was refused: ${t.reason}');
+    if (_disposed || _removed) return;
+    // A version held already that does not have this phone: a removal
+    // taken before, by this app or the notification extension.
+    if (t is TakenOld && !account.listed) return _removedNow();
     // A version a computer had and the relay did not is given to the relay.
     if (t is TakenNewer && !fromRelay) _publish(t.list.bytes);
   }
@@ -260,14 +269,6 @@ class HostedSessions implements ChannelEvents {
   void _newer(HeldList list) {
     if (_disposed) return;
     if (!account.listed) return _removedNow();
-    // A channel to a computer behind the new version is opened again, so
-    // that the version reaches it as the channel's first frame.
-    for (final p in _processes.values) {
-      final ch = p.channel;
-      if (ch != null && ch.ready && ch.hostCounter != null && ch.hostCounter! < list.counter && _computer(p.hostKey) != null) {
-        ch.close(ErrorCode.ERROR_CODE_SESSION_GONE, 'a newer list to give');
-      }
-    }
     // Channels to computers no longer on it, and their sessions, go.
     for (final p in [..._processes.values]) {
       if (_computer(p.hostKey) == null) _dropProcess(p, 'its computer is no longer on the list');

@@ -433,11 +433,6 @@ void main() {
       final req = ChannelFrame.fromBuffer(Uint8List.sublistView(t.receive(Uint8List.fromList(sent.message)).plaintext!, 1));
       expect(req.session.sessionId, 's1');
       expect(req.session.message, [1]);
-      // A version newer than the computer's closes the channel, to give it
-      // that version by the next one.
-      s.onFrame(v2.Frame(list: v2.List_(list: version(Int64(4), [self, computer]))));
-      await Future<void>.delayed(Duration.zero);
-      expect(relay.where((f) => f.hasCloseChannel()).single.closeChannel.channelId, Int64(9));
     });
 
     test('a channel given up before the relay answered its open is closed when it does', () async {
@@ -491,6 +486,51 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(removed, isTrue);
       expect(states.last.state, 'refused');
+    });
+
+    test('as the relay tells a removed key: the newest list, then the refusal', () async {
+      final other = phoneDevice(MainKeys.fromSeed(sodium, seed(7)), ReadKeys.fromSeed(sodium, seed(8)));
+      final values = MemoryValues();
+      final b = await HostedAccount.create(e2e, values,
+          origin: 'wss://relay.test', accountId: accountId, phoneKey: main.signing.publicKey, self: other, first: v1List, newest: version(Int64(2), [self, other]));
+      final v3 = version(Int64(3), [self]);
+      await b.take(v3);
+      // Held from before, and only the refusal comes: removed too.
+      {
+        var removed = false;
+        final t = HostedSessions(e2e: e2e, account: (await HostedAccount.load(e2e, values))!, main: MainKeys.fromSeed(sodium, seed(7)), sendRelay: (_) => true, toClient: (_) {}, relayState: (_) {}, onRemoved: () => removed = true);
+        addTearDown(t.dispose);
+        t.onState(const HostedRefused(ErrorCode.ERROR_CODE_UNAUTHENTICATED, 'removed'));
+        expect(removed, isTrue, reason: 'refusal alone');
+      }
+      // The list alone, held from before: removed at once.
+      {
+        var removed = false;
+        final t = HostedSessions(e2e: e2e, account: (await HostedAccount.load(e2e, values))!, main: MainKeys.fromSeed(sodium, seed(7)), sendRelay: (_) => true, toClient: (_) {}, relayState: (_) {}, onRemoved: () => removed = true);
+        addTearDown(t.dispose);
+        t.onFrame(v2.Frame(list: v2.List_(list: v3)));
+        await Future<void>.delayed(Duration.zero);
+        expect(removed, isTrue, reason: 'list alone');
+      }
+      for (final held in [true, false]) {
+        // Held from before, or new to it.
+        final acct = held ? (await HostedAccount.load(e2e, values))! : await HostedAccount.create(e2e, MemoryValues(),
+            origin: 'wss://relay.test', accountId: accountId, phoneKey: main.signing.publicKey, self: other, first: v1List, newest: version(Int64(2), [self, other]));
+        var removed = false;
+        final seen = <RelayView>[];
+        final t = HostedSessions(e2e: e2e, account: acct, main: MainKeys.fromSeed(sodium, seed(7)), sendRelay: (_) => true, toClient: (_) {}, relayState: seen.add, onRemoved: () => removed = true);
+        addTearDown(t.dispose);
+        t.onFrame(v2.Frame(list: v2.List_(list: v3)));
+        await Future<void>.delayed(Duration.zero);
+        t.onState(const HostedRefused(ErrorCode.ERROR_CODE_UNAUTHENTICATED, 'removed'));
+        expect(removed, isTrue, reason: held ? 'held' : 'new');
+        expect(seen.last.state, 'refused');
+      }
+      // Refused while still listed is only offline, retried.
+      final t = HostedSessions(e2e: e2e, account: account, main: main, sendRelay: (_) => true, toClient: (_) {}, relayState: states.add);
+      addTearDown(t.dispose);
+      t.onState(const HostedRefused(ErrorCode.ERROR_CODE_PERMISSION_DENIED, 'locked'));
+      expect(states.last.state, 'offline');
     });
 
     test('a version without this phone ends everything, said as removed', () async {
