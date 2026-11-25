@@ -258,9 +258,13 @@ class JoiningPhone {
 Future<OpenAccount?> openAccount({required E2e e2e, required KeyStore store, required KeyValues values, required String relay, String reason = 'Unlock PiRC'}) async {
   final account = await HostedAccount.load(e2e, values);
   if (account == null || hostedRelayKey(account.origin) != relay) return null;
-  final mainSeed = await store.load(relay, KeyKind.main, reason: reason);
-  final readSeed = await store.load(relay, KeyKind.read);
-  if (mainSeed == null || readSeed == null) return null;
+  // Copies of their own, which this wipes: a platform's bytes may be
+  // read-only.
+  final mainKept = await store.load(relay, KeyKind.main, reason: reason);
+  final readKept = await store.load(relay, KeyKind.read);
+  if (mainKept == null || readKept == null) return null;
+  final mainSeed = Uint8List.fromList(mainKept);
+  final readSeed = Uint8List.fromList(readKept);
   try {
     final main = MainKeys.fromSeed(e2e.sodium, mainSeed);
     final read = ReadKeys.fromSeed(e2e.sodium, readSeed);

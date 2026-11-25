@@ -21,8 +21,12 @@ class TsComputer {
   final lines = <String>[];
   Completer<void>? _waiting;
 
-  static Future<TsComputer> start(String origin) async =>
-      TsComputer._(await Process.start('node', ['--experimental-transform-types', '--no-warnings', '../extension/test/hosted-computer.ts', origin]));
+  /// [script] is hosted-computer.ts's stand-in, or hosted-pi.ts's real pi.
+  static Future<TsComputer> start(String origin, {String script = 'hosted-computer.ts'}) async =>
+      TsComputer._(await Process.start('node', ['--experimental-transform-types', '--no-warnings', '../extension/test/$script', origin]));
+
+  /// Closes its stdin, which ends a script that waits on it.
+  Future<void> close() => _proc.stdin.close();
 
   void _wake() {
     final w = _waiting;

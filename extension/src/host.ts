@@ -301,11 +301,14 @@ export class Host implements Sink {
       const [e2e, noise] = await Promise.all([loadE2e(), loadNoise()]);
       const j = new ComputerJoin({ origin, e2e, noise, open: wsSocket, random: (n) => new Uint8Array(randomBytes(n)), log: (m) => this.log(m) });
       this.joining = j;
+      // The text before the QR code: pi cuts a widget taller than its
+      // space, and a terminal on a phone (Termius, Blink) has the text to
+      // copy, not a camera.
       ui.setWidget("pirc-join", [
-        "PiRC: scan this with the account's phone, or paste the text below into PiRC there.",
+        "PiRC: paste this into PiRC on the account's phone, or scan the code below with it.",
         "Whoever uses it gets full control of this machine. It works once, for ten minutes.",
-        ...qrLines(j.text),
         j.text,
+        ...qrLines(j.text),
       ]);
       try {
         const joined = await j.start();

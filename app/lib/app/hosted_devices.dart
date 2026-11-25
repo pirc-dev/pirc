@@ -153,7 +153,56 @@ class AppHostedDevices implements HostedDevices {
       return '$e';
     }
   }
+  @override
+  Future<String?> remove(String key) async {
+    final hex = _hexOfKeyText(key);
+    final a = _account;
+    final newest = a.newest;
+    final target = newest.body.devices.where((d) => hexOf(d.signingKey) == hex).firstOrNull;
+    if (hex == null || target == null) return 'not a device of this account';
+    if (bytesEqual(target.signingKey, a.self.signingKey)) return "the account's phone is on every version of the list";
+    final body = Uint8List.sublistView(newest.bytes, signatureBytes);
+    final Uint8List list;
+    try {
+      final counter = await this.counter.next(newest.counter + Int64.ONE);
+      // Built on the newest read just now: a newer one since, and the
+      // relay refuses this one.
+      if (a.newest.counter != newest.counter) return 'the account changed meanwhile; try again';
+      list = e2e.makeList(
+        phone: run.open.main.signing,
+        devices: [for (final d in newest.body.devices) if (!bytesEqual(d.signingKey, target.signingKey)) d],
+        previousBody: body,
+        accountId: a.accountId,
+        counter: counter,
+      );
+    } on Object catch (e) {
+      return '$e';
+    }
+    final id = run.sessions.requestId('rm');
+    try {
+      await run.sessions.request(id, v2.Frame(publishList: v2.PublishList(requestId: id, list: list)));
+    } on HostedRefusal catch (e) {
+      return 'The relay refused: ${e.message}';
+    } on Object {
+      // Unanswered: perhaps taken. The phone reads the newest again before
+      // it signs anything else.
+      run.conn.switchAccount(a.accountId);
+      return 'The relay did not say whether it took the change. Look again once PiRC has connected.';
+    }
+    await a.take(list);
+    // The names, sealed again without it.
+    if (_kept.isNotEmpty) {
+      try {
+        await publishNames(e2e: e2e, open: run.open, sessions: run.sessions, values: values, names: {});
+        _kept = await keptNames(values);
+      } on Object catch (e) {
+        debugPrint('hosted: names not sealed again: $e');
+      }
+    }
+    return null;
+  }
 }
+
 
 /// Where a deletion asked for is recorded until it is known done (D5): a
 /// phone stopped half-way, or that never heard the relay's answer,

@@ -53,6 +53,13 @@ class _Devices implements HostedDevices {
     renamed.add((key, name));
     return null;
   }
+
+  final removed = <String>[];
+  @override
+  Future<String?> remove(String key) async {
+    removed.add(key);
+    return null;
+  }
 }
 
 void main() {

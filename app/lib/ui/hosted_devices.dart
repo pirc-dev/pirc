@@ -24,7 +24,16 @@ abstract interface class HostedDevices {
 
   /// Gives a device a name; why not, or null once done.
   Future<String?> rename(String key, String name);
+
+  /// Takes a device off the account; why not, or null once the relay has
+  /// the version without it.
+  Future<String?> remove(String key);
 }
+
+/// What removing a device does, by role, before anything is asked.
+String removalText(DeviceView d) => d.role == 'host'
+    ? 'Its sessions end here, and no phone or browser of this account can reach it any more. To bring it back, run /pirc join on it and add it again.'
+    : 'It loses every computer of this account at once, and forgets the account. To bring it back, add it again.';
 
 String hostedName(DeviceView d) =>
     d.self ? 'This phone' : d.label.isNotEmpty ? d.label : d.role == 'host' ? 'A computer' : 'A phone or browser';
@@ -63,7 +72,7 @@ class HostedDeviceList extends StatelessWidget {
             _Row(
               d,
               behind: behind.contains(d.key),
-              onTap: devices.isPhone ? () => showSheet<void>(context, (_) => _RenameSheet(device: d, rename: devices.rename)) : null,
+              onTap: devices.isPhone ? () => showSheet<void>(context, (_) => _RenameSheet(device: d, rename: devices.rename, remove: d.self ? null : devices.remove)) : null,
             ),
           ],
           if (devices.isPhone) ...[
@@ -148,9 +157,12 @@ class _Add extends StatelessWidget {
 }
 
 class _RenameSheet extends StatefulWidget {
-  const _RenameSheet({required this.device, required this.rename});
+  const _RenameSheet({required this.device, required this.rename, this.remove});
   final DeviceView device;
   final Future<String?> Function(String key, String name) rename;
+
+  /// None for this phone, which the list always holds.
+  final Future<String?> Function(String key)? remove;
 
   @override
   State<_RenameSheet> createState() => _RenameSheetState();
@@ -165,6 +177,43 @@ class _RenameSheetState extends State<_RenameSheet> {
   void dispose() {
     _name.dispose();
     super.dispose();
+  }
+
+  // Asked first, by what removing does.
+  Future<void> _remove() async {
+    if (_busy) return;
+    final d = widget.device;
+    final sure = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text('Remove ${hostedName(d)}?'),
+        content: Text(removalText(d)),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    String? error;
+    try {
+      error = await widget.remove!(d.key);
+    } on Object catch (e) {
+      error = '$e';
+    }
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
   }
 
   Future<void> _save() async {
@@ -208,6 +257,18 @@ class _RenameSheetState extends State<_RenameSheet> {
           Answers(cancel: () => Navigator.of(context).maybePop(), label: _busy ? '…' : 'Save', disabled: _busy, go: _save),
         ]),
       ),
+      if (widget.remove != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: SheetGroup(children: [
+            SheetRow(
+              label: widget.device.role == 'host' ? 'Remove this computer' : 'Remove this phone or browser',
+              sub: widget.device.role == 'host' ? 'Its sessions end, and it can no longer be reached' : 'It loses every computer at once',
+              danger: true,
+              onTap: _remove,
+            ),
+          ]),
+        ),
     ]);
   }
 }

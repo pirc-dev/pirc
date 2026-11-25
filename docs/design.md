@@ -2588,6 +2588,42 @@ built; steps 14 and 15 are not finished.
             test on macOS, shows the same notice.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
+          Removal (9a, `app/lib/ui/hosted_devices.dart`,
+          `app/lib/app/hosted_devices.dart`): on the account's phone a
+          device's sheet offers Remove, saying first what it does by role (a
+          computer's sessions end and no device of the account reaches it; a
+          phone or browser loses every computer and forgets the account),
+          and asking once more. The version without it is signed with the
+          counter file, built on the newest read just then, published, taken
+          as the newest, and the names sealed again without it; the probes
+          of 8b2 give it to every running process. An unanswered publish
+          makes the phone read the newest again before signing anything
+          else. The account's phone is on every version and has no Remove.
+          Tested against the Go relay: a computer removed stops, saying so,
+          and its session leaves every list; a second phone removed is told
+          so and forgets the account.
+
+          The end to end tests (9b): a real pi in tmux with the extension
+          (`extension/test/hosted-pi.ts`), joined by `/pirc join` typed at
+          its terminal, the Go relay, and the app's Dart as the account's
+          phone (`app/test/hosted_pi_test.dart`): the computer added by the
+          code pi shows, its session seen over a channel, prompted and the
+          model's reply received, the turn's notice fetched with the
+          read-only key, then the computer removed and pi saying so. It runs
+          with the app's tests where go, node, tmux and pi are on PATH. On
+          the iOS simulator, `app/integration_test/hosted_test.dart` signs
+          up with the phone's own key store and prefs against a local relay,
+          opens the account again and wakes with the read-only key; it found
+          that the platform's key store gives read-only bytes, which the
+          account's opening wiped in place, and the in-memory store of the
+          tests now gives them so too. `xcrun simctl push` posts a local
+          notification that no notification extension sees, so the
+          extension's own run waits for a real phone (stage 7).
+          - **Found on the way**: `/pirc join` showed its text under the QR
+            code, and pi cuts a widget taller than its space, so a short
+            terminal lost the text a phone's terminal (Termius, Blink) needs;
+            the text now comes first.
+
        **Decisions for the app**:
        - *What gates a hosted phone* (D1): the account, as the relay
          says it, not each phone's subscription. A new account starts the

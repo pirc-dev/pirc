@@ -12,6 +12,7 @@
 // Swift, the same.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
 
@@ -141,8 +142,10 @@ Future<List<HostedNote>> hostedNotes({
 }) async {
   final account = await HostedAccount.load(e2e, values);
   if (account == null || hostedRelayKey(account.origin) != relay) throw const NoticesUnreadable('no hosted account');
-  final seed = await store.load(relay, KeyKind.read);
-  if (seed == null) throw const NoticesUnreadable('no read-only key');
+  final kept = await store.load(relay, KeyKind.read);
+  if (kept == null) throw const NoticesUnreadable('no read-only key');
+  // A copy of its own, which this wipes: a platform's bytes may be read-only.
+  final seed = Uint8List.fromList(kept);
   final read = ReadKeys.fromSeed(e2e.sodium, seed);
   seed.fillRange(0, seed.length, 0);
   try {
