@@ -2457,6 +2457,28 @@ built; steps 14 and 15 are not finished.
             event comes, a version only the phone had reaches the computer
             by a channel alone and the relay from it, and a removal ends the
             session.
+
+          The account in the app (8b1, `app/lib/hosted/setup.dart`,
+          `attest.dart`, `ui/hosted_start_screen.dart`):
+          - **The first screen of a hosted build**, before any paywall:
+            sign up, "My account is on another phone" (the code shown for
+            the account's phone to add), or "I run my own relay" (the join
+            screen of every build). A build without `PIRC_HOSTED` never
+            shows it.
+          - **Sign-up in one tap**: new seeds, version 1 signed, the
+            sign-up attested for its own login's nonce (App Attest or Play
+            Integrity with the store's proof; a build with
+            `PIRC_TEST_ATTEST` sends the test attestation, for simulators),
+            then the account kept. The relay's answer must name the account
+            version 1 makes. A sign-up or join that fails keeps no seed.
+          - **Kept under the relay key `pirc-e2e:` and the origin**, which no
+            self-hosted address can be, so a phone holds one kind of relay
+            or the other. The seeds open the account only if they give the
+            phone it lists.
+          - **On a hosted account the phone's own subscription gates
+            nothing** (D1); the account's, as the relay says it, does, with
+            the locked screen in 8b2. The session list and chats run over
+            8a's engine.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

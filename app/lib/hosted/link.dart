@@ -26,10 +26,13 @@ class LinkError implements Exception {
 }
 
 class HostedLink {
-  HostedLink._(this._ws, this.welcome, this._frames);
+  HostedLink._(this._ws, this.welcome, this._frames, this.nonce);
 
   final WebSocket _ws;
   final Welcome welcome;
+
+  /// The login's nonce, which an attestation for this login binds.
+  final Uint8List nonce;
   final StreamController<Frame> _frames;
 
   /// Frames from the relay after Welcome, until the connection closes.
@@ -50,6 +53,7 @@ class HostedLink {
     final frames = StreamController<Frame>();
     final login = Completer<Welcome>();
     var phase = 0;
+    var nonce = Uint8List(0);
     ws.listen(
       (m) async {
         if (m is! List<int>) {
@@ -70,6 +74,7 @@ class HostedLink {
         }
         if (phase == 0 && f.hasChallenge()) {
           phase = 1;
+          nonce = Uint8List.fromList(f.challenge.nonce);
           final signed = framed(authContext, [account, utf8.encode(origin), f.challenge.nonce]);
           ws.add(Frame(auth: Auth(signature: await sign(signed))).writeToBuffer());
         } else if (phase == 1 && f.hasWelcome()) {
@@ -95,7 +100,8 @@ class HostedLink {
       ),
     ).writeToBuffer());
     try {
-      return HostedLink._(ws, await login.future.timeout(timeout), frames);
+      final welcome = await login.future.timeout(timeout);
+      return HostedLink._(ws, welcome, frames, nonce);
     } catch (_) {
       await ws.close();
       rethrow;

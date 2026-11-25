@@ -11,6 +11,14 @@ import 'package:flutter/material.dart' show DefaultMaterialLocalizations;
 import 'package:flutter/services.dart';
 
 import '../core/protocol.dart';
+import '../e2e/list.dart' show E2e;
+import '../hosted/account.dart' show AccountUnreadable, KeyValues, accountKey;
+import '../hosted/attest.dart';
+import '../hosted/join.dart' as hosted show JoinFailed;
+import '../hosted/setup.dart';
+import '../hosted/try_stores.dart' show hostedBuild;
+import '../ui/hosted_join_screens.dart' show ShowCodeScreen;
+import '../ui/hosted_start_screen.dart';
 import '../core/view.dart';
 import '../join.dart';
 import '../keys/key_holder.dart';
@@ -40,11 +48,14 @@ import 'store.dart';
 // What the app keeps besides its keys, by key: on iOS in the App Group's
 // defaults, which the notification extension reads ("relay", "notices.v1");
 // on Android in a file out of backups.
-abstract class AppPrefs {
+abstract class AppPrefs implements KeyValues {
+  @override
   Future<String?> get(String key);
+  @override
   Future<void> set(String key, String? value);
 
-  // The relay it joined.
+  // The relay it joined; for a hosted account, its relay key
+  // (hosted/setup.dart).
   Future<String?> relay() => get('relay');
   Future<void> setRelay(String? relay) => set('relay', relay);
 
@@ -141,7 +152,12 @@ class MemoryPrefs extends AppPrefs {
 }
 
 class PircApp extends StatefulWidget {
-  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily});
+  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily, this.hosted = hostedBuild ? hostedRelay : null, this.attest = platformAttest});
+
+  // PiRC's hosted relay, offered at first run; none in a build without
+  // PIRC_HOSTED.
+  final String? hosted;
+  final Attest attest;
 
   final KeyStore store;
   final AppPrefs prefs;
@@ -194,6 +210,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   DateTime? _awaySince;
   var _awayOutside = false;
   RelayConnection? _conn;
+  // The hosted account's connection, in place of _conn.
+  HostedRun? _hosted;
+  // A relay of one's own chosen at the hosted build's first screen.
+  var _ownRelay = false;
   PircModel? _model;
   // The app's navigator, which is below this widget, not above it.
   final _nav = GlobalKey<NavigatorState>();
@@ -269,7 +289,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // Whether the store lets this phone be used: the trial, paid, or in its
   // grace after a failed payment; always, with no store, and while joined
   // to the review relay, whatever the store says.
-  bool get _allowed => widget.subscription == null || _relay == reviewRelay || _access.value?.access == Access.allowed;
+  // On a hosted account the account's subscription, as the relay says it,
+  // gates the phone instead (docs/design.md, step 14, stage 5, D1).
+  bool get _allowed => widget.subscription == null || _relay == reviewRelay || _isHosted || _access.value?.access == Access.allowed;
+
+  bool get _isHosted => _relay != null && hostedOriginOf(_relay!) != null;
 
   bool get _play => defaultTargetPlatform == TargetPlatform.android;
 
@@ -438,6 +462,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _conn?.stop();
+    _hosted?.dispose();
     _notes?.dispose();
     _links?.cancel();
     _storeChanged?.cancel();
@@ -451,6 +476,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) _refresh();
     if (state == AppLifecycleState.paused) {
       _conn?.stop();
+      _hosted?.stop();
       if (_model != null && _awaySince == null) {
         _awaySince = DateTime.now();
         _awayOutside = outside;
@@ -462,6 +488,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       if (settings.lock && away != null && _locks(DateTime.now().difference(away), settings.hold)) return _lock();
       _notes?.resumed();
       _conn?.start();
+      _hosted?.start();
     }
   }
 
@@ -496,12 +523,14 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _chat.value = null;
     _inSettings = false;
     _conn?.stop();
+    _hosted?.dispose();
     _notes?.detach();
     _holder?.forget();
     _settings!.key = null;
     setState(() {
       _key = null;
       _conn = null;
+      _hosted = null;
       _model = null;
       _lockError = null;
     });
@@ -511,6 +540,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
 
   Future<void> _unlockOnce() async {
     final relay = _relay!;
+    if (hostedOriginOf(relay) != null) return _unlockHosted(relay);
     final holder = _holder ??= KeyHolder(widget.store, relay, holdFor: _settings!.hold, protect: widget.protect);
     final shuts = _shuts;
     try {
@@ -573,6 +603,133 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     });
     model.restore().whenComplete(conn.start);
     _explainNotifications();
+  }
+
+  // --- A hosted account ---------------------------------------------------
+
+  // The account's main seed asked for, then connected; the keys gone (the
+  // app reinstalled), back to the first screen.
+  Future<void> _unlockHosted(String relay) async {
+    final shuts = _shuts;
+    final OpenAccount? open;
+    try {
+      final e2e = await E2e.load();
+      open = await openAccount(e2e: e2e, store: widget.store, values: widget.prefs, relay: relay);
+    } on KeyUnavailable catch (e) {
+      if (mounted) setState(() => _lockError = e.cancelled ? null : e.reason);
+      return;
+    } on AccountUnreadable catch (e) {
+      if (mounted) setState(() => _lockError = '$e');
+      return;
+    }
+    if (!mounted || shuts != _shuts) {
+      open?.dispose();
+      return;
+    }
+    if (open == null) {
+      await widget.prefs.setRelay(null);
+      setState(() => _relay = null);
+      return;
+    }
+    await _connectHosted(relay, open);
+  }
+
+  Future<void> _connectHosted(String relay, OpenAccount open) async {
+    final e2e = await E2e.load();
+    late final PircModel model;
+    final run = HostedRun(
+      e2e: e2e,
+      open: open,
+      toClient: (f) {
+        _notes?.onFrame(f);
+        model.client.onFrame(f);
+      },
+      relayState: (r) {
+        _notes?.onState(r.state == 'ready');
+        model.client.onState(r);
+      },
+    );
+    model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
+    _notes?.attach(model, run.send);
+    final key = await DeviceKey.fromSeed(open.mainSeed);
+    if (!mounted) {
+      run.dispose();
+      return;
+    }
+    _settings!
+      ..relay = relay
+      ..key = key;
+    setState(() {
+      _key = key;
+      _hosted = run;
+      _model = model;
+    });
+    model.restore().whenComplete(run.start);
+    _explainNotifications();
+  }
+
+  // Makes an account on the hosted relay, this phone its phone.
+  Future<void> _signUp() async {
+    final origin = widget.hosted!;
+    final e2e = await E2e.load();
+    final open = await signUp(e2e: e2e, store: widget.store, values: widget.prefs, origin: origin, attest: widget.attest, protect: _settings!.lock);
+    await _hostedJoined(open);
+  }
+
+  // Shows this phone's code until the account's phone adds it.
+  Future<void> _joinPhone() async {
+    final nav = _nav.currentState;
+    if (nav == null) return;
+    final JoiningPhone j;
+    try {
+      j = await JoiningPhone.start(e2e: await E2e.load(), store: widget.store, values: widget.prefs, origin: widget.hosted!, attest: widget.attest, protect: _settings!.lock);
+    } on hosted.JoinFailed catch (e) {
+      if (!mounted) return;
+      await showCupertinoDialog<void>(
+        context: nav.overlay!.context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Could not start the join'),
+          content: Text(e.message),
+          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    // Joined, the screen shows it a moment, then the account opens.
+    final route = CupertinoPageRoute<void>(
+      builder: (_) => ShowCodeScreen(
+        text: j.text,
+        done: j.joined,
+        cancel: j.cancel,
+        joined: (_) => Future<void>.delayed(const Duration(seconds: 2), () {
+          if (mounted) nav.popUntil((r) => r.isFirst);
+        }),
+      ),
+    );
+    unawaited(nav.push(route));
+    final OpenAccount open;
+    try {
+      open = await j.done;
+    } on Object {
+      // Said on the screen.
+      return;
+    }
+    if (!mounted) return open.dispose();
+    await _hostedJoined(open);
+  }
+
+  Future<void> _hostedJoined(OpenAccount open) async {
+    final relay = hostedRelayKey(open.account.origin);
+    await widget.prefs.setRelay(relay);
+    if (!mounted) {
+      open.dispose();
+      return;
+    }
+    setState(() {
+      _relay = relay;
+      _ownRelay = false;
+    });
+    await _connectHosted(relay, open);
   }
 
   // Once, after joining (or on the first open since notifications came):
@@ -706,7 +863,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
 
   Future<void> _removedOnce(String relay) async {
     _conn?.stop();
+    _hosted?.dispose();
+    _hosted = null;
     await widget.store.delete(relay);
+    if (hostedOriginOf(relay) != null) await widget.prefs.set(accountKey, null);
     await widget.cache?.clear();
     await widget.drafts?.clear();
     await widget.prefs.setRelay(null);
@@ -837,6 +997,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     final Widget home;
     if (!_loaded) {
       home = CupertinoPageScaffold(backgroundColor: look.page, child: const SizedBox.shrink());
+    } else if (widget.hosted != null && _relay == null && !_ownRelay) {
+      // Before the paywall: a hosted account is gated by its own
+      // subscription, which the relay checks.
+      home = HostedStartScreen(signUp: _signUp, joinPhone: _joinPhone, ownRelay: () => setState(() => _ownRelay = true));
     } else if (!_allowed && _relay == null && _joinFirst) {
       home = JoinScreen(join: _join, incoming: _incoming, scan: widget.scan ?? (widget.camera ? _scan : null), back: () => setState(() => _joinFirst = false));
     } else if (!_allowed) {
@@ -859,7 +1023,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         join: _relay == null ? () => setState(() => _joinFirst = true) : null,
       );
     } else if (_relay == null) {
-      home = JoinScreen(join: _join, incoming: _incoming, scan: widget.scan ?? (widget.camera ? _scan : null));
+      home = JoinScreen(
+        join: _join,
+        incoming: _incoming,
+        scan: widget.scan ?? (widget.camera ? _scan : null),
+        back: widget.hosted == null ? null : () => setState(() => _ownRelay = false),
+      );
     } else if (_model == null) {
       home = LockScreen(unlock: _unlock, error: _lockError);
     } else {

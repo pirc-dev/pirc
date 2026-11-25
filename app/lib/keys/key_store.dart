@@ -92,7 +92,8 @@ class MemoryKeyStore implements KeyStore {
       asked++;
       if (decline) throw const KeyUnavailable('declined', cancelled: true);
     }
-    return s.$1;
+    // A copy, as the platform's: the caller may wipe what it is given.
+    return Uint8List.fromList(s.$1);
   }
 
   @override
