@@ -201,7 +201,9 @@ class HostedAccount {
 
   // In order, so that an older write never lands after a newer one; and
   // never over a newer version another writer (the notification
-  // extension) kept meanwhile.
+  // extension) kept before the read here. The read and the write are not
+  // one step across processes: a version the other writer keeps between
+  // them is lost on disk, and comes back from the relay at the next login.
   Future<void> _write() => _writing = _writing.then((_) async {
         final kept = await _values.get(accountKey);
         if (kept != null) {
@@ -255,7 +257,12 @@ class MemoryCounter implements PhoneCounter {
 }
 
 /// The counter in a file of the private folder (app/files.dart), written
-/// aside, flushed, then renamed over the old one.
+/// aside, flushed, then renamed over the old one. Dart flushes no folder,
+/// and a phone's flush may not reach the disk at once, so a write can be
+/// lost to a power cut; the first counter after each start therefore
+/// skips [restartGap] numbers past the one read. A skipped number is only
+/// wasted (docs/e2e.md, section 3), and the relay's newest is the floor
+/// besides.
 class FileCounter implements PhoneCounter {
   FileCounter(this.path, {this.protect});
 
@@ -264,11 +271,13 @@ class FileCounter implements PhoneCounter {
   /// Gives a file the folder's protection again, after the rename.
   final Future<void> Function(String path)? protect;
   Future<Int64>? _last;
+  static const restartGap = 64;
 
   Future<Int64> _read() async {
     try {
       final v = Int64.parseInt((await File(path).readAsString()).trim());
-      return v.isNegative ? throw const FormatException('negative') : v;
+      if (v.isNegative) throw const FormatException('negative');
+      return v + restartGap;
     } on PathNotFoundException {
       return Int64.ZERO;
     }

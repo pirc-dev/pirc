@@ -239,7 +239,9 @@ void main() {
     expect(l.welcome.listCounter, want);
   });
 
-  test('the computer removed: its session ends', () async {
+  // The relay ends the computer's session too; that the phone closes the
+  // channel itself is hosted_engine_test.dart's.
+  test('the computer removed: its session ends, and the computer stops', () async {
     final c = connect();
     addTearDown(() {
       c.sessions.dispose();

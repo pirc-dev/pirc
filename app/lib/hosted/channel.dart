@@ -34,10 +34,12 @@ const windowBytes = 256 * 1024;
 const ackMessages = 8;
 const ackBytes = 128 * 1024;
 
-/// The channels a client keeps at once. With each computer allowed a
-/// window toward it, 16 keep the relay's queue toward this connection
-/// under its caps (256 frames, 4 MiB) without holding counts back.
-const maxChannels = 16;
+/// The channels a client keeps at once. Each computer may have a window
+/// in flight toward this phone (16 messages, 256 KiB of Noise bytes), so 8
+/// keep the relay's queue toward this connection (256 frames, 4 MiB) at
+/// half its caps, the frames' overhead, the computers' counts and the
+/// relay's own frames included, without holding counts back.
+const maxChannels = 8;
 
 /// What the client holds back for one channel before giving it up.
 const queueBytes = 4 << 20;
@@ -156,6 +158,9 @@ class HostedChannel {
   /// The computer's list counter, once it answered.
   Int64? hostCounter;
 
+  /// Whether OpenChannel went to the relay.
+  var sentOpen = false;
+
   bool get ready => phase == ChannelPhase.ready;
   bool get over => phase == ChannelPhase.closed;
 
@@ -170,6 +175,7 @@ class HostedChannel {
       close(ErrorCode.ERROR_CODE_SESSION_GONE, 'not connected', tell: false);
       return false;
     }
+    sentOpen = true;
     return true;
   }
 

@@ -165,10 +165,11 @@ void main() {
       expect(File(path).readAsStringSync().trim(), '2');
       expect(await c.next(Int64(2)), Int64(3));
       expect(await c.next(Int64(10)), Int64(10));
-      // A restart reads it again; a backup that brought back an older
-      // version of the list still gets a higher counter.
+      // A restart reads it again and skips past what a lost write may
+      // have used; an older floor still gets a higher counter.
       final again = FileCounter(path);
-      expect(await again.next(Int64(4)), Int64(11));
+      expect(await again.next(Int64(4)), Int64(10 + FileCounter.restartGap + 1));
+      expect(await again.next(Int64(4)), Int64(10 + FileCounter.restartGap + 2));
       File(path).writeAsStringSync('nonsense');
       await expectLater(FileCounter(path).next(Int64(2)), throwsFormatException);
     });
@@ -432,6 +433,41 @@ void main() {
       final req = ChannelFrame.fromBuffer(Uint8List.sublistView(t.receive(Uint8List.fromList(sent.message)).plaintext!, 1));
       expect(req.session.sessionId, 's1');
       expect(req.session.message, [1]);
+      // A version newer than the computer's closes the channel, to give it
+      // that version by the next one.
+      s.onFrame(v2.Frame(list: v2.List_(list: version(Int64(4), [self, computer]))));
+      await Future<void>.delayed(Duration.zero);
+      expect(relay.where((f) => f.hasCloseChannel()).single.closeChannel.channelId, Int64(9));
+    });
+
+    test('a channel given up before the relay answered its open is closed when it does', () async {
+      await ready();
+      final ref = common.SessionRef(hostKey: computer.signingKey, sessionId: 's1', instanceId: 'i1');
+      s.fromClient(v1.Frame(routed: v1.Routed(session: ref, payload: [1])));
+      final open = relay.last.openChannel;
+      s.onFrame(v2.Frame(list: v2.List_(list: version(Int64(3), [self]))));
+      await Future<void>.delayed(Duration.zero);
+      s.onFrame(v2.Frame(channelOpened: v2.ChannelOpened(requestId: open.requestId, channelId: Int64(4))));
+      expect(relay.last.closeChannel.channelId, Int64(4));
+    });
+
+    test('sealed entries that do not open open no channel', () async {
+      await ready();
+      s.onFrame(v2.Frame(sessionList: v2.SessionList(sessions: [
+        for (var i = 0; i < 20; i++) v2.SessionEntry(session: common.SessionRef(hostKey: computer.signingKey, sessionId: 's$i', instanceId: 'i$i'), sealed: Uint8List(80)),
+      ])));
+      expect(client.last.sessionList.sessions, isEmpty);
+      expect(relay.where((f) => f.hasOpenChannel()), isEmpty);
+    });
+
+    test('once disposed, nothing is taken or sent', () async {
+      await ready();
+      s.dispose();
+      final n = relay.length;
+      s.onFrame(v2.Frame(sessionList: v2.SessionList(sessions: [v2.SessionEntry(session: common.SessionRef(hostKey: computer.signingKey, sessionId: 's', instanceId: 'i'), sealed: Uint8List(80))])));
+      s.onState(HostedReady(v2.Welcome(maxFrameBytes: 1 << 20, listCounter: account.newest.counter)));
+      expect(s.fromClient(v1.Frame(routed: v1.Routed(session: common.SessionRef(hostKey: computer.signingKey, sessionId: 's', instanceId: 'i'), payload: [1]))), isFalse);
+      expect(relay.length, n);
     });
 
     test('a sealed entry from a computer not on the list is left out', () async {
@@ -439,6 +475,22 @@ void main() {
       s.onFrame(v2.Frame(sessionList: v2.SessionList(sessions: [v2.SessionEntry(session: common.SessionRef(hostKey: Uint8List(32), sessionId: 's', instanceId: 'i'), sealed: Uint8List(80))])));
       expect(client.last.sessionList.sessions, isEmpty);
       expect(relay.where((f) => f.hasOpenChannel()), isEmpty);
+    });
+
+    test('an account already without this phone when it logs in is removed', () async {
+      final other = phoneDevice(MainKeys.fromSeed(sodium, seed(7)), ReadKeys.fromSeed(sodium, seed(8)));
+      final values = MemoryValues();
+      final b = await HostedAccount.create(e2e, values,
+          origin: 'wss://relay.test', accountId: accountId, phoneKey: main.signing.publicKey, self: other, first: v1List, newest: version(Int64(2), [self, other]));
+      await b.take(version(Int64(3), [self]));
+      final again = (await HostedAccount.load(e2e, values))!;
+      var removed = false;
+      final t = HostedSessions(e2e: e2e, account: again, main: MainKeys.fromSeed(sodium, seed(7)), sendRelay: (_) => true, toClient: (_) {}, relayState: states.add, onRemoved: () => removed = true);
+      addTearDown(t.dispose);
+      t.onState(HostedReady(v2.Welcome(maxFrameBytes: 1 << 20, listCounter: Int64(3))));
+      await Future<void>.delayed(Duration.zero);
+      expect(removed, isTrue);
+      expect(states.last.state, 'refused');
     });
 
     test('a version without this phone ends everything, said as removed', () async {

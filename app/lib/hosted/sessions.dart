@@ -123,22 +123,32 @@ class HostedSessions implements ChannelEvents {
   final _pushIds = <String>{};
   var _ready = false;
   var _removed = false;
+  var _disposed = false;
+  // Opens given up before the relay answered them: closed when it does.
+  final _abandoned = <String>{};
   var _publishes = 0;
 
-  bool get _connected => _ready && !_removed;
+  bool get _connected => _ready && !_removed && !_disposed;
 
+  /// Ends every channel and stops taking frames; the keys may be disposed
+  /// after it.
   void dispose() {
+    if (_disposed) return;
     _listSub.cancel();
     _closeAll('stopped', tell: true);
+    _disposed = true;
+    _ready = false;
+    _abandoned.clear();
     _boxSecret.fillRange(0, _boxSecret.length, 0);
   }
 
   // --- From the connection -------------------------------------------------
 
   void onState(HostedState s) {
-    if (_removed) return;
+    if (_removed || _disposed) return;
     if (s is! HostedReady) {
       _ready = false;
+      _abandoned.clear();
       _closeAll('the connection went', tell: false);
       relayState(switch (s) {
         HostedConnecting() => const RelayView(state: 'connecting'),
@@ -157,6 +167,9 @@ class HostedSessions implements ChannelEvents {
 
   Future<void> _welcomed(v2.Welcome w) async {
     if (w.list.isNotEmpty) await _take(w.list, fromRelay: true);
+    // Removed by a version taken before this login, by this app before it
+    // stopped or by the notification extension.
+    if (!_removed && !account.listed) _removedNow();
     if (!_connected) return;
     // The relay is behind this phone: it is given the newer version.
     if (w.listCounter < account.newest.counter) _publish(account.newest.bytes);
@@ -164,7 +177,7 @@ class HostedSessions implements ChannelEvents {
   }
 
   void onFrame(v2.Frame f) {
-    if (_removed) return;
+    if (_removed || _disposed) return;
     switch (f.whichBody()) {
       case v2.Frame_Body.list:
         unawaited(_take(f.list.list, fromRelay: true));
@@ -187,6 +200,10 @@ class HostedSessions implements ChannelEvents {
         if (f.devices.names.isNotEmpty) _openNames(f.devices.names);
         _sendKeys();
       case v2.Frame_Body.channelOpened:
+        if (_abandoned.remove(f.channelOpened.requestId)) {
+          sendRelay(v2.Frame(closeChannel: v2.CloseChannel(channelId: f.channelOpened.channelId, code: ErrorCode.ERROR_CODE_SESSION_GONE)));
+          return;
+        }
         for (final p in _processes.values) {
           final ch = p.channel;
           if (ch != null && ch.requestId == f.channelOpened.requestId) ch.opened(f.channelOpened.channelId);
@@ -233,13 +250,23 @@ class HostedSessions implements ChannelEvents {
   }
 
   // A newer version taken, from anywhere.
+  void _removedNow() {
+    _removed = true;
+    _closeAll('this phone was removed from the account', tell: true);
+    relayState(const RelayView(state: 'refused', reason: 'this phone was removed from the account'));
+    onRemoved?.call();
+  }
+
   void _newer(HeldList list) {
-    if (!account.listed) {
-      _removed = true;
-      _closeAll('this phone was removed from the account', tell: true);
-      relayState(const RelayView(state: 'refused', reason: 'this phone was removed from the account'));
-      onRemoved?.call();
-      return;
+    if (_disposed) return;
+    if (!account.listed) return _removedNow();
+    // A channel to a computer behind the new version is opened again, so
+    // that the version reaches it as the channel's first frame.
+    for (final p in _processes.values) {
+      final ch = p.channel;
+      if (ch != null && ch.ready && ch.hostCounter != null && ch.hostCounter! < list.counter && _computer(p.hostKey) != null) {
+        ch.close(ErrorCode.ERROR_CODE_SESSION_GONE, 'a newer list to give');
+      }
     }
     // Channels to computers no longer on it, and their sessions, go.
     for (final p in [..._processes.values]) {
@@ -274,22 +301,19 @@ class HostedSessions implements ChannelEvents {
       highest: _highest[key],
       now: _now(),
     );
-    final p = _process(ref.hostKey, ref.instanceId);
-    final s = p.sessions.putIfAbsent(ref.sessionId, () => _Session(common.SessionRef(hostKey: ref.hostKey, sessionId: ref.sessionId, instanceId: ref.instanceId)));
-    if (r.result == 'accepted') {
-      _highest[key] = r.ordering!;
-      s.sealed = r.body;
-      s.announcedAt = e.hasAnnouncedAt() ? e.announcedAt : null;
-    } else if (r.reason != 'ordering' || s.sealed == null) {
+    final known = _processes[_processId(ref.hostKey, ref.instanceId)]?.sessions[ref.sessionId];
+    if (r.result != 'accepted') {
       // An older copy than one seen keeps the one seen; anything else is
-      // left out.
+      // left out, and opens nothing.
+      if (r.reason == 'ordering' && known != null && (known.sealed != null || known.whole != null)) return _entry(known);
       debugPrint('hosted: an announcement was refused: ${r.reason}');
-      if (s.sealed == null && s.whole == null) {
-        p.sessions.remove(ref.sessionId);
-        _idleSoon(p);
-      }
       return null;
     }
+    _highest[key] = r.ordering!;
+    final p = _process(ref.hostKey, ref.instanceId);
+    final s = p.sessions.putIfAbsent(ref.sessionId, () => _Session(common.SessionRef(hostKey: ref.hostKey, sessionId: ref.sessionId, instanceId: ref.instanceId)));
+    s.sealed = r.body;
+    s.announcedAt = e.hasAnnouncedAt() ? e.announcedAt : null;
     return _entry(s);
   }
 
@@ -410,6 +434,8 @@ class HostedSessions implements ChannelEvents {
 
   @override
   void closed(HostedChannel ch, String why) {
+    // Opened, and not answered yet: the relay's answer is closed when it comes.
+    if (ch.id == null && ch.sentOpen && _ready) _abandoned.add(ch.requestId);
     final p = _of(ch);
     if (p == null) return;
     debugPrint('hosted: channel to ${p.instanceId} closed: $why');

@@ -2438,8 +2438,8 @@ built; steps 14 and 15 are not finished.
             a port of `relay-client/hosted.ts`.
           - **A channel's client end** (`channel.dart`): IK's initiator,
             the list first, the computer's list state, pieces, and the
-            window both ways as `channel.proto` has it. At most 16 channels
-            at once, which keeps the relay's queue toward the phone under
+            window both ways as `channel.proto` has it. At most 8 channels
+            at once, which keeps the relay's queue toward the phone at half
             its caps without holding counts back.
           - **The Client's frames from the account** (`sessions.dart`):
             the existing `Client` speaks `v1alpha1`, so the session list is
