@@ -15,6 +15,8 @@ import 'package:pirc/app/links.dart';
 import 'package:pirc/app/model.dart';
 import 'package:pirc/app/store.dart';
 import 'package:pirc/e2e/list.dart';
+import 'package:pirc/gen/pirc/v1alpha1/common.pb.dart' as common;
+import 'package:pirc/gen/pirc/v1alpha1/common.pbenum.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart';
 import 'package:pirc/hosted/account.dart';
 import 'package:pirc/hosted/join.dart';
@@ -415,6 +417,34 @@ void main() {
       );
       expect(await store.load(hostedRelayKey(origin), KeyKind.main), isNull);
       expect(await HostedAccount.load(e2e, prefs), isNull);
+    });
+
+    test('a connection dropped during the login is tried again; a refused login is not', () async {
+      var logins = 0;
+      var refuse = false;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((req) async {
+        final ws = await WebSocketTransformer.upgrade(req);
+        logins++;
+        ws.listen((m) {
+          if (refuse) {
+            ws.add(Frame(error: common.Error(code: ErrorCode.ERROR_CODE_PERMISSION_DENIED, message: 'no')).writeToBuffer());
+          } else {
+            ws.close();
+          }
+        });
+      });
+      final origin = 'ws://127.0.0.1:${server.port}';
+      await expectLater(signUp(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: origin, attest: testAttest, protect: false), throwsA(isA<SignUpFailed>()));
+      expect(logins, signUpAttempts);
+      logins = 0;
+      refuse = true;
+      await expectLater(
+        signUp(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: origin, attest: testAttest, protect: false),
+        throwsA(isA<SignUpFailed>().having((e) => e.message, 'message', contains('refused'))),
+      );
+      expect(logins, 1);
     });
 
     test('an account opened only with its own keys', () async {

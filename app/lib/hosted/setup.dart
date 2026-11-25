@@ -135,8 +135,10 @@ Future<OpenAccount> signUp({
       } on SignUpFailed {
         rethrow;
       } on LinkError catch (e) {
-        // The relay refused the login itself: no account was made.
-        throw SignUpFailed('the relay refused: $e');
+        // The relay refused the login itself: no account was made. A
+        // connection that only dropped is tried again, below.
+        if (e.refused) throw SignUpFailed('the relay refused: $e');
+        lost = e;
       } on Object catch (e) {
         lost = e;
       }

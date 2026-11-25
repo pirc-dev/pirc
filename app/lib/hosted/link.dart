@@ -19,8 +19,12 @@ const hostedPath = '/v1alpha2';
 
 /// A login the relay refused, or a connection that ended before Welcome.
 class LinkError implements Exception {
-  const LinkError(this.message);
+  const LinkError(this.message, {this.refused = false});
   final String message;
+
+  /// The relay answered the login with an Error, rather than the
+  /// connection failing.
+  final bool refused;
   @override
   String toString() => message;
 }
@@ -69,7 +73,7 @@ class HostedLink {
         }
         if (phase == 2) return frames.add(f);
         if (f.hasError()) {
-          if (!login.isCompleted) login.completeError(LinkError(f.error.message.isEmpty ? 'the relay refused the login' : f.error.message));
+          if (!login.isCompleted) login.completeError(LinkError(f.error.message.isEmpty ? 'the relay refused the login' : f.error.message, refused: true));
           return;
         }
         if (phase == 0 && f.hasChallenge()) {
