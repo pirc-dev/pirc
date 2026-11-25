@@ -2523,22 +2523,29 @@ built; steps 14 and 15 are not finished.
           - **A new account starts the store's purchase first**: given up,
             or waiting for approval, no account is made; bought, the store's
             proof goes in the sign-up.
-          - **A locked account** shows only its screen: renew through this
-            phone's store (the proof this phone has, or a purchase, then
-            `RenewSubscription`; the relay then closes the connection and
-            the phone logs in again, unlocked), or, on the account's phone,
-            delete it.
+          - **A locked account** shows only its screen, over whatever was
+            open: renew through this phone's store (the proof this phone
+            has, or a purchase, then `RenewSubscription`; the relay then
+            closes the connection and the phone logs in again, unlocked),
+            or, on the account's phone, delete it. "Subscribe" in Settings
+            always buys, then gives the proof, and logs in again to show the
+            subscriptions the relay now has.
           - **Deleting the account**, from Settings or the locked screen, on
             the account's phone only: asked first, saying that it cannot be
-            undone, that the sessions stay on the computers and that the
-            store's subscription is to be cancelled in the store; then
-            `DeleteAccount`, and once the relay has done it this phone's
-            keys, account and chats go, as on a removal.
+            undone, that the sessions stay on the computers and in which
+            stores the account's live subscriptions are to be cancelled;
+            then recorded (D5), `DeleteAccount`, and once the relay has done
+            it this phone's keys, account and chats go, as on a removal, the
+            record last. An answer lost leaves the record: the phone asks
+            again at its next login, and a login refused while it is
+            recorded is taken as the deletion done.
           - **China mainland** (decision 6): the hosted relay is not offered
             on that App Store storefront (StoreKit's `Storefront.current`,
-            `CHN`), nor when the storefront does not answer within three
-            seconds; the app's first screen is then the join screen of a
-            relay of one's own.
+            `CHN`), nor when iOS gives no storefront, fails, or does not
+            answer within three seconds (but to a simulator build, which
+            has no App Store account); the app's first screen is then the
+            join screen of a relay of one's own. Android's Play has no China
+            mainland store.
           - **Export compliance, looked at again**: a `PIRC_HOSTED` build
             encrypts the app's own content with libsodium (Noise channels,
             `crypto_box`), which is not the exempt-only use that

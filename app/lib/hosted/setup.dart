@@ -14,6 +14,7 @@ import 'package:fixnum/fixnum.dart';
 
 import '../core/view.dart' show RelayView;
 import '../e2e/list.dart';
+import '../gen/pirc/v1alpha1/common.pbenum.dart' show ErrorCode;
 import '../gen/pirc/v1alpha1/relay.pb.dart' as v1;
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import '../keys/key_store.dart';
@@ -287,6 +288,7 @@ class HostedRun {
     void Function()? onRemoved,
     KeyValues? values,
     void Function(Welcome w)? onWelcome,
+    void Function(ErrorCode code)? onRefused,
   }) {
     final a = open.account;
     conn = HostedConnection(
@@ -298,7 +300,7 @@ class HostedRun {
       onFrame: (f) => sessions.onFrame(f),
       onState: (s) => sessions.onState(s),
     );
-    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved, values: values, onWelcome: onWelcome);
+    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved, values: values, onWelcome: onWelcome, onRefused: onRefused);
   }
 
   final OpenAccount open;

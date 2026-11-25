@@ -102,6 +102,7 @@ class HostedSessions implements ChannelEvents {
     this.onRemoved,
     this.values,
     this.onWelcome,
+    this.onRefused,
     Int64 Function()? now,
   }) : _now = now ?? (() => Int64(DateTime.now().millisecondsSinceEpoch)) {
     _boxSecret = main.box.secretKey.extractBytes();
@@ -132,6 +133,10 @@ class HostedSessions implements ChannelEvents {
   /// Each login's Welcome, for the account's state: locked, and its
   /// subscriptions.
   final void Function(v2.Welcome w)? onWelcome;
+
+  /// A login the relay refused, by its code: once deleting the account was
+  /// asked for, that is how the phone learns it is done.
+  final void Function(ErrorCode code)? onRefused;
   final Int64 Function() _now;
 
   late final Uint8List _boxSecret;
@@ -194,6 +199,7 @@ class HostedSessions implements ChannelEvents {
       // A removed key is given the newest list, then refused: this phone
       // learns of its removal from that list, which it may hold already.
       if (s is HostedRefused && !account.listed) return _removedNow();
+      if (s is HostedRefused) onRefused?.call(s.code);
       _closeAll('the connection went', tell: false);
       relayState(switch (s) {
         HostedConnecting() => const RelayView(state: 'connecting'),

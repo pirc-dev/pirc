@@ -283,7 +283,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // Asked before the first screen shows, briefly: on no answer the
       // hosted relay is not offered this time.
       if (widget.hosted != null)
-        widget.storefront().then<String?>((c) => c).timeout(const Duration(seconds: 3), onTimeout: () => chinaMainland).catchError((Object _) => chinaMainland),
+        widget.storefront().then<String?>((c) => c).timeout(const Duration(seconds: 3), onTimeout: () => unknownStorefront).catchError((Object _) => unknownStorefront),
     ]).then((v) {
       if (!mounted) return;
       final r = v[0] as String?;
@@ -293,7 +293,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         _relay = r;
         if (subscription != null) _access.value = (v[3] as (StoreStatus, bool)).$1;
         _buyWaiting = v[subscription != null ? 4 : 3] as bool;
-        _hostedOffered = widget.hosted != null && v.last != chinaMainland;
+        _hostedOffered = widget.hosted != null && v.last != chinaMainland && v.last != unknownStorefront;
         _loaded = true;
       });
       if (subscription != null && (v[3] as (StoreStatus, bool)).$2) _stored(_access.value!);
@@ -640,6 +640,14 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _explainNotifications();
   }
 
+  // What is open over the list (a chat, Settings) closed, as on locking.
+  void _closeOpen() {
+    _detail = null;
+    _nav.currentState?.popUntil((r) => r.isFirst);
+    _chat.value = null;
+    _inSettings = false;
+  }
+
   // --- A hosted account ---------------------------------------------------
 
   // The account's main seed asked for, then connected; the keys gone (the
@@ -675,6 +683,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // with them, and the phone is back at the first screen.
       await forgetNames(widget.prefs);
       await widget.prefs.set(accountKey, null);
+      await widget.prefs.set(deletingKey, null);
       await widget.prefs.setRelay(null);
       if (mounted) setState(() => _relay = null);
       return;
@@ -701,7 +710,18 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       onRemoved: () => _hostedRemoved(relay),
       values: widget.prefs,
       onWelcome: (w) {
-        if (mounted && identical(_hosted?.open, open)) setState(() => _hostedWelcome = w);
+        if (!mounted || !identical(_hosted?.open, open)) return;
+        // Locked: only its screen; what was open over the list closes.
+        if (w.locked && _hostedWelcome?.locked != true) _closeOpen();
+        setState(() => _hostedWelcome = w);
+        // A deletion asked for and not known done: asked again.
+        unawaited(_hostedAccount?.resumeDeletion());
+      },
+      // Refused with a deletion asked for: the account is gone, and so is
+      // this phone's part of it.
+      onRefused: (code) async {
+        if (code != ErrorCode.ERROR_CODE_UNAUTHENTICATED || !(await _hostedAccount?.deleting() ?? false)) return;
+        if (mounted && _relay == relay) await _removed(relay);
       },
     );
     model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
@@ -726,6 +746,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         proof: widget.proof,
         // Deleted at the relay: this phone's part goes, as on a removal.
         deleted: () => _removed(relay),
+        values: widget.prefs,
       );
       _model = model;
     });
@@ -970,6 +991,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     if (hostedOriginOf(relay) != null) {
       await forgetNames(widget.prefs);
       await widget.prefs.set(accountKey, null);
+      // The record of a deletion goes last (D5).
+      await widget.prefs.set(deletingKey, null);
     }
     await widget.cache?.clear();
     await widget.drafts?.clear();

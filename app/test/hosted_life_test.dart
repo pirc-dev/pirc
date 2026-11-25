@@ -14,7 +14,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart';
 
 import 'package:pirc/app/app.dart';
-import 'package:pirc/app/hosted_devices.dart' show AppHostedAccount;
+import 'package:pirc/app/hosted_devices.dart' show AppHostedAccount, deletingKey;
+import 'package:pirc/gen/pirc/v1alpha1/common.pb.dart' as common;
+import 'package:pirc/gen/pirc/v1alpha1/common.pbenum.dart';
+import 'package:pirc/hosted/attest.dart' show unknownStorefront;
 import 'package:pirc/app/model.dart';
 import 'package:pirc/app/store.dart';
 import 'package:pirc/core/view.dart';
@@ -49,10 +52,14 @@ class _Controls implements HostedAccountControls {
   @override
   String? get storeName => 'the App Store';
   var renewed = 0;
+  var bought = 0;
   var deleted = 0;
+  Object? throws;
   @override
-  Future<String?> renew() async {
+  Future<String?> renew({bool buy = false}) async {
     renewed++;
+    if (buy) bought++;
+    if (throws != null) throw throws!;
     return null;
   }
 
@@ -144,7 +151,9 @@ void main() {
       expect(c.renewed, 1);
       await tester.tap(find.text('Delete this account'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('It does not cancel your subscription: cancel it in the App Store.'), findsOneWidget);
+      // Its one subscription has lapsed: no store to cancel in.
+      expect(find.textContaining('This cannot be undone.'), findsOneWidget);
+      expect(find.textContaining('cancel it in'), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(c.deleted, 0);
@@ -180,38 +189,115 @@ void main() {
     });
   });
 
-  testWidgets('the app on a locked account: only the locked screen', (tester) async {
-    final e2e = (await tester.runAsync(E2e.load))!;
-    // A relay that makes any account, and says it is locked at every login
-    // to one.
-    final server = (await tester.runAsync(() => HttpServer.bind(InternetAddress.loopbackIPv4, 0)))!;
-    addTearDown(() => server.close(force: true));
-    server.listen((req) async {
-      final ws = await WebSocketTransformer.upgrade(req);
-      var account = false;
-      ws.listen((m) {
-        final f = v2.Frame.fromBuffer(m as List<int>);
-        if (f.hasHello()) {
-          account = f.hello.accountId.isNotEmpty;
-          ws.add(v2.Frame(challenge: v2.Challenge(nonce: List.filled(32, 1))).writeToBuffer());
-        }
-        if (f.hasAuth()) ws.add(v2.Frame(welcome: v2.Welcome(maxFrameBytes: 1 << 20, listCounter: account ? Int64.ONE : null, locked: account)).writeToBuffer());
-        if (f.hasSignUp()) ws.add(v2.Frame(signedUp: v2.SignedUp(requestId: f.signUp.requestId, accountId: e2e.sha256(f.signUp.list.sublist(signatureBytes)))).writeToBuffer());
-      });
-    });
-    final origin = 'ws://127.0.0.1:${server.port}';
-    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: origin, attest: testAttest, storefront: () async => null));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign up'));
-    for (var i = 0; i < 100 && find.byType(LockedAccountScreen).evaluate().isEmpty; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect(find.byType(LockedAccountScreen), findsOneWidget, reason: _all(tester));
-    expect(find.byType(SessionsScreen), findsNothing);
+  group('with a stand-in relay', () {
+    late E2e e2e;
+    setUpAll(() async => e2e = await E2e.load());
 
-    await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(minutes: 31));
+    Future<void> until(WidgetTester tester, bool Function() done, {int tries = 200}) async {
+      for (var i = 0; i < tries && !done(); i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    Future<(_StandIn, MemoryKeyStore, MemoryPrefs)> signedUp(WidgetTester tester, {bool locked = false}) async {
+      tester.view.physicalSize = const Size(1170, 4000);
+      addTearDown(tester.view.reset);
+      final relay = (await tester.runAsync(() => _StandIn.start(e2e)))!;
+      addTearDown(relay.stop);
+      relay.locked = locked;
+      final keys = MemoryKeyStore();
+      final prefs = MemoryPrefs();
+      await tester.pumpWidget(PircApp(store: keys, prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest, storefront: () async => null, subscription: _Store(Bought.bought), proof: () async => 'a proof'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sign up'));
+      await until(tester, () => find.byType(LockedAccountScreen).evaluate().isNotEmpty || (find.byType(SessionsScreen).evaluate().isNotEmpty && find.textContaining('Connecting').evaluate().isEmpty));
+      return (relay, keys, prefs);
+    }
+
+    testWidgets('locked: only its screen; renewed, the relay closes, and the phone logs in again unlocked', (tester) async {
+      final (relay, _, _) = await signedUp(tester, locked: true);
+      expect(find.byType(LockedAccountScreen), findsOneWidget, reason: _all(tester));
+      expect(find.byType(SessionsScreen), findsNothing);
+      await tester.tap(find.text('Renew through Google Play'));
+      await until(tester, () => find.byType(LockedAccountScreen).evaluate().isEmpty);
+      expect(find.byType(LockedAccountScreen), findsNothing, reason: _all(tester));
+      expect(find.byType(SessionsScreen), findsOneWidget);
+      expect(relay.renewals, ['a proof']);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(minutes: 31));
+    });
+
+    testWidgets('locked while Settings is open: the locked screen comes over it', (tester) async {
+      final (relay, _, _) = await signedUp(tester);
+      await tester.tap(find.bySemanticsLabel('Settings'));
+      await tester.pumpAndSettle();
+      relay.locked = true;
+      relay.dropAll();
+      await until(tester, () => find.byType(LockedAccountScreen).evaluate().isNotEmpty);
+      // Settings' page gone, its animation done.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(LockedAccountScreen), findsOneWidget, reason: _all(tester));
+      expect(find.text('ACCOUNT'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(minutes: 31));
+    });
+
+    testWidgets('deleted, and the answer lost: recorded, and finished once the relay refuses the login', (tester) async {
+      final (relay, keys, prefs) = await signedUp(tester);
+      relay.answerDelete = false;
+      await tester.tap(find.bySemanticsLabel('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete this account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty);
+      expect(find.byType(HostedStartScreen), findsOneWidget, reason: _all(tester));
+      final relayKey = hostedRelayKey(relay.origin);
+      expect(await tester.runAsync(() => keys.load(relayKey, KeyKind.main)), isNull);
+      expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
+      expect(await tester.runAsync(() => prefs.get(deletingKey)), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(minutes: 31));
+    });
+  });
+
+  testWidgets('a renewal that fails says so and can be tried again', (tester) async {
+    final c = _Controls()..throws = PlatformException(code: 'network');
+    await tester.pumpWidget(_page(LockedAccountScreen(controls: c, now: () => now)));
+    await tester.tap(find.text('Renew through the App Store'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('network'), findsOneWidget);
+    expect(find.byType(CupertinoActivityIndicator), findsNothing);
+    expect(find.text('Renew through the App Store'), findsOneWidget);
+  });
+
+  testWidgets('deleting names the stores of the account\'s own subscriptions, none else', (tester) async {
+    final play = v2.AccountSubscription(store: v2.SubscriptionStore.SUBSCRIPTION_STORE_GOOGLE_PLAY, ends: _at(DateTime.utc(2027, 12, 1)), renews: true);
+    await tester.pumpWidget(_page(ListView(children: [HostedAccountRows(controls: _Controls(subscriptions: [play]), now: () => now)])));
+    await tester.tap(find.text('Delete this account'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cancel it in Google Play.'), findsOneWidget);
+    expect(find.textContaining('App Store'), findsNothing);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(_page(ListView(children: [HostedAccountRows(controls: _Controls(), now: () => now)])));
+    await tester.tap(find.text('Delete this account'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('cancel it in'), findsNothing);
+  });
+
+  testWidgets('Subscribe in Settings always buys', (tester) async {
+    final c = _Controls();
+    await tester.pumpWidget(_page(ListView(children: [HostedAccountRows(controls: c, now: () => now)])));
+    await tester.tap(find.text('Subscribe through the App Store'));
+    await tester.pumpAndSettle();
+    expect(c.bought, 1);
   });
 
   group('China mainland', () {
@@ -225,6 +311,12 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest, storefront: () => Completer<String?>().future));
       await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(find.byType(HostedStartScreen), findsNothing);
+    });
+
+    testWidgets('nor when the storefront is unknown', (tester) async {
+      await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest, storefront: () async => unknownStorefront));
       await tester.pumpAndSettle();
       expect(find.byType(HostedStartScreen), findsNothing);
     });
@@ -302,7 +394,9 @@ void main() {
       await tester.pumpAndSettle();
       // The test relay's own subscription, which every sign-up there has.
       expect(find.text('Paid through the test store, renewing'), findsOneWidget, reason: _all(tester));
-      expect(find.text('Subscribe through the App Store'), findsNothing);
+      expect(find.textContaining('Subscribe through'), findsNothing);
+      // Nothing of the other platform's store, nor of either as a choice.
+      expect(_all(tester), isNot(contains('either store')));
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(minutes: 31));
@@ -320,14 +414,26 @@ void main() {
       }
       String? had;
       final store = _Store(Bought.bought);
-      final a = AppHostedAccount(run: run, store: store, storeName: 'the App Store', subscriptionsOf: () => const [], proof: () async => had, deleted: () async {});
+      final a = AppHostedAccount(run: run, store: store, storeName: 'the App Store', subscriptionsOf: () => const [], proof: () async => had, deleted: () async {}, values: MemoryPrefs());
       // None on this phone: bought, then still none to prove.
       expect(await a.renew(), contains('no subscription'));
       expect(store.buys, 1);
+      Future<void> readyAgain() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        for (var i = 0; i < 100 && run.conn.current is! HostedReady; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+      }
+
       had = 'a proof';
       expect(await a.renew(), isNull);
-      // Had already: not bought again.
+      // Logged in again, to be told the subscriptions.
+      await readyAgain();
+      // Had already: not bought again, but when a purchase is what was asked.
       expect(store.buys, 1);
+      expect(await a.renew(buy: true), isNull);
+      expect(store.buys, 2);
+      await readyAgain();
       store.bought = Bought.cancelled;
       had = null;
       expect(await a.renew(), 'Not bought.');
@@ -364,4 +470,75 @@ void main() {
       await tester.pump(const Duration(minutes: 31));
     }, skip: !ready);
   });
+}
+
+// A relay that makes any account and plays its life: locked or not, a
+// renewal that unlocks it (Done, then the close "renewed"), a deletion
+// answered or not, and every login refused once the account is deleted.
+class _StandIn {
+  _StandIn._(this._server, this.e2e);
+  final HttpServer _server;
+  final E2e e2e;
+  var locked = false;
+  var deleted = false;
+  var answerDelete = true;
+  final renewals = <String>[];
+  final _sockets = <WebSocket>[];
+
+  String get origin => 'ws://127.0.0.1:${_server.port}';
+
+  static Future<_StandIn> start(E2e e2e) async {
+    final r = _StandIn._(await HttpServer.bind(InternetAddress.loopbackIPv4, 0), e2e);
+    r._server.listen(r._serve);
+    return r;
+  }
+
+  void _send(WebSocket ws, v2.Frame f) => ws.add(f.writeToBuffer());
+
+  Future<void> _serve(HttpRequest req) async {
+    final ws = await WebSocketTransformer.upgrade(req);
+    _sockets.add(ws);
+    var account = false;
+    ws.listen((m) {
+      final f = v2.Frame.fromBuffer(m as List<int>);
+      if (f.hasHello()) {
+        account = f.hello.accountId.isNotEmpty;
+        _send(ws, v2.Frame(challenge: v2.Challenge(nonce: List.filled(32, 1))));
+      } else if (f.hasAuth()) {
+        if (account && deleted) {
+          _send(ws, v2.Frame(error: common.Error(code: ErrorCode.ERROR_CODE_UNAUTHENTICATED, message: 'key not a member of the account')));
+          ws.close();
+          return;
+        }
+        _send(ws, v2.Frame(welcome: v2.Welcome(maxFrameBytes: 1 << 20, listCounter: account ? Int64.ONE : null, locked: account && locked)));
+      } else if (f.hasSignUp()) {
+        _send(ws, v2.Frame(signedUp: v2.SignedUp(requestId: f.signUp.requestId, accountId: e2e.sha256(f.signUp.list.sublist(signatureBytes)))));
+      } else if (f.hasRenewSubscription()) {
+        final r = f.renewSubscription;
+        renewals.add(r.hasGooglePlayToken() ? r.googlePlayToken : r.appStoreTransaction);
+        _send(ws, v2.Frame(done: v2.Done(requestId: r.requestId)));
+        if (locked) {
+          locked = false;
+          ws.close(1000, 'renewed');
+        }
+      } else if (f.hasDeleteAccount()) {
+        deleted = true;
+        if (answerDelete) _send(ws, v2.Frame(done: v2.Done(requestId: f.deleteAccount.requestId)));
+        ws.close(1000, 'deleted');
+      }
+    });
+  }
+
+  /// Every connection closed, as the relay going away.
+  void dropAll() {
+    for (final ws in _sockets) {
+      ws.close();
+    }
+    _sockets.clear();
+  }
+
+  Future<void> stop() async {
+    dropAll();
+    await _server.close(force: true);
+  }
 }

@@ -155,16 +155,22 @@ class AppHostedDevices implements HostedDevices {
   }
 }
 
+/// Where a deletion asked for is recorded until it is known done (D5): a
+/// phone stopped half-way, or that never heard the relay's answer,
+/// finishes it when it can.
+const deletingKey = 'hosted.deleting';
+
 /// A hosted account's life as the app runs it, for Settings and the locked
 /// account's screen (ui/hosted_account_screens.dart).
 class AppHostedAccount implements HostedAccountControls {
-  AppHostedAccount({required this.run, required this.store, required this.storeName, required this.subscriptionsOf, required this.proof, required this.deleted});
+  AppHostedAccount({required this.run, required this.store, required this.storeName, required this.subscriptionsOf, required this.proof, required this.deleted, required this.values});
 
   final HostedRun run;
   final Store? store;
   @override
   final String? storeName;
   final List<v2.AccountSubscription> Function() subscriptionsOf;
+  final KeyValues values;
 
   /// The store's proof of this phone's subscription, null for none.
   final Future<String?> Function() proof;
@@ -178,43 +184,66 @@ class AppHostedAccount implements HostedAccountControls {
   @override
   bool get isPhone => run.open.account.isPhone;
 
-  // The relay takes the store's proof, once the store says it is live.
+  // The relay takes the store's proof, once the store says it is live;
+  // then the phone logs in again, to be told the account's subscriptions.
   Future<String?> _give(String proof) async {
     try {
       await run.renew(proof);
-      return null;
     } on HostedRefusal catch (e) {
       return 'The relay refused: ${e.message}';
-    } on Object catch (e) {
-      return '$e';
     }
+    run.conn.switchAccount(run.open.account.accountId);
+    return null;
   }
 
   @override
-  Future<String?> renew() async {
+  Future<String?> renew({bool buy = false}) async {
     final store = this.store;
     if (store == null) return 'This build has no store to renew through.';
-    // A subscription this phone has already, which the relay may not know.
-    final had = await proof();
-    if (had != null && await _give(had) == null) return null;
-    final bought = await store.buy();
-    if (bought == Bought.cancelled) return 'Not bought.';
-    if (bought == Bought.pending) return 'The purchase waits for approval. Renew again once it is approved.';
-    final p = await proof();
-    if (p == null) return 'The store has no subscription for this phone yet. Try again in a moment.';
-    return _give(p);
+    try {
+      // A subscription this phone has already, which the relay may not
+      // know; not when a purchase is what was asked for.
+      if (!buy) {
+        final had = await proof();
+        if (had != null && await _give(had) == null) return null;
+      }
+      final bought = await store.buy();
+      if (bought == Bought.cancelled) return 'Not bought.';
+      if (bought == Bought.pending) return 'The purchase waits for approval. Renew again once it is approved.';
+      final p = await proof();
+      if (p == null) return 'The store has no subscription for this phone yet. Try again in a moment.';
+      return await _give(p);
+    } on Object catch (e) {
+      return 'Not renewed: $e';
+    }
   }
 
   @override
   Future<String?> deleteAccount() async {
+    // Recorded first, for this account only: whatever happens next, the
+    // phone finishes it.
+    await values.set(deletingKey, _me);
     try {
       await run.deleteAccount();
     } on HostedRefusal catch (e) {
+      // Refused: nothing was deleted, nothing to finish.
+      await values.set(deletingKey, null);
       return 'The relay refused: ${e.message}';
-    } on Object catch (e) {
-      return 'The account was not deleted: $e';
+    } on Object {
+      return 'PiRC could not hear whether the relay deleted the account. It finishes once it can reach the relay again.';
     }
     await deleted();
     return null;
+  }
+
+  String get _me => hexOf(run.open.account.accountId);
+
+  /// Whether this account's deletion was asked for and is not known done.
+  Future<bool> deleting() async => await values.get(deletingKey) == _me;
+
+  /// A deletion recorded and not known done: asked again, once logged in.
+  Future<void> resumeDeletion() async {
+    if (!isPhone || !await deleting()) return;
+    await deleteAccount();
   }
 }

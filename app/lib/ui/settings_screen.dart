@@ -125,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               ],
             ]),
             if (widget.hostedAccount case final a?)
-              _Section(title: 'Account', sub: 'One subscription, through either store, covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])
+              _Section(title: 'Account', sub: 'Its subscription covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])
             else if (widget.subscription?.value case final sub?) _Section(title: 'Subscription', sub: 'Through your ${_store()}.', rows: [
               // The stores' reviewers, who may not subscribe; the store's own
               // answer, beside it, is shown only when it allows the phone.

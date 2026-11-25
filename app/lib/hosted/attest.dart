@@ -49,16 +49,22 @@ RenewSubscription renewWith(String requestId, String proof) => defaultTargetPlat
     ? RenewSubscription(requestId: requestId, appStoreTransaction: proof)
     : RenewSubscription(requestId: requestId, googlePlayToken: proof);
 
-/// The App Store's storefront country (ISO 3166-1 alpha-3); null on
-/// Android, without StoreKit, or when it cannot be had.
+/// The App Store's storefront country (ISO 3166-1 alpha-3) on iOS; null on
+/// Android, where Play has no China mainland store. On iOS a storefront
+/// that cannot be had is said as unknownStorefront: the hosted relay is
+/// then not offered (decision 6), but to a build for simulators, which
+/// have no App Store account.
 Future<String?> hostedStorefront() async {
   if (defaultTargetPlatform != TargetPlatform.iOS) return null;
   try {
-    return await _store.invokeMethod<String>('storefront');
+    final c = await _store.invokeMethod<String>('storefront');
+    return c ?? (testAttest ? null : unknownStorefront);
   } on Object {
-    return null;
+    return unknownStorefront;
   }
 }
+
+const unknownStorefront = 'unknown';
 
 /// China mainland's storefront, where the hosted relay is not offered
 /// (docs/design.md, step 14, decision 6).

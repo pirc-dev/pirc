@@ -23,9 +23,10 @@ abstract interface class HostedAccountControls {
   /// "Google Play"; null in a build without one.
   String? get storeName;
 
-  /// Buys or renews through this phone's store; why not, or null once
-  /// the relay has it.
-  Future<String?> renew();
+  /// Renews through this phone's store, with the subscription it has or
+  /// one bought; with [buy], always a purchase. Why not, or null once the
+  /// relay has it.
+  Future<String?> renew({bool buy = false});
 
   /// Deletes the account; why not, or null once deleted.
   Future<String?> deleteAccount();
@@ -74,15 +75,21 @@ bool offerPurchase(List<AccountSubscription> subs, DateTime now) {
   return carrying.every((s) => !s.renews && (_ends(s)?.isBefore(now.add(_week)) ?? false));
 }
 
-/// Asks before deleting, saying what it does and what it does not.
-Future<bool> confirmDelete(BuildContext context, String? storeName) async =>
+/// The stores the account's live subscriptions are through, as the screens
+/// name them.
+List<String> storesOf(List<AccountSubscription> subs, DateTime now) =>
+    {for (final s in subs) if (live(s, now) && s.store != SubscriptionStore.SUBSCRIPTION_STORE_TEST) _storeOf(s.store)}.toList();
+
+/// Asks before deleting, saying what it does and what it does not: the
+/// subscriptions to cancel are named by the stores they are through.
+Future<bool> confirmDelete(BuildContext context, List<String> stores) async =>
     await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Delete this account?'),
         content: Text('The relay deletes the account and everything it holds of it, and every computer, phone and browser on it stops reaching the others. '
             'Your sessions stay on your computers. This cannot be undone.'
-            '${storeName == null ? '' : ' It does not cancel your subscription: cancel it in $storeName.'}'),
+            '${stores.isEmpty ? '' : ' It does not cancel the subscription: cancel it in ${stores.join(' and in ')}.'}'),
         actions: [
           CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
           CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
@@ -111,16 +118,24 @@ class _StepState extends State<_Step> {
   Future<void> _go() async {
     if (_busy) return;
     if (widget.confirm != null && !await widget.confirm!(context)) return;
+    if (!mounted) return;
     setState(() {
       _busy = true;
       _error = null;
     });
-    final error = await widget.run();
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _error = error;
-    });
+    String? error;
+    try {
+      error = await widget.run();
+    } on Object catch (e) {
+      error = '$e';
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error;
+        });
+      }
+    }
   }
 
   @override
@@ -171,7 +186,7 @@ class LockedAccountScreen extends StatelessWidget {
             Text('Renew it on a phone with PiRC from its store.', textAlign: TextAlign.center, style: look.text(size: 15, color: look.secondary)),
           if (controls.isPhone) ...[
             const SizedBox(height: 16),
-            _Step(label: 'Delete this account', run: controls.deleteAccount, danger: true, confirm: (c) => confirmDelete(c, store)),
+            _Step(label: 'Delete this account', run: controls.deleteAccount, danger: true, confirm: (c) => confirmDelete(c, storesOf(controls.subscriptions, at))),
           ],
         ]),
       ),
@@ -198,8 +213,8 @@ class HostedAccountRows extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (lines.isEmpty) Text('No subscription yet.', style: look.text(size: 15, color: look.ink2, spacing: 0)),
         for (final l in lines) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(l, style: look.text(size: 15, spacing: 0))),
-        if (store != null && offerPurchase(subs, at)) _Step(label: 'Subscribe through $store', run: controls.renew),
-        if (controls.isPhone) _Step(label: 'Delete this account', run: controls.deleteAccount, danger: true, confirm: (c) => confirmDelete(c, store)),
+        if (store != null && offerPurchase(subs, at)) _Step(label: 'Subscribe through $store', run: () => controls.renew(buy: true)),
+        if (controls.isPhone) _Step(label: 'Delete this account', run: controls.deleteAccount, danger: true, confirm: (c) => confirmDelete(c, storesOf(subs, at))),
       ]),
     );
   }
