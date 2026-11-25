@@ -68,10 +68,12 @@ Future<T> stateOf<T extends ConnectionState>(Stream<ConnectionState> states) =>
 // The Go relay in its hosted mode (built with the tag hosted), with the
 // test attestation, as test/harness.ts's startHostedRelay starts it.
 class HostedRelay {
-  HostedRelay._(this.origin, this._proc);
+  HostedRelay._(this.origin, this._dir, this._port, this._proc);
 
   final String origin;
-  final Process _proc;
+  final Directory _dir;
+  final int _port;
+  Process _proc;
 
   static Future<HostedRelay> start(Directory dir) async {
     final bin = '${dir.path}/pirc-relay-hosted';
@@ -80,8 +82,12 @@ class HostedRelay {
     final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = probe.port;
     await probe.close();
+    return HostedRelay._('ws://127.0.0.1:$port', dir, port, await _serve(dir, port));
+  }
+
+  static Future<Process> _serve(Directory dir, int port) async {
     final origin = 'ws://127.0.0.1:$port';
-    final proc = await Process.start(bin, ['serve-hosted', '--plaintext', '--listen', '127.0.0.1:$port', '--origin', origin, '--test-attestation', '--data-dir', '${dir.path}/hosted']);
+    final proc = await Process.start('${dir.path}/pirc-relay-hosted', ['serve-hosted', '--plaintext', '--listen', '127.0.0.1:$port', '--origin', origin, '--test-attestation', '--data-dir', '${dir.path}/hosted']);
     proc.stdout.drain<void>();
     final listening = Completer<void>();
     final log = StringBuffer();
@@ -90,7 +96,19 @@ class HostedRelay {
       if (!listening.isCompleted && log.toString().contains('msg=listening')) listening.complete();
     });
     await listening.future.timeout(const Duration(seconds: 20), onTimeout: () => throw StateError('the hosted relay did not start:\n$log'));
-    return HostedRelay._(origin, proc);
+    return proc;
+  }
+
+  /// The relay's data folder, which holds its store.
+  Directory get data => Directory('${_dir.path}/hosted');
+
+  /// Stops the relay, runs [stopped] (to change its data), and starts it
+  /// again on the same origin.
+  Future<void> restart([Future<void> Function()? stopped]) async {
+    _proc.kill();
+    await _proc.exitCode;
+    await stopped?.call();
+    _proc = await _serve(_dir, _port);
   }
 
   void kill() => _proc.kill();

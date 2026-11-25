@@ -107,8 +107,8 @@ account ID, the relay's origin and the relay's nonce, as now.
 The account is a **device list**. Each version holds:
 
 - the account ID, empty in the first version, whose hash is the account ID;
-- a counter, and the hash of the version before (kept for audit: a device that skips versions
-  does not check it);
+- a counter, and the hash of the version before (the relay checks it, below; a device, which
+  may skip versions, does not);
 - for each device: its role (computer or client), its signing, channel and box keys, and for a
   phone its read-only key and notification key;
 - the account's phone's signature, over framed(`pirc-e2e-v2 list`, account ID, body).
@@ -127,6 +127,14 @@ verifies under the phone's key. From then on it accepts only versions that phone
 this account, with a higher counter than its own. The signature is checked every time a version
 is read, from the relay or from disk, and a list is refused by its size before it is parsed. One
 signer and one counter means no forks, withdrawals or races.
+
+**Each version built on the relay's.** The relay takes a new version only if its previous hash is
+the hash of the version it holds; otherwise it answers with a conflict and sends the version it
+holds first. So two changes made from one version, the second of which would put back what the
+first removed, cannot both be taken, whatever client signed them: the phone builds the second
+again on the first. A relay that lost versions it had taken (its store restored from an older
+copy) refuses the phone's newest at its next login, and the phone signs a new version with the
+newest's devices on top of the relay's, so the account does not stay at the older version.
 
 **Caps.** **Decided**: at most **10 clients**, the account's phone among them, and
 **50 computers**, in at most 16 KB, so that a list always fits in one Noise message. Every

@@ -21,9 +21,11 @@ const v1Body = body({ accountId: EMPTY, counter: 1n, previousHash: EMPTY, device
 export const accountId = sha256(v1Body);
 export const v1 = makeList({ seed: phoneSeed, accountId: EMPTY, counter: 1n, previousBody: null, devices: [phone] });
 
-/** Version n of the list, holding `devices`. */
-export function version(counter: bigint, devices: Dev[], signer = phoneSeed): Uint8Array {
-  return makeList({ seed: signer, accountId, counter, previousBody: v1Body, devices });
+/** Version n of the list, holding `devices`, built on `previous` (a signed
+ * version; version 1 if not given). The relay takes only a version built
+ * on the one it holds. */
+export function version(counter: bigint, devices: Dev[], signer = phoneSeed, previous?: Uint8Array): Uint8Array {
+  return makeList({ seed: signer, accountId, counter, previousBody: previous ? previous.subarray(64) : v1Body, devices });
 }
 
 export const computerSecrets: Secrets = {

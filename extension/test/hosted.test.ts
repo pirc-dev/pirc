@@ -78,7 +78,10 @@ function device(name: string, account: Uint8Array, as: Signer = signer(name)) {
 
 const v2 = version(2n, [phone, computer, alice, bob]);
 // Bob removed, given to the computer by alice before the relay has it.
-const v3 = version(3n, [phone, computer, alice]);
+const v3 = version(3n, [phone, computer, alice], undefined, v2);
+// Version 4 drops the computer; version 5 puts it back.
+const v4 = version(4n, [phone, alice], undefined, v3);
+const v5 = version(5n, [phone, computer, alice], undefined, v4);
 const SESSION = "0194f3e2-7c1a-7000-8000-000000000002";
 
 test("a computer in an account: sealed announcements, a channel, a removal", async () => {
@@ -209,7 +212,7 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
   assert.equal(await notice({ counter: 3n, devices: [phone, computer, alice] }, 2), noticeOrdering);
 
   // Version 4 drops the computer: it stops, removed.
-  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p4", list: version(4n, [phone, alice]) } } }));
+  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p4", list: v4 } } }));
   await until("removed", () => (hosted!.current.kind === "removed" ? true : undefined));
   assert.ok(statuses.some((s) => s.kind === "removed"));
   hosted.stop();
@@ -220,9 +223,9 @@ test("another process leaves the account: this one stops, left", async () => {
   // The account from the test before, with the computer back on the list.
   const p = device("phone", accountId);
   await p.ready();
-  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p5", list: version(5n, [phone, computer, alice]) } } }));
+  p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p5", list: v5 } } }));
   await p.next("Done", (f) => (f.body.case === "done" ? f : undefined));
-  const { dir } = accountFolder([{ counter: 1n, bytes: v1 }, { counter: 5n, bytes: version(5n, [phone, computer, alice]) }], relay.origin);
+  const { dir } = accountFolder([{ counter: 1n, bytes: v1 }, { counter: 5n, bytes: v5 }], relay.origin);
   const statuses: string[] = [];
   const sink = (n: string) => ({ instanceId: n, computerName: "c", lives: () => [], announce: () => {}, request: () => {}, onStatus: (s: HostedStatus) => statuses.push(`${n} ${s.kind}`), log: () => {}, fail: () => {} });
   const one = await Hosted.open(dir, sink("one"), { rescanMs: 100 });

@@ -2632,6 +2632,17 @@ built; steps 14 and 15 are not finished.
             terminal lost the text a phone's terminal (Termius, Blink) needs;
             the text now comes first.
 
+          After 9b, the relay takes a version only if it is built on the
+          one it holds (docs/e2e.md, section 3), so the one-change-at-a-time
+          rule above no longer rests on the phone alone. A relay that lost
+          versions refuses the phone's newest at its next login, and the
+          phone signs the newest's devices again on top of the relay's.
+          Tested in Go (a version built on an older one, or on one the relay
+          never had, refused with the relay's sent first) and against the Go
+          relay restored to an older store (`app/test/hosted_relay_behind_test.dart`):
+          the phone's next version holds its newest's devices, both
+          computers come back, and neither is told it was removed.
+
        **Decisions for the app**:
        - *What gates a hosted phone* (D1): the account, as the relay
          says it, not each phone's subscription. A new account starts the

@@ -171,6 +171,15 @@ class HostedSessions implements ChannelEvents {
   // Opens given up before the relay answered them: closed when it does.
   final _abandoned = <String>{};
   var _publishes = 0;
+  // The relay's newest list, as it last sent it.
+  Uint8List? _relayList;
+  final _relayBehind = StreamController<Uint8List>.broadcast();
+
+  /// The relay's list, when the relay holds an older version than this
+  /// phone's newest and refused the newest because it is not built on the
+  /// relay's: the relay lost versions it had taken. Only the account's
+  /// phone can sign a version on top of it (app/hosted_devices.dart).
+  Stream<Uint8List> get relayBehind => _relayBehind.stream;
 
   bool get _connected => _ready && !_removed && !_disposed;
 
@@ -185,6 +194,7 @@ class HostedSessions implements ChannelEvents {
     _abandoned.clear();
     _failWaiting('stopped');
     _frames.close();
+    _relayBehind.close();
     _boxSecret.fillRange(0, _boxSecret.length, 0);
   }
 
@@ -217,14 +227,17 @@ class HostedSessions implements ChannelEvents {
   }
 
   Future<void> _welcomed(v2.Welcome w) async {
-    if (w.list.isNotEmpty) await _take(w.list, fromRelay: true);
+    if (w.list.isNotEmpty) {
+      _relayList = Uint8List.fromList(w.list);
+      await _take(w.list, fromRelay: true);
+    }
     if (_disposed || _removed) return;
     // Removed by a version taken before this login, by this app before it
     // stopped or by the notification extension.
     if (!account.listed) return _removedNow();
     if (!_connected) return;
     // The relay is behind this phone: it is given the newer version.
-    if (w.listCounter < account.newest.counter) _publish(account.newest.bytes);
+    if (w.listCounter < account.newest.counter) unawaited(_giveNewest());
     onWelcome?.call(w);
     // Locked, the relay takes only a renewal or a deletion: the sessions
     // are not asked for.
@@ -237,6 +250,7 @@ class HostedSessions implements ChannelEvents {
     _frames.add(f);
     switch (f.whichBody()) {
       case v2.Frame_Body.list:
+        _relayList = Uint8List.fromList(f.list.list);
         unawaited(_take(f.list.list, fromRelay: true));
       case v2.Frame_Body.sessionList:
         final entries = <v1.SessionEntry>[];
@@ -319,6 +333,21 @@ class HostedSessions implements ChannelEvents {
     if (t is TakenOld && !account.listed) return _removedNow();
     // A version a computer had and the relay did not is given to the relay.
     if (t is TakenNewer && !fromRelay) _publish(t.list.bytes);
+  }
+
+  // The relay takes only a version built on the one it holds. Refused, it
+  // has sent its own first; the account's phone builds on that.
+  Future<void> _giveNewest() async {
+    final id = requestId('newest');
+    try {
+      await request(id, v2.Frame(publishList: v2.PublishList(requestId: id, list: account.newest.bytes)));
+    } on HostedRefusal catch (e) {
+      final held = _relayList;
+      if (e.code == ErrorCode.ERROR_CODE_CONFLICT && account.isPhone && held != null && !_disposed) _relayBehind.add(held);
+    } on Object catch (e) {
+      // Unanswered or stopped: the next login gives it again.
+      debugPrint('hosted: the newest list not given to the relay: $e');
+    }
   }
 
   void _publish(Uint8List list) {

@@ -147,6 +147,21 @@ func TestPublishList(t *testing.T) {
 	if e := b.errorFor("forged"); e.Code != pb1.ErrorCode_ERROR_CODE_INVALID {
 		t.Errorf("forged: %v", e)
 	}
+	// Newer, but built on the version before the relay's (a second change
+	// made from v3 would undo v4's), or on one the relay never had:
+	// CONFLICT and the relay's, to build on.
+	fromV3 := sha256.Sum256(v3[ListSignatureBytes:])
+	for name, prev := range map[string][]byte{"stale": fromV3[:], "unknown": bytes.Repeat([]byte{7}, 32)} {
+		l, _ := makeList(phone, &pb.ListBody{AccountId: id, Counter: 5, PreviousHash: prev, Devices: ta.devices})
+		b.send(publishFrame(name, l))
+		if l := b.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
+			t.Errorf("%s: List %x", name, l.List[:8])
+		}
+		if e := b.errorFor(name); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
+			t.Errorf("%s: %v", name, e)
+		}
+	}
+	hc.quiet("List after a refused one", isList)
 	// Not from a read-only key.
 	v5, _ := ta.version(5, ta.devices...)
 	r.send(publishFrame("ro", v5))

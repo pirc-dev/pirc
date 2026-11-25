@@ -198,6 +198,14 @@ func (s *Server) publishList(c *conn, p *pb.PublishList) *frameError {
 		s.log.Info("list refused", "account", shortKey(a.id), "key", shortKey(c.key), "list", r.Result, "reason", r.Reason)
 		return e
 	}
+	// Built on the version held: one built on an older one would undo
+	// what the versions between changed. The publisher gets the version
+	// held, first, to build on.
+	if !bytes.Equal(r.List.GetPreviousHash(), cur.hash) {
+		s.log.Info("list not built on the relay's", "account", shortKey(a.id), "key", shortKey(c.key), "counter", r.Counter, "held", cur.counter)
+		c.queue(listFrameOf(cur))
+		return &frameError{code: pb1.ErrorCode_ERROR_CODE_CONFLICT, msg: "not built on the relay's list"}
+	}
 	if !count(s.listPublishes, string(a.id), s.cfg.MaxListPublishesPerAccount, now) {
 		return rateLimited("too many list versions; try again in an hour")
 	}

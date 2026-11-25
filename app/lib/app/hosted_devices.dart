@@ -77,14 +77,15 @@ class _Rereading implements DeviceAdder {
 class AppHostedDevices implements HostedDevices {
   AppHostedDevices({required this.e2e, required this.run, required this.values, required this.counter, this.scan}) {
     unawaited(keptNames(values).then((n) => _kept = n));
+    run.sessions.relayBehind.listen((l) => unawaited(_exclusive(() => _catchUp(l))));
   }
 
   Map<String, String> _kept = {};
 
   // One change of the list at a time, from this phone: each is built on the
-  // version the one before it published. The relay takes any higher
-  // counter its phone signed, so two built on one version would have the
-  // second undo the first.
+  // version the one before it published. The relay refuses a version not
+  // built on the one it holds, so the second of two built on one version
+  // would be refused, where it would otherwise undo the first.
   Future<void> _signing = Future.value();
 
   Future<T> _exclusive<T>(Future<T> Function() step) {
@@ -110,6 +111,55 @@ class AppHostedDevices implements HostedDevices {
       return null;
     }
     return 'PiRC is reading the account from the relay again, after a change it did not hear answered; try again in a moment.';
+  }
+
+  // The login at which a version was last signed on top of the relay's.
+  int? _caughtUpAt;
+
+  // The relay holds an older version than the newest, and refused the
+  // newest as not built on its own: it lost versions it had taken. The
+  // phone signs the newest's devices again, on top of the relay's, once a
+  // login, so that the account does not stay where the relay was.
+  Future<void> _catchUp(Uint8List relayList) async {
+    if (!isPhone || _blocked() != null || _caughtUpAt == run.conn.logins) return;
+    final a = _account;
+    final newest = a.newest;
+    final first = bytesEqual(relayList, a.first);
+    final r = e2e.checkList(
+      bytes: relayList,
+      phoneKey: a.phoneKey,
+      mode: first ? ListMode.first : ListMode.later,
+      accountId: a.accountId,
+      highest: Int64.ZERO,
+    );
+    if (r.result != 'accepted' || r.counter! >= newest.counter) return;
+    _caughtUpAt = run.conn.logins;
+    final Uint8List list;
+    try {
+      final counter = await this.counter.next(newest.counter + Int64.ONE);
+      if (a.newest.counter != newest.counter) return;
+      list = e2e.makeList(
+        phone: run.open.main.signing,
+        devices: newest.body.devices,
+        previousBody: Uint8List.sublistView(relayList, signatureBytes),
+        accountId: a.accountId,
+        counter: counter,
+      );
+    } on Object catch (e) {
+      debugPrint('hosted: no version signed on the relay\'s: $e');
+      return;
+    }
+    final id = run.sessions.requestId('up');
+    try {
+      await run.sessions.request(id, v2.Frame(publishList: v2.PublishList(requestId: id, list: list)));
+    } on HostedRefusal catch (e) {
+      debugPrint('hosted: the relay refused the version on its own: ${e.message}');
+      return;
+    } on Object {
+      _unanswered();
+      return;
+    }
+    await a.take(list);
   }
 
   final E2e e2e;
