@@ -86,14 +86,21 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   @override
   void dispose() {
     // Leaving before the end declines: the device is told, nothing is added.
-    if (_step == _Step.checking || _step == _Step.offered) _adder?.cancel();
+    // After an end, the join's side is let go (cancel does nothing twice).
+    if (_step != _Step.adding && _step != _Step.added) _adder?.cancel();
     _text.dispose();
     super.dispose();
   }
 
   Future<void> _go(String text) async {
     if (text.trim().isEmpty) return;
-    final adder = widget.adder();
+    final DeviceAdder adder;
+    try {
+      adder = widget.adder();
+    } catch (e) {
+      setState(() => _error = 'the join failed: $e');
+      return;
+    }
     setState(() {
       _adder = adder;
       _step = _Step.checking;
@@ -109,6 +116,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       // The device may end the join while the person is asked.
       unawaited(adder.ended.then((_) {
         if (mounted && identical(_adder, adder) && _step == _Step.offered) {
+          adder.cancel();
           setState(() {
             _step = _Step.failed;
             _error = 'the device ended the join; nothing was added';

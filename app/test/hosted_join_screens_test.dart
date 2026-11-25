@@ -87,7 +87,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('the device ended the join; nothing was added'), findsOneWidget);
     expect(find.text('It is mine: add it'), findsNothing);
-    expect(a.calls, ['start PIRC1CODE']);
+    // Its side let go at once, and again on leaving, which does nothing twice.
+    expect(a.calls, ['start PIRC1CODE', 'cancel']);
+    await tester.pumpWidget(frame(const SizedBox()));
+    expect(a.calls, ['start PIRC1CODE', 'cancel', 'cancel']);
   });
 
   testWidgets('a confirm that fails: any error said; a version the relay took passed on', (tester) async {
@@ -165,5 +168,17 @@ void main() {
     failed.completeError(const JoinFailed('the code did not match: start the join again'));
     await tester.pumpAndSettle();
     expect(find.text('the code did not match: start the join again'), findsOneWidget);
+  });
+
+  testWidgets('a join that cannot be made at all: said, and the code can be tried again', (tester) async {
+    var n = 0;
+    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => n++ == 0 ? throw StateError('Stream has already been listened to.') : FakeAdder(() => computer), computers: 1, published: (_) {})));
+    await tester.enterText(find.byType(CupertinoTextField), 'PIRC1CODE');
+    await tester.tap(find.text('Use the text'));
+    await tester.pumpAndSettle();
+    expect(find.text('the join failed: Bad state: Stream has already been listened to.'), findsOneWidget);
+    await tester.tap(find.text('Use the text'));
+    await tester.pumpAndSettle();
+    expect(find.text('A computer: you will be able to control it from here.'), findsOneWidget);
   });
 }

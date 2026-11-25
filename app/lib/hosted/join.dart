@@ -166,6 +166,8 @@ String _requestId(String kind) => '$kind${++_request}';
 
 /// The account's phone adding a device: [start], then [confirm] or [cancel].
 class AddDevice {
+  /// [frames] is listened to at once, so each AddDevice needs a stream of
+  /// its own, or a broadcast one.
   AddDevice({required this.e2e, required this.account, required Stream<Frame> frames, required this.send, @visibleForTesting this.listedAs}) {
     _frames = _Frames(frames, (f) {
       if (_joinId.isNotEmpty && f.hasJoinEnded() && f.joinEnded.joinId == _joinId && !_ended.isCompleted) _ended.complete();
@@ -247,7 +249,9 @@ class AddDevice {
   /// The person confirmed: the list that adds the device signed and
   /// published, then sent to it. The version published. Nothing is signed
   /// once the device has ended the join; should it end it after the relay
-  /// took the version, JoinFailed carries that version.
+  /// took the version, JoinFailed carries that version. Where the relay
+  /// does not answer the publish, whether it took the version is unknown,
+  /// and the caller reads the account's newest from the relay again.
   Future<Uint8List> confirm() async {
     final offered = _offered;
     final t = _transport;
