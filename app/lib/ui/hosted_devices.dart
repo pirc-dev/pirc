@@ -66,7 +66,7 @@ class HostedDeviceList extends StatelessWidget {
               onTap: devices.isPhone ? () => showSheet<void>(context, (_) => _RenameSheet(device: d, rename: devices.rename)) : null,
             ),
           ],
-          if (devices.isPhone && role == 'host') ...[
+          if (devices.isPhone) ...[
             if (shown.isNotEmpty) Container(height: 0.5, color: look.rule),
             _Add('Add a device', onTap: () => devices.addDevice(context)),
           ],

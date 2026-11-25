@@ -2485,17 +2485,33 @@ built; steps 14 and 15 are not finished.
           - **Settings lists the computers, then the phones and browsers**,
             from the newest list, online or not, under the name the
             account's phone gave each, or a computer's own name from what
-            it sealed; a computer whose channel said a counter below the
-            newest says that it has not yet confirmed the latest change. A
-            hosted account has no relay address to change and no relay to
-            leave there.
-          - **Only the account's phone adds and renames.** "Add a device"
-            opens part 7's screen on the running connection's frames, with
-            the counter file of the private folder; the version the relay
-            took becomes the account's newest. A name given is signed with
-            the list's counter, sealed to every client and published; the
-            sessions of a computer renamed show its new name at once.
-            Another phone sees the same list and changes nothing.
+            it sealed. A hosted account has no relay address to change and
+            no relay to leave there.
+          - **Which computers have confirmed the newest list**: each
+            channel's answer says the computer's counter, and the highest a
+            computer has said is kept. After a change, the account's phone
+            opens one more channel to each running process, which gives it
+            the version as its first frame and hears its counter back, and
+            closes it; the channels in use stay. A computer that has said no
+            counter as high as the newest, or none, is shown as not yet
+            having confirmed the latest change, which is what a removal
+            relies on (`e2e.md`, section 3).
+          - **Only the account's phone adds and names.** "Add a device", in
+            both sections, opens part 7's screen on the running
+            connection's frames, with the counter file of the private
+            folder; the version the relay took becomes the account's newest.
+            A publish the relay does not answer makes the phone log in again,
+            reading the newest before anything else is signed, and the
+            screen says the device may have been added.
+          - **The names are the phone's own**, kept beside the account and
+            the only thing a publish starts from, never a copy the relay
+            gives back; every client keeps the highest names ordering it has
+            seen, across restarts, and refuses a lower one. A name given is
+            signed with the list's counter, sealed to every client and
+            published, and sealed again after each device added, so that a
+            new client has them; a computer renamed shows its new name on
+            its sessions at once. Another phone sees the same list and
+            changes nothing.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

@@ -40,6 +40,8 @@ class _Events implements ChannelEvents {
   void closed(HostedChannel ch, String why) => closes.add(why);
 }
 
+String open9(List<v2.Frame> relay) => relay.firstWhere((f) => f.hasOpenChannel()).openChannel.requestId;
+
 void main() {
   late E2e e2e;
   late SodiumSumo sodium;
@@ -433,6 +435,43 @@ void main() {
       final req = ChannelFrame.fromBuffer(Uint8List.sublistView(t.receive(Uint8List.fromList(sent.message)).plaintext!, 1));
       expect(req.session.sessionId, 's1');
       expect(req.session.message, [1]);
+    });
+
+    test('which computers have confirmed the newest list: by their channels, and by a probe after a change', () async {
+      await ready();
+      // Never heard from: not confirmed.
+      expect(s.behind, {hexOf(computer.signingKey)});
+      // A channel, and the computer's counter in its answer.
+      final ref = common.SessionRef(hostKey: computer.signingKey, sessionId: 's1', instanceId: 'i1');
+      s.fromClient(v1.Frame(routed: v1.Routed(session: ref, payload: [1])));
+      Future<NoiseTransport> answer(v2.OpenChannel open, Int64 id, Int64 counter) async {
+        final r = e2e.noise.ikResponder(staticKey: computerChannel.secretKey, accountId: accountId);
+        expect(r.readMessage(Uint8List.fromList(open.message)).ok, isTrue);
+        final m2 = r.writeMessage();
+        final t = m2.transport!;
+        s.onFrame(v2.Frame(channelOpened: v2.ChannelOpened(requestId: open.requestId, channelId: id)));
+        s.onFrame(v2.Frame(channelMessage: v2.ChannelMessage(channelId: id, message: m2.message)));
+        // The list the phone sent first.
+        t.receive(Uint8List.fromList(relay.where((f) => f.hasChannelMessage() && f.channelMessage.channelId == id).last.channelMessage.message));
+        s.onFrame(v2.Frame(channelMessage: v2.ChannelMessage(channelId: id, message: t.send(pieces(ChannelFrame(listState: ListState(counter: counter)).writeToBuffer()).single).message)));
+        await Future<void>.delayed(Duration.zero);
+        return t;
+      }
+
+      await answer(relay.last.openChannel, Int64(9), Int64(2));
+      expect(s.behind, isEmpty);
+      // A change: behind until it confirms; the phone gives it the version
+      // by a channel of its own, closed once it has answered.
+      s.onFrame(v2.Frame(list: v2.List_(list: version(Int64(3), [self, computer]))));
+      await Future<void>.delayed(Duration.zero);
+      expect(s.behind, {hexOf(computer.signingKey)});
+      final probe = relay.lastWhere((f) => f.hasOpenChannel()).openChannel;
+      expect(probe.requestId, isNot(open9(relay)));
+      await answer(probe, Int64(10), Int64(3));
+      expect(s.behind, isEmpty);
+      expect(relay.last.closeChannel.channelId, Int64(10));
+      // The channel in use stays.
+      expect(relay.where((f) => f.hasCloseChannel() && f.closeChannel.channelId == Int64(9)), isEmpty);
     });
 
     test('a channel given up before the relay answered its open is closed when it does', () async {

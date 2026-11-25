@@ -88,6 +88,9 @@ class HostedRefusal implements Exception {
   String toString() => message.isEmpty ? 'the relay refused (${code.name})' : 'the relay refused: $message';
 }
 
+/// Where every client keeps the highest names ordering it has seen.
+const namesSeenKey = 'hosted.names.seen';
+
 class HostedSessions implements ChannelEvents {
   HostedSessions({
     required this.e2e,
@@ -97,11 +100,17 @@ class HostedSessions implements ChannelEvents {
     required this.toClient,
     required this.relayState,
     this.onRemoved,
+    this.values,
     Int64 Function()? now,
   }) : _now = now ?? (() => Int64(DateTime.now().millisecondsSinceEpoch)) {
     _boxSecret = main.box.secretKey.extractBytes();
     _listSub = account.changes.listen(_newer);
+    _names0 = _loadSeen();
   }
+
+  /// Where the highest names ordering seen is kept, so that the relay
+  /// cannot bring back older names after a restart either.
+  final KeyValues? values;
 
   final E2e e2e;
   final HostedAccount account;
@@ -126,6 +135,15 @@ class HostedSessions implements ChannelEvents {
   // The highest ordering value seen per computer, session and kind.
   final _highest = <String, Int64>{};
   Int64? _namesHighest;
+  // The kept highest read, before any names are opened; then each Devices
+  // in turn.
+  late Future<void> _names0;
+  // Each computer's list counter, as its channels last said, by signing key
+  // in hex: the highest it has confirmed.
+  final _confirmed = <String, Int64>{};
+  // Channels opened only to give computers a newer list, and to hear their
+  // counter back (the account's phone, after a change).
+  final _probes = <HostedChannel>[];
   Map<String, String> _names = {};
   // Each computer's own name, from what it sealed, by signing key in hex.
   final _computerNames = <String, String>{};
@@ -220,17 +238,20 @@ class HostedSessions implements ChannelEvents {
         if (!f.sessionEnded.hasSession()) return;
         _ended(f.sessionEnded.session);
       case v2.Frame_Body.devices:
-        _devices = f.devices;
-        if (f.devices.names.isNotEmpty) _openNames(f.devices.names);
-        _sendKeys();
+        final d = f.devices;
+        _names0 = _names0.then((_) async {
+          if (_disposed) return;
+          _devices = d;
+          if (d.names.isNotEmpty) await _openNames(d.names);
+          if (!_disposed) _sendKeys();
+        });
       case v2.Frame_Body.channelOpened:
         if (_abandoned.remove(f.channelOpened.requestId)) {
           sendRelay(v2.Frame(closeChannel: v2.CloseChannel(channelId: f.channelOpened.channelId, code: ErrorCode.ERROR_CODE_SESSION_GONE)));
           return;
         }
-        for (final p in _processes.values) {
-          final ch = p.channel;
-          if (ch != null && ch.requestId == f.channelOpened.requestId) ch.opened(f.channelOpened.channelId);
+        for (final ch in _channels) {
+          if (ch.requestId == f.channelOpened.requestId) ch.opened(f.channelOpened.channelId);
         }
       case v2.Frame_Body.channelMessage:
         _byId(f.channelMessage.channelId)?.message(Uint8List.fromList(f.channelMessage.message));
@@ -245,9 +266,8 @@ class HostedSessions implements ChannelEvents {
         _pushIds.remove(e.requestId);
         _abandoned.remove(e.requestId);
         _waiting.remove(e.requestId)?.completeError(HostedRefusal(e.code, e.message));
-        for (final p in _processes.values) {
-          final ch = p.channel;
-          if (ch != null && ch.requestId == e.requestId && ch.id == null) ch.refused('the relay: ${e.message}');
+        for (final ch in _channels) {
+          if (ch.requestId == e.requestId && ch.id == null) ch.refused('the relay: ${e.message}');
         }
         toClient(v1.Frame(error: e));
       default:
@@ -255,10 +275,15 @@ class HostedSessions implements ChannelEvents {
     }
   }
 
+  // Every channel: the processes' and the probes.
+  List<HostedChannel> get _channels => [
+        for (final p in _processes.values) ?p.channel,
+        ..._probes,
+      ];
+
   HostedChannel? _byId(Int64 id) {
-    for (final p in _processes.values) {
-      final ch = p.channel;
-      if (ch != null && ch.id == id) return ch;
+    for (final ch in _channels) {
+      if (ch.id == id) return ch;
     }
     return null;
   }
@@ -277,7 +302,7 @@ class HostedSessions implements ChannelEvents {
   }
 
   void _publish(Uint8List list) {
-    sendRelay(v2.Frame(publishList: v2.PublishList(requestId: 'l${++_publishes}', list: list)));
+    sendRelay(v2.Frame(publishList: v2.PublishList(requestId: 'list${++_publishes}', list: list)));
   }
 
   // A newer version taken, from anywhere.
@@ -294,6 +319,14 @@ class HostedSessions implements ChannelEvents {
     // Channels to computers no longer on it, and their sessions, go.
     for (final p in [..._processes.values]) {
       if (_computer(p.hostKey) == null) _dropProcess(p, 'its computer is no longer on the list');
+    }
+    // The account's phone, which shows which computers have confirmed the
+    // change, gives it to each running process by a channel of its own,
+    // and hears its counter back; the channels in use stay as they are.
+    if (account.isPhone) {
+      for (final p in _processes.values) {
+        _probe(p);
+      }
     }
     _sendKeys();
   }
@@ -422,8 +455,40 @@ class HostedSessions implements ChannelEvents {
     return null;
   }
 
+  void _probe(_Process p) {
+    if (!_connected || _probes.length >= maxChannels) return;
+    final computer = _computer(p.hostKey);
+    if (computer == null) return;
+    final ch = HostedChannel(
+      e2e: e2e,
+      channelKey: main.channel.secretKey,
+      hostKey: p.hostKey,
+      hostChannelKey: Uint8List.fromList(computer.channelKey),
+      instanceId: p.instanceId,
+      accountId: account.accountId,
+      list: account.newest.bytes,
+      send: sendRelay,
+      events: this,
+    );
+    _probes.add(ch);
+    ch.open();
+  }
+
+  void _confirm(List<int> hostKey, Int64 counter) {
+    final k = hexOf(hostKey);
+    final had = _confirmed[k];
+    if (had == null || counter > had) _confirmed[k] = counter;
+  }
+
   @override
   void listState(HostedChannel ch, Int64 counter, Uint8List? newer) {
+    _confirm(ch.hostKey, counter);
+    if (_probes.contains(ch)) {
+      if (newer != null) unawaited(_take(newer, fromRelay: false));
+      ch.close(ErrorCode.ERROR_CODE_SESSION_GONE, 'heard its counter');
+      _sendKeys();
+      return;
+    }
     final p = _of(ch);
     if (p == null) return;
     p.backoff = reopenMin;
@@ -438,6 +503,7 @@ class HostedSessions implements ChannelEvents {
 
   @override
   void session(HostedChannel ch, SessionFrame f) {
+    if (_probes.contains(ch)) return;
     final p = _of(ch);
     if (p == null) return;
     final ref = common.SessionRef(hostKey: p.hostKey, sessionId: f.sessionId, instanceId: p.instanceId);
@@ -464,6 +530,7 @@ class HostedSessions implements ChannelEvents {
   void closed(HostedChannel ch, String why) {
     // Opened, and not answered yet: the relay's answer is closed when it comes.
     if (ch.id == null && ch.sentOpen && _ready) _abandoned.add(ch.requestId);
+    if (_probes.remove(ch)) return;
     final p = _of(ch);
     if (p == null) return;
     debugPrint('hosted: channel to ${p.instanceId} closed: $why');
@@ -497,11 +564,27 @@ class HostedSessions implements ChannelEvents {
       ch?.close(ErrorCode.ERROR_CODE_SESSION_GONE, why, tell: tell);
     }
     _processes.clear();
+    for (final ch in [..._probes]) {
+      ch.close(ErrorCode.ERROR_CODE_SESSION_GONE, why, tell: tell);
+    }
+    _probes.clear();
   }
 
   // --- Devices and names -------------------------------------------------
 
-  void _openNames(List<int> sealed) {
+  Future<void> _loadSeen() async {
+    final kept = await values?.get(namesSeenKey);
+    if (kept == null) return;
+    final Int64 v;
+    try {
+      v = Int64.parseInt(kept);
+    } on FormatException {
+      return;
+    }
+    if (!v.isNegative && (_namesHighest == null || v > _namesHighest!)) _namesHighest = v;
+  }
+
+  Future<void> _openNames(List<int> sealed) async {
     final r = e2e.openNames(
       sealed: sealed,
       accountId: account.accountId,
@@ -516,6 +599,8 @@ class HostedSessions implements ChannelEvents {
       return;
     }
     _namesHighest = r.ordering;
+    await values?.set(namesSeenKey, '${r.ordering}');
+    if (_disposed) return;
     final before = _names;
     _names = {for (final n in r.names) hexOf(n.signingKey): n.name};
     // A computer's sessions show under its name: given again when it changed.
@@ -545,12 +630,9 @@ class HostedSessions implements ChannelEvents {
     ));
   }
 
-  /// The computers' list counters, as their channels said, by signing key:
-  /// a computer behind the newest has not yet confirmed its changes.
-  Map<String, Int64> get hostCounters => {
-        for (final p in _processes.values)
-          if (p.channel?.hostCounter != null) hexOf(p.hostKey): p.channel!.hostCounter!,
-      };
+  /// The highest list counter each computer's channels said, by signing
+  /// key in hex.
+  Map<String, Int64> get hostCounters => Map.unmodifiable(_confirmed);
 
   // --- For the account's screens ----------------------------------------
 
@@ -565,11 +647,12 @@ class HostedSessions implements ChannelEvents {
   Map<String, String> get names => Map.unmodifiable(_names);
   Int64? get namesOrdering => _namesHighest;
 
-  /// The computers whose channel said a list counter below the newest:
-  /// a change not yet confirmed by them, by signing key in hex.
+  /// The computers on the newest list that have not confirmed it: no
+  /// channel of theirs has said its counter, or one said a lower one. By
+  /// signing key in hex.
   Set<String> get behind => {
-        for (final MapEntry(key: k, value: c) in hostCounters.entries)
-          if (c < account.newest.counter) k,
+        for (final d in account.newest.body.devices)
+          if (d.role == roleComputer && (_confirmed[hexOf(d.signingKey)] ?? Int64.ZERO) < account.newest.counter) hexOf(d.signingKey),
       };
 
   /// A fresh request ID.

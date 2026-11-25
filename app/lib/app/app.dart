@@ -678,6 +678,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // From a version the account's phone signed: said, then this phone's
       // keys, account and chats go, and it is back at the first screen.
       onRemoved: () => _hostedRemoved(relay),
+      values: widget.prefs,
     );
     model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
     _notes?.attach(model, run.send);

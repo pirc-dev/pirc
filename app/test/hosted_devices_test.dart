@@ -23,7 +23,9 @@ import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart' as v2;
 import 'package:pirc/hosted/account.dart';
 import 'package:pirc/hosted/connection.dart';
 import 'package:pirc/hosted/keys.dart';
+import 'package:pirc/e2e/names.dart';
 import 'package:pirc/hosted/names.dart';
+import 'package:pirc/hosted/sessions.dart';
 import 'package:pirc/hosted/setup.dart';
 import 'package:pirc/keys/key_store.dart';
 import 'package:pirc/ui/hosted_devices.dart';
@@ -94,6 +96,7 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Settings'));
     await until(tester, () => find.text('Add a device').evaluate().isNotEmpty);
+    expect(find.text('Add a device'), findsNWidgets(2));
     expect(find.text('COMPUTERS'), findsOneWidget, reason: shown(tester));
     expect(find.text('No computers yet.'), findsOneWidget);
     expect(find.text('This phone'), findsOneWidget);
@@ -103,7 +106,7 @@ void main() {
     final computer = (await tester.runAsync(() => TsComputer.start(relay.origin)))!;
     addTearDown(computer.kill);
     final text = (await tester.runAsync(() => computer.until((l) => l.startsWith('PIRC1'))))!;
-    await tester.tap(find.text('Add a device'));
+    await tester.tap(find.text('Add a device').first);
     await until(tester, () => find.byType(AddDeviceScreen).evaluate().isNotEmpty);
     await tester.enterText(find.byType(CupertinoTextField), text);
     await tester.tap(find.text('Use the text'));
@@ -116,6 +119,9 @@ void main() {
     await until(tester, () => find.text('build box').evaluate().isNotEmpty);
     // Listed under the name it gave itself, once its session was seen.
     expect(find.text('build box'), findsOneWidget, reason: shown(tester));
+    // Its channel said the newest counter: confirmed, nothing said.
+    await until(tester, () => find.text('Has not yet confirmed the latest change to this account').evaluate().isEmpty);
+    expect(find.text('Has not yet confirmed the latest change to this account'), findsNothing, reason: shown(tester));
 
     // Renamed: sealed to every client, and back from the relay so.
     expect(find.bySemanticsLabel('build box: rename'), findsOneWidget);
@@ -135,6 +141,40 @@ void main() {
     // The session, too, shows under it.
     await until(tester, () => model(tester).sessions.any((s) => s.hostLabel == 'Desk'));
     expect(model(tester).sessions.map((s) => '${s.name} on ${s.hostLabel}'), ['fix the build on Desk']);
+
+    // A second phone added afterwards: the names are sealed again, to it too.
+    final joining = (await tester.runAsync(() async {
+      final e2e = await E2e.load();
+      return JoiningPhone.start(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: relay.origin, attest: testAttest, protect: false);
+    }))!;
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.text('Add a device').first);
+    await until(tester, () => find.byType(AddDeviceScreen).evaluate().isNotEmpty);
+    await tester.enterText(find.byType(CupertinoTextField), joining.text);
+    await tester.tap(find.text('Use the text'));
+    await until(tester, () => find.text('It is mine: add it').evaluate().isNotEmpty);
+    await tester.tap(find.text('It is mine: add it'));
+    await until(tester, () => find.text('Done').evaluate().isNotEmpty);
+    final second = (await tester.runAsync(() => joining.done))!;
+    addTearDown(second.dispose);
+    final names = (await tester.runAsync(() async {
+      final e2e = await E2e.load();
+      final run = HostedRun(e2e: e2e, open: second, toClient: (_) {}, relayState: (_) {});
+      run.start();
+      try {
+        for (var i = 0; i < 100 && run.sessions.names.isEmpty; i++) {
+          if (run.conn.current is HostedReady) run.sessions.fromClient(Frame(watchKeys: WatchKeys()));
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        return run.sessions.names;
+      } finally {
+        run.conn.stop();
+        run.sessions.dispose();
+      }
+    }))!;
+    expect(names.values, contains('Desk'));
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 31));
@@ -167,8 +207,10 @@ void main() {
       final d = _Devices(isPhone: true, behind: {key});
       await listed(tester, d);
       expect(find.text('Has not yet confirmed the latest change to this account'), findsOneWidget);
-      await tester.tap(find.text('Add a device'));
+      await tester.tap(find.text('Add a device').first);
       expect(d.added, 1);
+      await tester.tap(find.text('Add a device').last);
+      expect(d.added, 2);
       await tester.tap(find.text('build box'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(CupertinoTextField), 'Desk');
@@ -205,7 +247,7 @@ void main() {
       final prefs = MemoryPrefs();
       final store = MemoryKeyStore();
       final open = await signUp(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false);
-      final run = HostedRun(e2e: e2e, open: open, toClient: (_) {}, relayState: (_) {});
+      final run = HostedRun(e2e: e2e, open: open, toClient: (_) {}, relayState: (_) {}, values: prefs);
       addTearDown(run.dispose);
       run.start();
       for (var i = 0; i < 100 && run.conn.current is! HostedReady; i++) {
@@ -224,6 +266,48 @@ void main() {
       }
       expect(run.sessions.names.values.single, 'Pixel 9');
       expect(run.sessions.namesOrdering, kept);
+
+      // An older copy of the phone's own, as the relay could give back,
+      // after a restart too: refused, the highest seen being kept.
+      final old = e2e.makeNames(
+        accountId: open.account.accountId,
+        list: open.account.newest.body,
+        phone: open.main.signing,
+        phoneBoxSecretKey: open.main.box.secretKey,
+        ordering: kept - 1,
+        names: [DeviceName(open.account.self.signingKey, 'old')],
+      ).copies.single.sealed;
+      run.sessions.onFrame(v2.Frame(devices: v2.Devices(names: old)));
+      final sentAgain = <v2.Frame>[];
+      final again = HostedSessions(e2e: e2e, account: open.account, main: open.main, sendRelay: (f) {
+        sentAgain.add(f);
+        return true;
+      }, toClient: (_) {}, relayState: (_) {}, values: prefs);
+      addTearDown(again.dispose);
+      again.onState(HostedReady(v2.Welcome(maxFrameBytes: 1 << 20, listCounter: open.account.newest.counter)));
+      again.onFrame(v2.Frame(devices: v2.Devices(names: old)));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(again.names, isEmpty);
+      expect(run.sessions.names.values.single, 'Pixel 9');
+      // From there, given nothing by the relay, the phone still publishes
+      // the names it keeps.
+      final publishing = publishNames(e2e: e2e, open: open, sessions: again, values: prefs, names: {});
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final pub = sentAgain.lastWhere((f) => f.hasPublishNames()).publishNames;
+      again.onFrame(v2.Frame(done: v2.Done(requestId: pub.requestId)));
+      await publishing;
+      final mine = pub.copies.singleWhere((c) => _hex(c.recipientKey) == _hex(open.account.self.boxKey));
+      final opened = e2e.openNames(
+        sealed: mine.sealed,
+        accountId: open.account.accountId,
+        list: open.account.newest.body,
+        phoneKey: open.account.phoneKey,
+        recipientSecretKey: open.main.box.secretKey.extractBytes(),
+        now: Int64(DateTime.now().millisecondsSinceEpoch),
+      );
+      expect(opened.names.map((n) => n.name), ['Pixel 9']);
+      // Names wiped by the relay: the phone publishes from what it keeps.
+      run.sessions.onFrame(v2.Frame(devices: v2.Devices()));
 
       // Names given later keep those given before.
       await publishNames(e2e: e2e, open: open, sessions: run.sessions, values: prefs, names: {});

@@ -284,6 +284,7 @@ class HostedRun {
     required void Function(v1.Frame f) toClient,
     required void Function(RelayView r) relayState,
     void Function()? onRemoved,
+    KeyValues? values,
   }) {
     final a = open.account;
     conn = HostedConnection(
@@ -295,7 +296,7 @@ class HostedRun {
       onFrame: (f) => sessions.onFrame(f),
       onState: (s) => sessions.onState(s),
     );
-    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved);
+    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved, values: values);
   }
 
   final OpenAccount open;

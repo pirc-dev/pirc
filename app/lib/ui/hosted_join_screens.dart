@@ -213,7 +213,10 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           CupertinoButton(onPressed: () => Navigator.of(context).maybePop(), child: Text('Done', style: look.text(color: look.accent))),
         ],
       _Step.failed => [
-          _title(look, 'Not added', _error ?? ''),
+          // Unanswered, the device may be on the list: not said to be off it.
+          (_error ?? '').startsWith(uncertainPublish)
+              ? _title(look, 'Perhaps added', '${_error!}. Look for it in Settings once PiRC has connected again; if it is there but did not join, remove it.')
+              : _title(look, 'Not added', _error ?? ''),
           CupertinoButton(onPressed: () => Navigator.of(context).maybePop(), child: Text('Close', style: look.text(color: look.accent))),
         ],
     };

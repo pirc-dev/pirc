@@ -1,10 +1,13 @@
 // The names the account's phone gives the account's devices (docs/e2e.md,
-// section 3): the list holds none, so the phone keeps them, signs them with
-// the list's counter inside, and seals a copy to every client's box key,
-// which the relay keeps (PublishNames) and gives each client with Devices.
-// The names this phone sealed last come back to it so, and are what it
-// starts from; its ordering value is the clock, or one past the highest it
-// has seen or made, kept beside the account.
+// section 3): the list holds none, so the phone keeps them, here
+// ("hosted.names.v1", beside the account), signs them with the list's
+// counter inside, and seals a copy to every client's box key, which the
+// relay keeps (PublishNames) and gives each client with Devices. It starts
+// only from the names it keeps, never from a copy the relay gives back,
+// which the relay could hold back or replay. Its ordering value is the
+// clock, or one past the highest it has seen or made.
+import 'dart:convert';
+
 import 'package:fixnum/fixnum.dart';
 
 import '../e2e/bytes.dart';
@@ -16,6 +19,18 @@ import 'setup.dart' show OpenAccount;
 import 'sessions.dart';
 
 const _orderingKey = 'hosted.names.ordering';
+const namesKey = 'hosted.names.v1';
+
+/// The names this phone keeps, by signing key in hex.
+Future<Map<String, String>> keptNames(KeyValues values) async {
+  final v = await values.get(namesKey);
+  if (v == null) return {};
+  try {
+    return (jsonDecode(v) as Map<String, Object?>).map((k, n) => MapEntry(k, n as String));
+  } on Object {
+    return {};
+  }
+}
 
 /// A device's name for the screens when none was given: its own for a
 /// computer, its kind otherwise.
@@ -36,7 +51,14 @@ Future<void> publishNames({
   final account = open.account;
   if (!account.isPhone) throw StateError('only the account\'s phone gives names');
   final list = account.newest.body;
-  final all = {...sessions.names, ...names};
+  final listed = {for (final d in list.devices) hexOf(d.signingKey)};
+  // Kept first: the record a later publish starts from. A device no
+  // longer listed keeps no name.
+  final all = {
+    for (final MapEntry(key: k, value: n) in {...await keptNames(values), ...names}.entries)
+      if (listed.contains(k) && n.isNotEmpty) k: n,
+  };
+  await values.set(namesKey, jsonEncode(all));
   final kept = Int64.parseInt(await values.get(_orderingKey) ?? '0');
   final seen = sessions.namesOrdering ?? Int64.ZERO;
   final last = kept > seen ? kept : seen;

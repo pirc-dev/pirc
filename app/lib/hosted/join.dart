@@ -166,6 +166,10 @@ String _errorText(common.Error e) => switch (e.code) {
 
 const _expired = 'the code expired after ten minutes; start the join again';
 
+/// Why a join failed when the relay did not answer its publish: the
+/// device may be on the list or not.
+const uncertainPublish = 'the relay did not say whether it took the new list';
+
 int _request = 0;
 String _requestId(String kind) => '$kind${++_request}';
 
@@ -283,7 +287,7 @@ class AddDevice {
         if (f.hasDone() && f.done.requestId == id) return true;
         if (f.hasError() && f.error.requestId == id) throw JoinFailed('the relay did not take the new list: ${f.error.message}');
         return null;
-      }, late: 'the relay did not say whether it took the new list');
+      }, late: uncertainPublish);
       published = list;
       if (_ended.isCompleted) {
         throw JoinFailed('the device ended the join after it was put on the list: it is on the list but did not join; remove it', published: list);
