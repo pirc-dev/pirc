@@ -74,9 +74,10 @@ Future<void> raiseHighest(KeyValues values, Map<String, Int64> seen, {int? now})
 /// ten minutes after its session ends, and one older than that is gone.
 const firstSightSlack = Duration(minutes: 5);
 
-/// How many notices one fetch takes at most: the relay keeps one per
-/// session, and an account has at most 256 sessions.
-const noticesMax = 512;
+/// How many notices one fetch reads at most: the relay keeps one per live
+/// session (at most 256) and per session ended in the last ten minutes,
+/// within 2 MiB of copies an account; past this the rest are not read.
+const noticesMax = 4096;
 
 /// Values older than this are dropped from what is kept.
 const keptFor = Duration(days: 30);
@@ -178,8 +179,7 @@ Future<List<HostedNote>> hostedNotes({
         if (f.hasError()) throw NoticesUnreadable(f.error.message);
         if (!f.hasNotices() || f.notices.requestId != 'n') continue;
         stored.addAll(f.notices.notices);
-        if (stored.length > noticesMax) throw const NoticesUnreadable('more notices than an account has');
-        if (!f.notices.more) break;
+        if (stored.length >= noticesMax || !f.notices.more) break;
       }
     } on TimeoutException {
       throw const NoticesUnreadable('no answer in time');
@@ -189,7 +189,7 @@ Future<List<HostedNote>> hostedNotes({
     final secret = read.notification.secretKey.extractBytes();
     final ({List<HostedNote> notes, Map<String, Int64> seen}) opened;
     try {
-      opened = openNotices(e2e: e2e, account: account, notificationSecret: secret, stored: stored, highest: await _keptHighest(values), since: since, now: now);
+      opened = openNotices(e2e: e2e, account: account, notificationSecret: secret, stored: stored.length > noticesMax ? stored.sublist(0, noticesMax) : stored, highest: await _keptHighest(values), since: since, now: now);
     } finally {
       secret.fillRange(0, secret.length, 0);
     }

@@ -81,11 +81,9 @@ final class ReadKeys {
 
     init?(seed: Data) {
         guard var s1 = Sodium.deriveKey(master: seed, context: readContext, id: 1) else { return nil }
+        defer { s1.withUnsafeMutableBufferPointer { $0.update(repeating: 0) } }
         guard var s2 = Sodium.deriveKey(master: seed, context: readContext, id: 2) else { return nil }
-        defer {
-            s1.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
-            s2.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
-        }
+        defer { s2.withUnsafeMutableBufferPointer { $0.update(repeating: 0) } }
         guard let ro = Sodium.signKeyPair(seed: s1), var n = Sodium.boxKeyPair(seed: s2) else { return nil }
         readOnlyPublic = ro.publicKey
         readOnlySecret = ro.secretKey
@@ -102,8 +100,9 @@ final class ReadKeys {
 /// How far a session first seen may have its notice before the last wake,
 /// for a computer's clock behind the phone's (lib/hosted/notices.dart).
 let firstSightSlackMs: UInt64 = 5 * 60_000
-/// How many notices one fetch takes at most.
-let noticesMax = 512
+/// How many notices one fetch reads at most (lib/hosted/notices.dart);
+/// past this the rest are not read.
+let noticesMax = 4096
 /// Values older than this are dropped from what is kept.
 let keptForMs: UInt64 = 30 * 86_400_000
 
@@ -309,8 +308,7 @@ public enum HostedFetch {
             if case .error(let e) = f.body { throw FetchError.refused("\(e.code): \(e.message)") }
             guard case .notices(let n) = f.body, n.requestID == "n" else { continue }
             out += n.notices
-            if out.count > noticesMax { throw FetchError.unexpected("more notices than an account has") }
-            if !n.more { return out }
+            if out.count >= noticesMax || !n.more { return Array(out.prefix(noticesMax)) }
         }
     }
 }
