@@ -241,9 +241,10 @@ class AppHostedAccount implements HostedAccountControls {
   /// Whether this account's deletion was asked for and is not known done.
   Future<bool> deleting() async => await values.get(deletingKey) == _me;
 
-  /// A deletion recorded and not known done: asked again, once logged in.
-  Future<void> resumeDeletion() async {
-    if (!isPhone || !await deleting()) return;
-    await deleteAccount();
+  /// A deletion recorded and not known done: asked again, once logged in;
+  /// why it was not done, for the person, or null.
+  Future<String?> resumeDeletion() async {
+    if (!isPhone || !await deleting()) return null;
+    return deleteAccount();
   }
 }

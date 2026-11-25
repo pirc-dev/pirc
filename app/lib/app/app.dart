@@ -640,6 +640,20 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _explainNotifications();
   }
 
+  // A dialog with an OK, over whatever is showing.
+  void _say(String title, String body) {
+    final context = _nav.currentState?.overlay?.context;
+    if (context == null) return;
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+      ),
+    );
+  }
+
   // What is open over the list (a chat, Settings) closed, as on locking.
   void _closeOpen() {
     _detail = null;
@@ -714,8 +728,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         // Locked: only its screen; what was open over the list closes.
         if (w.locked && _hostedWelcome?.locked != true) _closeOpen();
         setState(() => _hostedWelcome = w);
-        // A deletion asked for and not known done: asked again.
-        unawaited(_hostedAccount?.resumeDeletion());
+        // A deletion asked for and not known done: asked again, and a
+        // refusal said, since the person was told it would finish.
+        unawaited(_hostedAccount?.resumeDeletion().then((why) {
+          if (why != null && mounted) _say('The account was not deleted', why);
+        }));
       },
       // Refused with a deletion asked for: the account is gone, and so is
       // this phone's part of it.
