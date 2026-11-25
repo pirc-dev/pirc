@@ -2553,6 +2553,32 @@ built; steps 14 and 15 are not finished.
             answer for such a build is open, for the owner, before its first
             upload: most likely Yes, claiming the mass-market exemption for
             standard algorithms, with its yearly self-classification report.
+
+          Notifications from the read-only key (8c, `app/lib/hosted/notices.dart`
+          on Android, `HostedFetch` in `PircNotices` on iOS):
+          - **A woken phone logs in with its read-only key**, made from the
+            read seed as the app makes it (both languages held to one seed's
+            keys), takes Welcome's newer list if it checks out, fetches the
+            notices sealed to it, and opens each with its notification key:
+            from a computer on the newest list, for its slot, with an
+            ordering value above the highest seen for its session and no
+            more than a day ahead. A session first seen shows only a notice
+            made after the last wake, so that an install shows no old ones.
+          - **What it learns is kept for the app**: a newer list, written only
+            over an older one; the highest values (`hosted.notices.v1`),
+            only raised. A phone taken off the account is given the newest
+            list before its refusal, keeps it, and shows nothing.
+          - **The account's subscription gates it, at the relay** (D1): the
+            phone's own store is not asked on a hosted account; a locked
+            account's read-only key is refused, and the push's fixed text
+            stays.
+          - **iOS's hosted path is compiled in only for a hosted build** (D3),
+            under `#if PIRC_HOSTED`, which an optional
+            `ios/Flutter/Hosted.xcconfig` sets (`app/README.md`).
+          - **Tested against the Go relay and a TypeScript computer** that
+            ends a turn: the Dart wake shows the notice once, a later one
+            again, none after a removal; the Swift wake, run by the same
+            test on macOS, shows the same notice.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

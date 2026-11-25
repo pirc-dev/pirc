@@ -1,2 +1,6 @@
 #include "Generated.xcconfig"
 #include "Identity.xcconfig"
+// A build with the hosted relay writes Hosted.xcconfig (app/README.md):
+// OTHER_SWIFT_FLAGS = $(inherited) -DPIRC_HOSTED, for the notification
+// extension's hosted path (docs/design.md, step 14, stage 5, D3).
+#include? "Hosted.xcconfig"

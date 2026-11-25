@@ -6,7 +6,8 @@
 // newer list, and "request <case> <session>" for each request, which it
 // answers with an error naming it ("echo <case>"), but for a history,
 // answered empty. From stdin it takes "name <text>", to rename the session
-// and announce it again, and "progress <text>", to send every channel a
+// and announce it again, "notice <text>", to end a turn with that notice,
+// announced with push, and "progress <text>", to send every channel a
 // tool's progress, as a session event.
 //
 //   node --experimental-transform-types --no-warnings extension/test/hosted-computer.ts <origin>
@@ -19,7 +20,7 @@ import { createInterface } from "node:readline";
 
 import { load as loadE2e } from "@pirc/e2e";
 import { load as loadNoise } from "@pirc/e2e/noise";
-import { SessionAnnouncementSchema, SessionMessageSchema } from "@pirc/protocol";
+import { NoticeKind, SessionAnnouncementSchema, SessionMessageSchema } from "@pirc/protocol";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
 
 import { writeAccount } from "../src/account.ts";
@@ -85,6 +86,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   if (cmd === "name") {
     announcement.name = text;
     hosted!.announce(live);
+  } else if (cmd === "notice") {
+    // A turn's end, as the extension makes one, announced with push.
+    announcement.notice = { $typeName: "pirc.v1alpha1.Notice", number: BigInt(Date.now()), kind: NoticeKind.FINISHED, text };
+    hosted!.announce(live, true);
   } else if (cmd === "progress") {
     hosted!.broadcast(SESSION, create(SessionMessageSchema, { body: { case: "event", value: { seq: BigInt(++seq), body: { case: "toolProgress", value: { toolCallId: "t1", text } } } } }));
   }

@@ -161,6 +161,17 @@ one without the paywall. An archive takes the defines the last `flutter`
 command wrote (`ios/Flutter/Generated.xcconfig`), so archive right after
 the `--config-only` command that gave `PIRC_STORE=true`.
 
+## Hosted builds
+
+A build with PiRC's hosted relay (`docs/e2e.md`) is made with
+`--dart-define=PIRC_HOSTED=true`, and, for a simulator or emulator, which
+cannot attest, `--dart-define=PIRC_TEST_ATTEST=true` against a relay with
+a test verifier; `PIRC_HOSTED_ORIGIN` names another relay than the test
+one. On iOS the notification extension's hosted path is compiled in only
+when `ios/Flutter/Hosted.xcconfig` exists, holding
+`OTHER_SWIFT_FLAGS = $(inherited) -DPIRC_HOSTED`; write it for a hosted
+build and remove it after, since git ignores it.
+
 ## Android release
 
 A release (`flutter build appbundle`) is signed with Play's upload key,

@@ -12,6 +12,9 @@ import '../core/view.dart';
 import '../keys/key_store.dart';
 import '../relay/connection.dart';
 import '../relay/keys.dart';
+import '../e2e/list.dart' show E2e;
+import '../hosted/notices.dart';
+import '../hosted/setup.dart' show hostedOriginOf;
 import 'push.dart';
 
 // A notification to post, for a session.
@@ -76,6 +79,7 @@ Future<bool> allowed(AppPrefs prefs, Store subscription, int now) async {
 // cannot be read, or the phone has no relay or key.
 Future<List<Note>> wake({required AppPrefs prefs, required KeyStore store, Store? subscription, required int now, Duration deadline = const Duration(seconds: 15)}) async {
   final relay = await prefs.relay();
+  if (relay != null && hostedOriginOf(relay) != null) return _hostedWake(prefs: prefs, store: store, relay: relay, now: now, deadline: deadline);
   if (subscription != null && relay != reviewRelay && !await allowed(prefs, subscription, now)) return const [];
   if (relay == null) throw const Unreachable('not joined');
   final seed = await store.load(relay, KeyKind.read);
@@ -88,4 +92,19 @@ Future<List<Note>> wake({required AppPrefs prefs, required KeyStore store, Store
     for (final s in notify)
       if (notification(s) case final n?) Note(s.id, n.title, n.body),
   ];
+}
+
+// A hosted account's wake: the notices sealed to this phone, read with its
+// read-only key (hosted/notices.dart). The account's subscription, as the
+// relay checks it, gates the phone, not the phone's own store (D1): a
+// locked account's read-only key is refused, and the fixed text shows.
+Future<List<Note>> _hostedWake({required AppPrefs prefs, required KeyStore store, required String relay, required int now, required Duration deadline}) async {
+  final shown = await prefs.notices();
+  try {
+    final notes = await hostedNotes(e2e: await E2e.load(), values: prefs, store: store, relay: relay, now: now, since: shown.since, deadline: deadline);
+    await prefs.setNotices(Shown(numbers: shown.numbers, since: now));
+    return [for (final n in notes) Note(n.session, n.title, n.body)];
+  } on NoticesUnreadable catch (e) {
+    throw Unreachable(e.reason);
+  }
 }

@@ -56,8 +56,13 @@ final class NotificationService: UNNotificationServiceExtension {
   // The first note in place of the fixed text, the rest posted beside it;
   // nil when there is nothing to write.
   private func written() async -> UNNotificationContent? {
-    guard let defaults = UserDefaults(suiteName: group),
-          let relay = defaults.string(forKey: "relay").flatMap(URL.init(string:)),
+    guard let defaults = UserDefaults(suiteName: group) else { return nil }
+    #if PIRC_HOSTED
+    // A hosted account (lib/hosted/setup.dart): its own path, gated by the
+    // account's subscription at the relay, not by this phone's store (D1).
+    if let key = defaults.string(forKey: "relay"), key.hasPrefix("pirc-e2e:") { return await hostedWritten(defaults, key) }
+    #endif
+    guard let relay = defaults.string(forKey: "relay").flatMap(URL.init(string:)),
           let seed = readKey(relay.absoluteString)
     else { return nil }
     // A build from source has no subscription ("store.none", which the app
@@ -74,6 +79,33 @@ final class NotificationService: UNNotificationServiceExtension {
     }
     return content(first)
   }
+
+  #if PIRC_HOSTED
+  // The notices sealed to this phone (PircNotices' HostedFetch); what it
+  // learnt kept for the app, which reads the same defaults: a newer list,
+  // higher ordering values, never written over newer ones.
+  private func hostedWritten(_ defaults: UserDefaults, _ key: String) async -> UNNotificationContent? {
+    guard let json = defaults.string(forKey: "hosted.v1"),
+          let account = try? HostedAccount(json: json),
+          "pirc-e2e:" + account.origin == key,
+          let seed = readKey(key)
+    else { return nil }
+    let shown = defaults.string(forKey: "notices.v1").flatMap { try? JSONDecoder().decode(Shown.self, from: Data($0.utf8)) } ?? Shown()
+    let now = UInt64(Date().timeIntervalSince1970 * 1000)
+    guard let wake = try? await HostedFetch.run(account: account, readSeed: seed, highest: HostedFetch.highest(defaults.string(forKey: "hosted.notices.v1")), since: shown.since, now: now, deadline: 20) else { return nil }
+    if let newer = wake.newer, let current = defaults.string(forKey: "hosted.v1"), let kept = HostedFetch.keepNewer(json: current, list: newer) {
+      defaults.set(kept, forKey: "hosted.v1")
+    }
+    defaults.set(HostedFetch.raise(defaults.string(forKey: "hosted.notices.v1"), wake.highest), forKey: "hosted.notices.v1")
+    if let next = try? JSONEncoder().encode(Shown(numbers: shown.numbers, since: now)) { defaults.set(String(decoding: next, as: UTF8.self), forKey: "notices.v1") }
+    guard let first = wake.notes.first else { return nil }
+    for note in wake.notes.dropFirst() {
+      let request = UNNotificationRequest(identifier: UUID().uuidString, content: content(note), trigger: nil)
+      try? await UNUserNotificationCenter.current().add(request)
+    }
+    return content(first)
+  }
+  #endif
 
   private func content(_ note: Note) -> UNNotificationContent {
     let c = UNMutableNotificationContent()

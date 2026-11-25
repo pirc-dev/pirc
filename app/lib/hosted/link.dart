@@ -19,8 +19,12 @@ const hostedPath = '/v1alpha2';
 
 /// A login the relay refused, or a connection that ended before Welcome.
 class LinkError implements Exception {
-  const LinkError(this.message, {this.refused = false});
+  const LinkError(this.message, {this.refused = false, this.list});
   final String message;
+
+  /// The newest list the relay gave before refusing: a removed key is
+  /// told of its removal so.
+  final Uint8List? list;
 
   /// The relay answered the login with an Error, rather than the
   /// connection failing.
@@ -58,6 +62,7 @@ class HostedLink {
     final login = Completer<Welcome>();
     var phase = 0;
     var nonce = Uint8List(0);
+    Uint8List? given;
     ws.listen(
       (m) async {
         if (m is! List<int>) {
@@ -72,8 +77,12 @@ class HostedLink {
           return;
         }
         if (phase == 2) return frames.add(f);
+        if (phase == 1 && f.hasList()) {
+          given = Uint8List.fromList(f.list.list);
+          return;
+        }
         if (f.hasError()) {
-          if (!login.isCompleted) login.completeError(LinkError(f.error.message.isEmpty ? 'the relay refused the login' : f.error.message, refused: true));
+          if (!login.isCompleted) login.completeError(LinkError(f.error.message.isEmpty ? 'the relay refused the login' : f.error.message, refused: true, list: given));
           return;
         }
         if (phase == 0 && f.hasChallenge()) {

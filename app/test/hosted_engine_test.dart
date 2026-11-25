@@ -87,6 +87,17 @@ void main() {
       expect(phoneDevice(MainKeys.fromSeed(sodium, seed(3)), read).signingKey, isNot(self.signingKey));
     });
 
+    test('the keys of a known seed, which PircNotices (Swift) derives the same', () {
+      final seed = Uint8List.fromList(List.generate(32, (i) => i));
+      final r = ReadKeys.fromSeed(sodium, seed);
+      final m = MainKeys.fromSeed(sodium, seed);
+      expect(hexOf(r.readOnly.publicKey), 'e986a0fefa70e95c2042e492c8799259d049a07248a5acd0a47c3c43592c006c');
+      expect(hexOf(r.notification.publicKey), 'a6269f02a7c7369d188fb42c89664070d78a99a1173166c0093c82762ee52222');
+      expect(hexOf(m.signing.publicKey), 'efb28d6c5f1acf8f29a96cd963b8860466a08dfa93246a52ca0bc6398891b3f4');
+      expect(hexOf(m.channel.publicKey), 'd342aa437b3426e3cf20f2eb1fed5ae4e72bd4be2ca0b22e5f4a770d74671d53');
+      expect(hexOf(m.box.publicKey), '0bebe669befbac3cdbe01155ec7b50924b839b8d18f2e4f99a3eb9583dd3a426');
+    });
+
     test('they sign as the list and the relay check', () {
       final m = Uint8List.fromList([1, 2, 3]);
       expect(sodium.crypto.sign.verifyDetached(message: m, signature: main.sign(m), publicKey: main.signing.publicKey), isTrue);
