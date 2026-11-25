@@ -18,6 +18,7 @@ import '../gen/pirc/v1alpha1/relay.pb.dart' as v1;
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import '../keys/key_store.dart';
 import 'account.dart';
+import 'attest.dart' show renewWith;
 import 'connection.dart';
 import 'join.dart';
 import 'keys.dart';
@@ -285,6 +286,7 @@ class HostedRun {
     required void Function(RelayView r) relayState,
     void Function()? onRemoved,
     KeyValues? values,
+    void Function(Welcome w)? onWelcome,
   }) {
     final a = open.account;
     conn = HostedConnection(
@@ -296,7 +298,7 @@ class HostedRun {
       onFrame: (f) => sessions.onFrame(f),
       onState: (s) => sessions.onState(s),
     );
-    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved, values: values);
+    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: toClient, relayState: relayState, onRemoved: onRemoved, values: values, onWelcome: onWelcome);
   }
 
   final OpenAccount open;
@@ -306,6 +308,21 @@ class HostedRun {
   bool send(v1.Frame f) => sessions.fromClient(f);
   void start() => conn.start();
   void stop() => conn.stop();
+
+  /// A subscription the store proves, for a locked account or one whose
+  /// subscriptions end; done once the store says it is live, and then a
+  /// locked account's connection closes and logs in again, unlocked.
+  Future<void> renew(String proof) {
+    final id = sessions.requestId('r');
+    return sessions.request(id, Frame(renewSubscription: renewWith(id, proof)), timeout: const Duration(seconds: 60));
+  }
+
+  /// Deletes the account and everything the relay holds of it; only the
+  /// account's phone may. Done before the relay closes every connection.
+  Future<void> deleteAccount() {
+    final id = sessions.requestId('d');
+    return sessions.request(id, Frame(deleteAccount: DeleteAccount(requestId: id)));
+  }
 
   /// Stops for good; the keys go with it.
   void dispose() {

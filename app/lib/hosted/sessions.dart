@@ -101,6 +101,7 @@ class HostedSessions implements ChannelEvents {
     required this.relayState,
     this.onRemoved,
     this.values,
+    this.onWelcome,
     Int64 Function()? now,
   }) : _now = now ?? (() => Int64(DateTime.now().millisecondsSinceEpoch)) {
     _boxSecret = main.box.secretKey.extractBytes();
@@ -127,6 +128,10 @@ class HostedSessions implements ChannelEvents {
 
   /// The newest list no longer has this phone.
   final void Function()? onRemoved;
+
+  /// Each login's Welcome, for the account's state: locked, and its
+  /// subscriptions.
+  final void Function(v2.Welcome w)? onWelcome;
   final Int64 Function() _now;
 
   late final Uint8List _boxSecret;
@@ -214,6 +219,10 @@ class HostedSessions implements ChannelEvents {
     if (!_connected) return;
     // The relay is behind this phone: it is given the newer version.
     if (w.listCounter < account.newest.counter) _publish(account.newest.bytes);
+    onWelcome?.call(w);
+    // Locked, the relay takes only a renewal or a deletion: the sessions
+    // are not asked for.
+    if (w.locked) return relayState(const RelayView(state: 'offline', reason: 'the account is locked'));
     relayState(const RelayView(state: 'ready'));
   }
 

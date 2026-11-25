@@ -16,13 +16,14 @@ import '../hosted/try_stores.dart';
 import '../join.dart';
 import '../push/push.dart';
 import 'devices.dart';
+import 'hosted_account_screens.dart';
 import 'hosted_devices.dart';
 import 'look.dart';
 import 'leave.dart';
 import 'relay_address.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.leave, this.version = appVersion, this.wide = false, this.hosted});
+  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.leave, this.version = appVersion, this.wide = false, this.hosted, this.hostedAccount});
   final PhoneSettings settings;
   // The relay's, for its hosts and clients; none before joining.
   final PircModel? model;
@@ -42,6 +43,9 @@ class SettingsScreen extends StatefulWidget {
   // A hosted account's devices, in place of the relay's address, hosts and
   // clients.
   final HostedDevices? hosted;
+  // A hosted account's subscriptions and deleting it, in place of this
+  // phone's own subscription.
+  final HostedAccountControls? hostedAccount;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -120,7 +124,9 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                 if (s.permission == Permission.denied) _Link(label: "Open the phone's Settings", onTap: s.openPhoneSettings),
               ],
             ]),
-            if (widget.subscription?.value case final sub?) _Section(title: 'Subscription', sub: 'Through your ${_store()}.', rows: [
+            if (widget.hostedAccount case final a?)
+              _Section(title: 'Account', sub: 'One subscription, through either store, covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])
+            else if (widget.subscription?.value case final sub?) _Section(title: 'Subscription', sub: 'Through your ${_store()}.', rows: [
               // The stores' reviewers, who may not subscribe; the store's own
               // answer, beside it, is shown only when it allows the phone.
               if (s.relay == reviewRelay) const _Row(label: 'Review access', sub: "Joined to PiRC's app review relay, which works without a subscription."),

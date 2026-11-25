@@ -14,8 +14,10 @@ import '../core/protocol.dart';
 import '../e2e/join.dart' show readJoinText;
 import '../e2e/list.dart' show E2e;
 import '../hosted/account.dart' show AccountUnreadable, KeyValues, MemoryCounter, PhoneCounter, accountKey;
+import '../gen/pirc/v1alpha2/relay.pb.dart' as v2 show Welcome;
 import '../hosted/attest.dart';
 import '../hosted/names.dart' show forgetNames;
+import '../ui/hosted_account_screens.dart';
 import '../hosted/setup.dart';
 import '../hosted/try_stores.dart' show hostedBuild;
 import '../ui/hosted_join_screens.dart' show ShowCodeScreen;
@@ -154,12 +156,16 @@ class MemoryPrefs extends AppPrefs {
 }
 
 class PircApp extends StatefulWidget {
-  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily, this.hosted = hostedBuild ? hostedRelay : null, this.attest = platformAttest, this.counter});
+  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily, this.hosted = hostedBuild ? hostedRelay : null, this.attest = platformAttest, this.counter, this.storefront = hostedStorefront, this.proof = storeProof});
 
   // PiRC's hosted relay, offered at first run; none in a build without
   // PIRC_HOSTED.
   final String? hosted;
   final Attest attest;
+  // The App Store's storefront country, and the store's proof of this
+  // phone's subscription (hosted/attest.dart).
+  final Future<String?> Function() storefront;
+  final Future<String?> Function() proof;
   // The account's phone's counter (hosted/account.dart); one in memory when
   // none is given, for the tests.
   final PhoneCounter? counter;
@@ -220,6 +226,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // The hosted account's connection, in place of _conn.
   HostedRun? _hosted;
   AppHostedDevices? _hostedDevices;
+  AppHostedAccount? _hostedAccount;
+  // The account as the last login said it: locked, its subscriptions.
+  v2.Welcome? _hostedWelcome;
+  // Whether the hosted relay is offered here: not on a China mainland
+  // storefront (decision 6).
+  var _hostedOffered = false;
   late final PhoneCounter _counter = widget.counter ?? MemoryCounter();
   // A relay of one's own chosen at the hosted build's first screen.
   var _ownRelay = false;
@@ -268,6 +280,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       PhoneSettings.load(store: widget.store, prefs: widget.prefs, push: widget.push, resync: () => _notes?.answered(), protect: widget.protect),
       if (subscription != null) _askStore(subscription),
       widget.prefs.buyWaiting(),
+      // Asked before the first screen shows, briefly: on no answer the
+      // hosted relay is not offered this time.
+      if (widget.hosted != null)
+        widget.storefront().then<String?>((c) => c).timeout(const Duration(seconds: 3), onTimeout: () => chinaMainland).catchError((Object _) => chinaMainland),
     ]).then((v) {
       if (!mounted) return;
       final r = v[0] as String?;
@@ -276,7 +292,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         _settings = v[2] as PhoneSettings;
         _relay = r;
         if (subscription != null) _access.value = (v[3] as (StoreStatus, bool)).$1;
-        _buyWaiting = v.last as bool;
+        _buyWaiting = v[subscription != null ? 4 : 3] as bool;
+        _hostedOffered = widget.hosted != null && v.last != chinaMainland;
         _loaded = true;
       });
       if (subscription != null && (v[3] as (StoreStatus, bool)).$2) _stored(_access.value!);
@@ -428,7 +445,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _incoming.value = link;
       // A link is to a relay of one's own: its join screen, past the
       // hosted build's first screen.
-      if (widget.hosted != null && !_ownRelay) setState(() => _ownRelay = true);
+      if (_hostedOffered && !_ownRelay) setState(() => _ownRelay = true);
       if (!_allowed) setState(() => _joinFirst = true);
       return;
     }
@@ -546,6 +563,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _conn = null;
       _hosted = null;
       _hostedDevices = null;
+      _hostedAccount = null;
+      _hostedWelcome = null;
       _model = null;
       _lockError = null;
       _lockReset = false;
@@ -681,6 +700,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // keys, account and chats go, and it is back at the first screen.
       onRemoved: () => _hostedRemoved(relay),
       values: widget.prefs,
+      onWelcome: (w) {
+        if (mounted && identical(_hosted?.open, open)) setState(() => _hostedWelcome = w);
+      },
     );
     model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
     _notes?.attach(model, run.send);
@@ -696,6 +718,15 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _key = key;
       _hosted = run;
       _hostedDevices = AppHostedDevices(e2e: e2e, run: run, values: widget.prefs, counter: _counter, scan: widget.scan ?? (widget.camera ? _scanText : null));
+      _hostedAccount = AppHostedAccount(
+        run: run,
+        store: widget.subscription,
+        storeName: widget.subscription == null ? null : _play ? 'Google Play' : 'the App Store',
+        subscriptionsOf: () => _hostedWelcome?.subscriptions ?? const [],
+        proof: widget.proof,
+        // Deleted at the relay: this phone's part goes, as on a removal.
+        deleted: () => _removed(relay),
+      );
       _model = model;
     });
     model.restore().whenComplete(run.start);
@@ -741,6 +772,15 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // Makes an account on the hosted relay, this phone its phone.
   Future<void> _signUp() async {
     final origin = widget.hosted!;
+    // A new account starts the store's trial or purchase before it is
+    // made, and the store's proof goes in the sign-up (D1).
+    final store = widget.subscription;
+    if (store != null && _access.value?.access != Access.allowed) {
+      final bought = await store.buy();
+      if (bought == Bought.cancelled) throw 'Not subscribed, so no account was made.';
+      if (bought == Bought.pending) throw 'The purchase waits for approval. Sign up again once it is approved.';
+      await _refresh();
+    }
     final e2e = await E2e.load();
     final open = await signUp(e2e: e2e, store: widget.store, values: widget.prefs, origin: origin, attest: widget.attest, protect: _settings!.lock);
     await _hostedJoined(open);
@@ -866,7 +906,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, hosted: _hostedDevices)));
+    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, hosted: _hostedDevices, hostedAccount: _hostedAccount)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -924,6 +964,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _hosted?.dispose();
     _hosted = null;
     _hostedDevices = null;
+    _hostedAccount = null;
+    _hostedWelcome = null;
     await widget.store.delete(relay);
     if (hostedOriginOf(relay) != null) {
       await forgetNames(widget.prefs);
@@ -1077,7 +1119,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     final Widget home;
     if (!_loaded) {
       home = CupertinoPageScaffold(backgroundColor: look.page, child: const SizedBox.shrink());
-    } else if (widget.hosted != null && _relay == null && !_ownRelay) {
+    } else if (_hostedOffered && _relay == null && !_ownRelay) {
       // Before the paywall: a hosted account is gated by its own
       // subscription, which the relay checks.
       home = HostedStartScreen(signUp: _signUp, joinPhone: _joinPhone, ownRelay: () => setState(() => _ownRelay = true));
@@ -1107,8 +1149,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         join: _join,
         incoming: _incoming,
         scan: widget.scan ?? (widget.camera ? _scan : null),
-        back: widget.hosted == null ? null : () => setState(() => _ownRelay = false),
+        back: _hostedOffered ? () => setState(() => _ownRelay = false) : null,
       );
+    } else if (_model != null && _isHosted && _hostedWelcome?.locked == true && _hostedAccount != null) {
+      home = LockedAccountScreen(controls: _hostedAccount!);
     } else if (_model == null) {
       home = LockScreen(
         unlock: _unlock,
@@ -1155,7 +1199,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                 Container(width: 0.5, color: look.rule),
                 Expanded(
                   child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true, hosted: _hostedDevices)
+                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true, hosted: _hostedDevices, hostedAccount: _hostedAccount)
                       : _chat.value != null
                           ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
                           : CupertinoPageScaffold(

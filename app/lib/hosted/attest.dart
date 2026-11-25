@@ -28,7 +28,38 @@ Future<Attestation> platformAttest(String origin, Uint8List nonce, Uint8List pub
       ? Attestation(appAttest: AppAttest(keyId: got['keyId']! as Uint8List, attestation: got['attestation']! as Uint8List))
       : Attestation(playIntegrity: PlayIntegrity(token: got['token']! as String));
   // None during a trial the relay counts itself.
-  final proof = await _store.invokeMethod<String>('proof');
+  final proof = await storeProof();
   if (proof != null) a.subscription = proof;
   return a;
 }
+
+/// The store's proof of this phone's subscription, as the relay checks it
+/// (Apple's signed transaction, Google's purchase token); null for none,
+/// or in a build without a store.
+Future<String?> storeProof() async {
+  try {
+    return await _store.invokeMethod<String>('proof');
+  } on MissingPluginException {
+    return null;
+  }
+}
+
+/// The proof as RenewSubscription carries it, by store.
+RenewSubscription renewWith(String requestId, String proof) => defaultTargetPlatform == TargetPlatform.iOS
+    ? RenewSubscription(requestId: requestId, appStoreTransaction: proof)
+    : RenewSubscription(requestId: requestId, googlePlayToken: proof);
+
+/// The App Store's storefront country (ISO 3166-1 alpha-3); null on
+/// Android, without StoreKit, or when it cannot be had.
+Future<String?> hostedStorefront() async {
+  if (defaultTargetPlatform != TargetPlatform.iOS) return null;
+  try {
+    return await _store.invokeMethod<String>('storefront');
+  } on Object {
+    return null;
+  }
+}
+
+/// China mainland's storefront, where the hosted relay is not offered
+/// (docs/design.md, step 14, decision 6).
+const chinaMainland = 'CHN';

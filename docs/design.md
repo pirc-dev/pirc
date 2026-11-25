@@ -2512,6 +2512,40 @@ built; steps 14 and 15 are not finished.
             new client has them; a computer renamed shows its new name on
             its sessions at once. Another phone sees the same list and
             changes nothing.
+
+          The account's life (8b3, `app/lib/ui/hosted_account_screens.dart`):
+          - **Who pays and until when**, from each login's `Welcome`, in
+            Settings' Account section; a purchase is offered only when no
+            subscription carries the account on, or every one that does
+            ends within a week and will not renew. A store is named only for
+            a subscription the account has there, and a widget test fails
+            on any mention of the other platform's store otherwise (D1).
+          - **A new account starts the store's purchase first**: given up,
+            or waiting for approval, no account is made; bought, the store's
+            proof goes in the sign-up.
+          - **A locked account** shows only its screen: renew through this
+            phone's store (the proof this phone has, or a purchase, then
+            `RenewSubscription`; the relay then closes the connection and
+            the phone logs in again, unlocked), or, on the account's phone,
+            delete it.
+          - **Deleting the account**, from Settings or the locked screen, on
+            the account's phone only: asked first, saying that it cannot be
+            undone, that the sessions stay on the computers and that the
+            store's subscription is to be cancelled in the store; then
+            `DeleteAccount`, and once the relay has done it this phone's
+            keys, account and chats go, as on a removal.
+          - **China mainland** (decision 6): the hosted relay is not offered
+            on that App Store storefront (StoreKit's `Storefront.current`,
+            `CHN`), nor when the storefront does not answer within three
+            seconds; the app's first screen is then the join screen of a
+            relay of one's own.
+          - **Export compliance, looked at again**: a `PIRC_HOSTED` build
+            encrypts the app's own content with libsodium (Noise channels,
+            `crypto_box`), which is not the exempt-only use that
+            `ITSAppUsesNonExemptEncryption` false rests on (above). The
+            answer for such a build is open, for the owner, before its first
+            upload: most likely Yes, claiming the mass-market exemption for
+            standard algorithms, with its yearly self-classification report.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

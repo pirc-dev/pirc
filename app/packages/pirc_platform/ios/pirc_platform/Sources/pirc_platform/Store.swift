@@ -211,6 +211,10 @@ final class Store {
         // the latest transaction as Apple signed it, which the relay
         // verifies and asks the App Store about.
         case "proof": result(await Transaction.latest(for: Subscription.yearly)?.jwsRepresentation)
+        // The App Store's storefront, for the hosted relay's check
+        // (docs/design.md, step 14, decision 6): its country, as ISO 3166-1
+        // alpha-3, "CHN" for China mainland; nil when StoreKit has none.
+        case "storefront": result(await Storefront.current?.countryCode)
         case "restore":
           try await AppStore.sync()
           result(nil)

@@ -1,7 +1,8 @@
 // A hosted account's devices as the app runs them, for Settings
 // (ui/hosted_devices.dart): adding one by its code (AddDevice, on the
 // running connection's frames), the version published taken as the
-// account's newest, and names given and sealed (hosted/names.dart).
+// account's newest, and names given and sealed (hosted/names.dart); and
+// the account's life: renewing through the store, deleting the account.
 import 'dart:async';
 import 'dart:convert' show base64Url;
 import 'dart:typed_data';
@@ -15,7 +16,11 @@ import '../hosted/account.dart';
 import '../hosted/join.dart';
 import '../hosted/names.dart';
 import '../hosted/setup.dart';
+import '../gen/pirc/v1alpha2/relay.pb.dart' as v2;
+import '../hosted/sessions.dart' show HostedRefusal;
+import '../ui/hosted_account_screens.dart';
 import '../ui/hosted_devices.dart';
+import 'store.dart';
 import '../ui/hosted_join_screens.dart';
 
 String _keyText(List<int> b) => base64Url.encode(b).replaceAll('=', '');
@@ -147,5 +152,69 @@ class AppHostedDevices implements HostedDevices {
     } on Object catch (e) {
       return '$e';
     }
+  }
+}
+
+/// A hosted account's life as the app runs it, for Settings and the locked
+/// account's screen (ui/hosted_account_screens.dart).
+class AppHostedAccount implements HostedAccountControls {
+  AppHostedAccount({required this.run, required this.store, required this.storeName, required this.subscriptionsOf, required this.proof, required this.deleted});
+
+  final HostedRun run;
+  final Store? store;
+  @override
+  final String? storeName;
+  final List<v2.AccountSubscription> Function() subscriptionsOf;
+
+  /// The store's proof of this phone's subscription, null for none.
+  final Future<String?> Function() proof;
+
+  /// After the relay has deleted the account: this phone's part of it goes.
+  final Future<void> Function() deleted;
+
+  @override
+  List<v2.AccountSubscription> get subscriptions => subscriptionsOf();
+
+  @override
+  bool get isPhone => run.open.account.isPhone;
+
+  // The relay takes the store's proof, once the store says it is live.
+  Future<String?> _give(String proof) async {
+    try {
+      await run.renew(proof);
+      return null;
+    } on HostedRefusal catch (e) {
+      return 'The relay refused: ${e.message}';
+    } on Object catch (e) {
+      return '$e';
+    }
+  }
+
+  @override
+  Future<String?> renew() async {
+    final store = this.store;
+    if (store == null) return 'This build has no store to renew through.';
+    // A subscription this phone has already, which the relay may not know.
+    final had = await proof();
+    if (had != null && await _give(had) == null) return null;
+    final bought = await store.buy();
+    if (bought == Bought.cancelled) return 'Not bought.';
+    if (bought == Bought.pending) return 'The purchase waits for approval. Renew again once it is approved.';
+    final p = await proof();
+    if (p == null) return 'The store has no subscription for this phone yet. Try again in a moment.';
+    return _give(p);
+  }
+
+  @override
+  Future<String?> deleteAccount() async {
+    try {
+      await run.deleteAccount();
+    } on HostedRefusal catch (e) {
+      return 'The relay refused: ${e.message}';
+    } on Object catch (e) {
+      return 'The account was not deleted: $e';
+    }
+    await deleted();
+    return null;
   }
 }
