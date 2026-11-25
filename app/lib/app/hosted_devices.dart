@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:convert' show base64Url;
 import 'dart:typed_data';
 
+import 'package:fixnum/fixnum.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../e2e/bytes.dart';
@@ -32,13 +33,22 @@ String? _hexOfKeyText(String key) {
 /// anything else is signed: a version built on an older one would drop
 /// the device the relay took.
 class _Rereading implements DeviceAdder {
-  _Rereading(this._add, this._reread);
+  _Rereading(this._add, this._reread, this._account) : _base = _account.newest.counter;
   final AddDevice _add;
   final void Function() _reread;
+  final HostedAccount _account;
+  // The version the join was started from, and so would build on.
+  final Int64 _base;
   @override
   Future<Offered> start(String text) => _add.start(text);
   @override
   Future<Uint8List> confirm() async {
+    // A newer version came while the person was asked: one built on the
+    // older would drop what it added.
+    if (_account.newest.counter != _base) {
+      _add.cancel();
+      throw const JoinFailed('the account changed while you were asked; nothing was added, start again');
+    }
     try {
       return await _add.confirm();
     } on JoinFailed catch (e) {
@@ -72,7 +82,10 @@ class AppHostedDevices implements HostedDevices {
   bool get isPhone => _account.isPhone;
 
   @override
+  // Only the account's phone hears the computers confirm a change (its
+  // probes), and only it shows which have not.
   Set<String> get behind {
+    if (!isPhone) return const {};
     final hex = run.sessions.behind;
     return {
       for (final d in _account.newest.body.devices)
@@ -104,6 +117,7 @@ class AppHostedDevices implements HostedDevices {
         adder: () => _Rereading(
           AddDevice(e2e: e2e, account: _phone(), frames: run.sessions.frames, send: (f) => run.sessions.sendRaw(f)),
           () => run.conn.switchAccount(_account.accountId),
+          _account,
         ),
         computers: computers,
         // The relay took it: the newest from now on, whatever the join did;

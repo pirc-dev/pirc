@@ -40,7 +40,31 @@ String defaultName(int role, bool phone) => role == roleComputer ? 'Computer' : 
 /// every device on the newest list gets a copy's entry, those without a
 /// name here keeping the one they had. Throws what the relay or the
 /// sealing refuses.
+// One publish at a time for each running account, so that two never take
+// one ordering.
+final _publishing = Expando<Future<void>>('names publishing');
+
 Future<void> publishNames({
+  required E2e e2e,
+  required OpenAccount open,
+  required HostedSessions sessions,
+  required KeyValues values,
+  required Map<String, String> names,
+  int Function()? now,
+}) {
+  final run = (_publishing[sessions] ?? Future.value()).then((_) => _publish(e2e: e2e, open: open, sessions: sessions, values: values, names: names, now: now));
+  _publishing[sessions] = run.then((_) {}, onError: (Object _) {});
+  return run;
+}
+
+/// Forgets the names and orderings kept, with the account.
+Future<void> forgetNames(KeyValues values) async {
+  for (final k in [namesKey, _orderingKey, namesSeenKey]) {
+    await values.set(k, null);
+  }
+}
+
+Future<void> _publish({
   required E2e e2e,
   required OpenAccount open,
   required HostedSessions sessions,

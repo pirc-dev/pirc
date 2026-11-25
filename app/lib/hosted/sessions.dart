@@ -242,7 +242,12 @@ class HostedSessions implements ChannelEvents {
         _names0 = _names0.then((_) async {
           if (_disposed) return;
           _devices = d;
-          if (d.names.isNotEmpty) await _openNames(d.names);
+          try {
+            if (d.names.isNotEmpty) await _openNames(d.names);
+          } on Object catch (e) {
+            // A failed write of the ordering: these names wait for the next.
+            debugPrint('hosted: names not taken: $e');
+          }
           if (!_disposed) _sendKeys();
         });
       case v2.Frame_Body.channelOpened:
@@ -423,7 +428,7 @@ class HostedSessions implements ChannelEvents {
     if (!_connected) return;
     final computer = _computer(p.hostKey);
     if (computer == null) return;
-    if (_processes.values.where((q) => q.channel != null).length >= maxChannels) {
+    if (_channels.length >= maxChannels) {
       debugPrint('hosted: $maxChannels channels open; ${p.instanceId} waits');
       return _later(p);
     }
@@ -456,7 +461,8 @@ class HostedSessions implements ChannelEvents {
   }
 
   void _probe(_Process p) {
-    if (!_connected || _probes.length >= maxChannels) return;
+    // Probes and the processes' channels share one cap.
+    if (!_connected || _channels.length >= maxChannels) return;
     final computer = _computer(p.hostKey);
     if (computer == null) return;
     final ch = HostedChannel(

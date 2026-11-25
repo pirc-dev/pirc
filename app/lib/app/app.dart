@@ -15,6 +15,7 @@ import '../e2e/join.dart' show readJoinText;
 import '../e2e/list.dart' show E2e;
 import '../hosted/account.dart' show AccountUnreadable, KeyValues, MemoryCounter, PhoneCounter, accountKey;
 import '../hosted/attest.dart';
+import '../hosted/names.dart' show forgetNames;
 import '../hosted/setup.dart';
 import '../hosted/try_stores.dart' show hostedBuild;
 import '../ui/hosted_join_screens.dart' show ShowCodeScreen;
@@ -653,6 +654,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // The seeds are gone (a backup restored to another phone, the
       // passcode removed, the app reinstalled): the account they open goes
       // with them, and the phone is back at the first screen.
+      await forgetNames(widget.prefs);
       await widget.prefs.set(accountKey, null);
       await widget.prefs.setRelay(null);
       if (mounted) setState(() => _relay = null);
@@ -923,7 +925,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _hosted = null;
     _hostedDevices = null;
     await widget.store.delete(relay);
-    if (hostedOriginOf(relay) != null) await widget.prefs.set(accountKey, null);
+    if (hostedOriginOf(relay) != null) {
+      await forgetNames(widget.prefs);
+      await widget.prefs.set(accountKey, null);
+    }
     await widget.cache?.clear();
     await widget.drafts?.clear();
     await widget.prefs.setRelay(null);

@@ -230,6 +230,17 @@ void main() {
     });
   });
 
+  test('the names and orderings kept go with the account', () async {
+    final prefs = MemoryPrefs();
+    for (final k in [namesKey, namesSeenKey, 'hosted.names.ordering']) {
+      await prefs.set(k, '1');
+    }
+    await forgetNames(prefs);
+    for (final k in [namesKey, namesSeenKey, 'hosted.names.ordering']) {
+      expect(await prefs.get(k), isNull, reason: k);
+    }
+  });
+
   test('one counter file for every caller, also while the folder is asked', () async {
     final d = Directory.systemTemp.createTempSync('pirc-folder-counter-');
     addTearDown(() => d.deleteSync(recursive: true));
