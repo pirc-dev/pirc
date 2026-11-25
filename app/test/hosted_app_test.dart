@@ -3,13 +3,15 @@
 // the first screen, the app opened again on the kept account, a computer's
 // session in its list (extension/test/hosted-computer.ts), and a second
 // phone joining. A failed sign-up or join keeps no key.
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pirc/app/app.dart';
+import 'package:pirc/app/links.dart';
 import 'package:pirc/app/model.dart';
 import 'package:pirc/app/store.dart';
 import 'package:pirc/e2e/list.dart';
@@ -19,6 +21,7 @@ import 'package:pirc/hosted/join.dart';
 import 'package:pirc/hosted/link.dart';
 import 'package:pirc/hosted/setup.dart';
 import 'package:pirc/keys/key_store.dart';
+import 'package:pirc/ui/hosted_join_screens.dart' show ShowCodeScreen;
 import 'package:pirc/ui/hosted_start_screen.dart';
 import 'package:pirc/ui/join_screen.dart';
 import 'package:pirc/ui/sessions_screen.dart';
@@ -150,6 +153,168 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(JoinScreen), findsOneWidget);
     expect(find.byType(HostedStartScreen), findsNothing);
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HostedStartScreen), findsOneWidget);
+  });
+
+  // Signed up in the app, connected; with links from outside when given.
+  Future<(MemoryKeyStore, MemoryPrefs)> signedUp(WidgetTester tester, {LinkPlatform? links, Duration? hold, bool protect = false}) async {
+    final store = MemoryKeyStore();
+    final prefs = MemoryPrefs();
+    if (hold != null) await tester.runAsync(() => prefs.setHold(hold));
+    await tester.pumpWidget(PircApp(store: store, prefs: prefs, protect: protect, hosted: relay.origin, attest: testAttest, links: links));
+    await tester.pump();
+    await tester.tap(find.text('Sign up'));
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready', reason: shown(tester));
+    return (store, prefs);
+  }
+
+  testWidgets('a join link while on a hosted account: said already added, and the account kept', (tester) async {
+    const channel = MethodChannel('dev.pirc.app/links');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    final (store, prefs) = await signedUp(tester, links: LinkPlatform());
+    final link = 'pirc://join?relay=${Uri.encodeComponent('ws://127.0.0.1:9')}&token=t';
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(channel.name, channel.codec.encodeMethodCall(MethodCall('opened', link)), (_) {});
+    await tester.pumpAndSettle();
+    expect(find.text('This phone is already added'), findsOneWidget, reason: shown(tester));
+    expect(find.textContaining('Leave'), findsNothing);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    final relayKey = hostedRelayKey(relay.origin);
+    expect(await tester.runAsync(() => store.load(relayKey, KeyKind.main)), isNotNull);
+    expect(await tester.runAsync(() => HostedAccount.load(e2e, prefs)), isNotNull);
+    // Nor does Settings offer to leave, or to move, a relay.
+    await tester.tap(find.bySemanticsLabel('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Leave this relay'), findsNothing);
+    expect(find.text('Change address'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
+  testWidgets('a join link opened at the hosted first screen: the join screen of a relay of one\'s own, with it filled in', (tester) async {
+    const channel = MethodChannel('dev.pirc.app/links');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest, links: LinkPlatform()));
+    await tester.pumpAndSettle();
+    expect(find.byType(HostedStartScreen), findsOneWidget);
+    final link = 'pirc://join?relay=${Uri.encodeComponent('ws://127.0.0.1:9')}&token=t';
+    await tester.binding.defaultBinaryMessenger.handlePlatformMessage(channel.name, channel.codec.encodeMethodCall(MethodCall('opened', link)), (_) {});
+    await tester.pumpAndSettle();
+    expect(find.byType(JoinScreen), findsOneWidget);
+    expect(tester.widget<CupertinoTextField>(find.byType(CupertinoTextField)).controller!.text, link);
+  });
+
+  testWidgets('locked again after time away: the account opened and connected anew', (tester) async {
+    // The lock on, as on a phone: the main seed asked for again.
+    final (store, _) = await signedUp(tester, hold: Duration.zero, protect: true);
+    final before = model(tester);
+    final asked = store.asked;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && !identical(model(tester), before) && model(tester).relay.state == 'ready');
+    expect(identical(model(tester), before), isFalse);
+    expect(store.asked, greaterThan(asked));
+    expect(model(tester).relay.state, 'ready');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
+  testWidgets('in the background the connection stops; back in front it connects again', (tester) async {
+    await signedUp(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await until(tester, () => model(tester).relay.state == 'stopped');
+    expect(model(tester).relay.state, 'stopped');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await until(tester, () => model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
+  testWidgets('a second phone joined from the first screen, then taken off the account: said, then its keys and account gone', (tester) async {
+    final store1 = MemoryKeyStore();
+    final prefs1 = MemoryPrefs();
+    final first = (await tester.runAsync(() async {
+      (await signUp(e2e: e2e, store: store1, values: prefs1, origin: relay.origin, attest: testAttest, protect: false)).dispose();
+      return openAccount(e2e: e2e, store: store1, values: prefs1, relay: hostedRelayKey(relay.origin));
+    }))!;
+    addTearDown(first.dispose);
+    final store = MemoryKeyStore();
+    final prefs = MemoryPrefs();
+    await tester.pumpWidget(PircApp(store: store, prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest));
+    await tester.pump();
+    await tester.tap(find.text('My account is on another phone'));
+    await until(tester, () => find.byType(ShowCodeScreen).evaluate().isNotEmpty);
+    final text = tester.widget<ShowCodeScreen>(find.byType(ShowCodeScreen)).text;
+
+    // The account's phone adds it.
+    final a = first.account;
+    final link = (await tester.runAsync(() => HostedLink.connect(origin: a.origin, publicKey: first.main.signing.publicKey, sign: (m) async => first.main.sign(m), accountId: a.accountId)))!;
+    addTearDown(link.close);
+    final frames = link.frames.asBroadcastStream();
+    PhoneAccount phone() => PhoneAccount(accountId: a.accountId, phone: a.self, signing: first.main.signing, channel: first.main.channel.secretKey, first: a.first, newest: a.newest.bytes, name: 'Pixel 9', counter: MemoryCounter().next);
+    // Started in real time and left running, while the app is pumped:
+    // its side of the join answers in the app's own time.
+    Object? addFailed;
+    var added = false;
+    await tester.runAsync(() async {
+      unawaited(() async {
+        final add = AddDevice(e2e: e2e, account: phone(), frames: frames, send: link.send);
+        await add.start(text);
+        await a.take(await add.confirm());
+        added = true;
+      }().catchError((Object e) {
+        addFailed = e;
+      }));
+    });
+    await until(tester, () => added || addFailed != null);
+    expect(addFailed, isNull);
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready', reason: shown(tester));
+    final relayKey = hostedRelayKey(relay.origin);
+    expect(await tester.runAsync(() => store.load(relayKey, KeyKind.main)), isNotNull);
+
+    // Taken off: a version of the phone alone.
+    await tester.runAsync(() async {
+      final body = Uint8List.sublistView(a.newest.bytes, signatureBytes);
+      final next = e2e.makeList(phone: first.main.signing, devices: [a.self], previousBody: body, accountId: a.accountId, counter: a.newest.counter + 1);
+      link.send(Frame(publishList: PublishList(requestId: 'rm', list: next)));
+      await frames.firstWhere((f) => f.hasDone() || f.hasError()).timeout(const Duration(seconds: 10));
+    });
+    await until(tester, () => find.text('Removed from the account').evaluate().isNotEmpty);
+    expect(find.text('Removed from the account'), findsOneWidget, reason: shown(tester));
+    await tester.tap(find.text('OK'));
+    await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty);
+    expect(find.byType(HostedStartScreen), findsOneWidget, reason: shown(tester));
+    expect(await tester.runAsync(() => store.load(relayKey, KeyKind.main)), isNull);
+    expect(await tester.runAsync(() => store.load(relayKey, KeyKind.read)), isNull);
+    expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
+    expect(await tester.runAsync(prefs.relay), isNull);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
+  testWidgets('an account kept that cannot be read: said, and this phone may start again', (tester) async {
+    final store = MemoryKeyStore();
+    final prefs = MemoryPrefs(hostedRelayKey('ws://127.0.0.1:1'));
+    await prefs.set(accountKey, '{"origin":"ws://127.0.0.1:1"}');
+    await tester.pumpWidget(PircApp(store: store, prefs: prefs, protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest));
+    await until(tester, () => find.text('Start again on this phone').evaluate().isNotEmpty, tries: 30);
+    expect(find.textContaining('cannot be read'), findsOneWidget, reason: shown(tester));
+    await tester.tap(find.text('Start again on this phone'));
+    await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty, tries: 30);
+    expect(find.byType(HostedStartScreen), findsOneWidget, reason: shown(tester));
+    expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
   });
 
   testWidgets('a build without the hosted relay never shows its screen', (tester) async {
@@ -160,6 +325,35 @@ void main() {
   });
 
   group('setup', () {
+    test('the attestation is asked for the login\'s nonce and the key that signs up or joins', () async {
+      final asked = <(Uint8List, Uint8List)>[];
+      Future<Attestation> recording(String o, Uint8List nonce, Uint8List key) async {
+        asked.add((nonce, key));
+        return Attestation(test: [1]);
+      }
+
+      final open = await signUp(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: relay.origin, attest: recording, protect: false);
+      expect(asked.single.$1.length, 32);
+      expect(asked.single.$2, open.account.phoneKey);
+      open.dispose();
+      final j = await JoiningPhone.start(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: relay.origin, attest: recording, protect: false);
+      expect(asked.last.$1.length, 32);
+      expect(asked.last.$1, isNot(asked.first.$1));
+      expect(asked.last.$2, isNot(asked.first.$2));
+      j.cancel();
+      await expectLater(j.done, throwsA(isA<JoinFailed>()));
+    });
+
+    test('one account to a phone: a second sign-up or join is refused before anything is kept', () async {
+      final store = MemoryKeyStore();
+      final prefs = MemoryPrefs();
+      (await signUp(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false)).dispose();
+      final seed = await store.load(hostedRelayKey(relay.origin), KeyKind.main);
+      await expectLater(signUp(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false), throwsA(isA<SignUpFailed>()));
+      await expectLater(JoiningPhone.start(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false), throwsA(isA<JoinFailed>()));
+      expect(await store.load(hostedRelayKey(relay.origin), KeyKind.main), seed);
+    });
+
     test('a refused sign-up keeps no key and no account', () async {
       final store = MemoryKeyStore();
       final prefs = MemoryPrefs();

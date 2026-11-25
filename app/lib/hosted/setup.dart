@@ -26,6 +26,9 @@ import 'sessions.dart';
 
 const hostedScheme = 'pirc-e2e:';
 
+/// How many times a sign-up is sent before it is given up.
+const signUpAttempts = 3;
+
 /// PiRC's hosted relay, until it has a domain of its own (docs/design.md,
 /// step 14, stage 6).
 const hostedRelay = String.fromEnvironment('PIRC_HOSTED_ORIGIN', defaultValue: 'wss://hosted-test.pirc.dev');
@@ -103,6 +106,8 @@ Future<OpenAccount> signUp({
 }) async {
   origin = hostedOrigin(origin);
   final relay = hostedRelayKey(origin);
+  // One account on a phone: a second would take the first's place.
+  if (await values.get(accountKey) != null) throw const SignUpFailed('this phone has an account already');
   final k = _NewKeys(e2e);
   var kept = false;
   try {
@@ -112,15 +117,28 @@ Future<OpenAccount> signUp({
     final first = e2e.makeList(phone: k.main.signing, devices: [self], counter: Int64.ONE);
     await k.keep(store, relay, protect: protect);
     kept = true;
-    final link = await HostedLink.connect(origin: origin, publicKey: k.main.signing.publicKey, sign: (m) async => k.main.sign(m));
-    final Frame answer;
-    try {
-      final attestation = await attest(origin, link.nonce, k.main.signing.publicKey);
-      link.send(Frame(signUp: SignUp(requestId: 'signup', attestation: attestation, list: first, inviteCode: inviteCode)));
-      answer = await link.frames.firstWhere((f) => (f.hasSignedUp() || f.hasError()) && (f.hasSignedUp() ? f.signedUp.requestId : f.error.requestId) == 'signup').timeout(const Duration(seconds: 30));
-    } finally {
-      await link.close();
+    // The relay answers the same key and version 1 with the same account
+    // again, so an answer lost to the network is asked for again rather
+    // than leaving an account nobody holds.
+    Frame? answer;
+    Object? lost;
+    for (var attempt = 0; attempt < signUpAttempts && answer == null; attempt++) {
+      try {
+        final link = await HostedLink.connect(origin: origin, publicKey: k.main.signing.publicKey, sign: (m) async => k.main.sign(m));
+        try {
+          final attestation = await attest(origin, link.nonce, k.main.signing.publicKey).timeout(const Duration(seconds: 30));
+          link.send(Frame(signUp: SignUp(requestId: 'signup', attestation: attestation, list: first, inviteCode: inviteCode)));
+          answer = await link.frames.firstWhere((f) => (f.hasSignedUp() || f.hasError()) && (f.hasSignedUp() ? f.signedUp.requestId : f.error.requestId) == 'signup').timeout(const Duration(seconds: 30));
+        } finally {
+          await link.close();
+        }
+      } on SignUpFailed {
+        rethrow;
+      } on Object catch (e) {
+        lost = e;
+      }
     }
+    if (answer == null) throw SignUpFailed('could not reach the relay: $lost');
     if (answer.hasError()) throw SignUpFailed(answer.error.message.isEmpty ? 'the relay refused the sign-up' : 'the relay refused: ${answer.error.message}');
     final accountId = e2e.sha256(Uint8List.sublistView(first, signatureBytes));
     if (!_same(answer.signedUp.accountId, accountId)) throw const SignUpFailed('the relay answered with another account');
@@ -172,13 +190,14 @@ class JoiningPhone {
   }) async {
     origin = hostedOrigin(origin);
     final relay = hostedRelayKey(origin);
+    if (await values.get(accountKey) != null) throw const JoinFailed('this phone has an account already');
     final k = _NewKeys(e2e);
     final self = phoneDevice(k.main, k.read);
     final HostedLink link;
     final Attestation attestation;
     try {
       link = await HostedLink.connect(origin: origin, publicKey: k.main.signing.publicKey, sign: (m) async => k.main.sign(m));
-      attestation = await attest(origin, link.nonce, k.main.signing.publicKey).catchError((Object e) {
+      attestation = await attest(origin, link.nonce, k.main.signing.publicKey).timeout(const Duration(seconds: 30)).catchError((Object e) {
         unawaited(link.close());
         throw e;
       });
@@ -200,6 +219,8 @@ class JoiningPhone {
     Future<(OpenAccount, Joined)> finish() async {
       try {
         final j = await join.done();
+        // An account kept meanwhile (a sign-up) is not written over.
+        if (await values.get(accountKey) != null) throw const JoinFailed('this phone has an account already');
         await k.keep(store, relay, protect: protect);
         try {
           final account = await HostedAccount.create(e2e, values, origin: origin, accountId: j.accountId, phoneKey: j.phoneKey, self: self, first: j.first, newest: j.list);

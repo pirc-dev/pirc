@@ -14,7 +14,6 @@ import '../core/protocol.dart';
 import '../e2e/list.dart' show E2e;
 import '../hosted/account.dart' show AccountUnreadable, KeyValues, accountKey;
 import '../hosted/attest.dart';
-import '../hosted/join.dart' as hosted show JoinFailed;
 import '../hosted/setup.dart';
 import '../hosted/try_stores.dart' show hostedBuild;
 import '../ui/hosted_join_screens.dart' show ShowCodeScreen;
@@ -190,6 +189,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   KeyHolder? _holder;
   DeviceKey? _key;
   String? _lockError;
+  // The lock screen's error is that what is kept cannot be read.
+  var _lockReset = false;
   PhoneSettings? _settings;
   // What is open beside the list on a wide screen, or over it on a narrow
   // one: a session's chat, or Settings; kept across the width changing, as
@@ -417,6 +418,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     if (_relay == null) {
       _nav.currentState?.popUntil((r) => r.isFirst);
       _incoming.value = link;
+      // A link is to a relay of one's own: its join screen, past the
+      // hosted build's first screen.
+      if (widget.hosted != null && !_ownRelay) setState(() => _ownRelay = true);
       if (!_allowed) setState(() => _joinFirst = true);
       return;
     }
@@ -434,7 +438,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     if (context == null) return;
     final other = link == null ? null : parseJoinLink(link);
     final relay = _relay;
-    if (other != null && relay != null && other.relay != relay && _model != null) {
+    // A hosted account is never left for a link: only the account's phone
+    // changes the account.
+    if (other != null && relay != null && other.relay != relay && _model != null && !_isHosted) {
       final left = await leaveRelay(
         context,
         relay: relay,
@@ -533,6 +539,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _hosted = null;
       _model = null;
       _lockError = null;
+      _lockReset = false;
     });
   }
 
@@ -619,7 +626,15 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       if (mounted) setState(() => _lockError = e.cancelled ? null : e.reason);
       return;
     } on AccountUnreadable catch (e) {
-      if (mounted) setState(() => _lockError = '$e');
+      if (mounted) {
+        setState(() {
+          _lockError = '$e';
+          _lockReset = true;
+        });
+      }
+      return;
+    } on Object catch (e) {
+      if (mounted) setState(() => _lockError = 'PiRC could not open the account: $e');
       return;
     }
     if (!mounted || shuts != _shuts) {
@@ -648,6 +663,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         _notes?.onState(r.state == 'ready');
         model.client.onState(r);
       },
+      // From a version the account's phone signed: said, then this phone's
+      // keys, account and chats go, and it is back at the first screen.
+      onRemoved: () => _hostedRemoved(relay),
     );
     model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
     _notes?.attach(model, run.send);
@@ -668,6 +686,21 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _explainNotifications();
   }
 
+  Future<void> _hostedRemoved(String relay) async {
+    final context = _nav.currentState?.overlay?.context;
+    if (context != null) {
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Removed from the account'),
+          content: const Text("The account's phone took this phone off the account. Its keys are deleted now; to come back, join again from the account's phone."),
+          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+        ),
+      );
+    }
+    if (mounted && _relay == relay) await _removed(relay);
+  }
+
   // Makes an account on the hosted relay, this phone its phone.
   Future<void> _signUp() async {
     final origin = widget.hosted!;
@@ -680,21 +713,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   Future<void> _joinPhone() async {
     final nav = _nav.currentState;
     if (nav == null) return;
-    final JoiningPhone j;
-    try {
-      j = await JoiningPhone.start(e2e: await E2e.load(), store: widget.store, values: widget.prefs, origin: widget.hosted!, attest: widget.attest, protect: _settings!.lock);
-    } on hosted.JoinFailed catch (e) {
-      if (!mounted) return;
-      await showCupertinoDialog<void>(
-        context: nav.overlay!.context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('Could not start the join'),
-          content: Text(e.message),
-          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
-        ),
-      );
-      return;
-    }
+    // A failure to reach the relay is said on the first screen.
+    final j = await JoiningPhone.start(e2e: await E2e.load(), store: widget.store, values: widget.prefs, origin: widget.hosted!, attest: widget.attest, protect: _settings!.lock);
+    if (!mounted) return j.cancel();
     // Joined, the screen shows it a moment, then the account opens.
     final route = CupertinoPageRoute<void>(
       builder: (_) => ShowCodeScreen(
@@ -808,7 +829,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, leave: _leave)));
+    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -886,6 +907,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _conn = null;
       _model = null;
       _holder = null;
+      _lockError = null;
+      _lockReset = false;
     });
   }
 
@@ -896,6 +919,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   Future<LeaveFailed?> _leave({bool phoneOnly = false}) async {
     final relay = _relay;
     if (relay == null) return null;
+    if (_isHosted) return const LeaveFailed("This phone is on a PiRC account: the account's phone takes devices off it.");
     if (!phoneOnly) {
       const unreachable = LeaveFailed("The relay can't be reached, so it can't take this phone off its list.", phoneOnly: true);
       final conn = _conn;
@@ -935,6 +959,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // which it saves, and drops the old. Null when it did; otherwise why
   // not, connected to the old address again.
   Future<String?> _follow(String to) async {
+    if (_isHosted) return 'This phone is on a PiRC account, not on a relay of its own.';
     final from = _relay, key = _key;
     if (from == null || key == null) return 'Unlock PiRC first.';
     to = to.trim();
@@ -1030,7 +1055,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         back: widget.hosted == null ? null : () => setState(() => _ownRelay = false),
       );
     } else if (_model == null) {
-      home = LockScreen(unlock: _unlock, error: _lockError);
+      home = LockScreen(
+        unlock: _unlock,
+        error: _lockError,
+        // What is kept cannot be read: this phone starts again.
+        reset: _lockReset && _relay != null ? () => _removed(_relay!) : null,
+      );
     } else {
       final model = _model!;
       // As the web page's: at 1024 points or wider (a tablet, a foldable
@@ -1070,7 +1100,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                 Container(width: 0.5, color: look.rule),
                 Expanded(
                   child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _follow, leave: _leave, wide: true)
+                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true)
                       : _chat.value != null
                           ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
                           : CupertinoPageScaffold(

@@ -5,10 +5,12 @@ import 'package:flutter/cupertino.dart';
 import 'look.dart';
 
 class LockScreen extends StatelessWidget {
-  const LockScreen({super.key, required this.unlock, this.error});
+  const LockScreen({super.key, required this.unlock, this.error, this.reset});
 
   final VoidCallback unlock;
   final String? error;
+  // What is kept cannot be opened: starting again, which forgets it.
+  final VoidCallback? reset;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +32,8 @@ class LockScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 CupertinoButton.filled(onPressed: unlock, child: Text('Unlock', style: look.text(color: look.onAccent, weight: FontWeight.w600))),
                 if (error != null) Padding(padding: const EdgeInsets.only(top: 16), child: Text(error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed))),
+                if (reset != null)
+                  CupertinoButton(onPressed: reset, child: Text('Start again on this phone', style: look.text(color: look.failed))),
               ],
             ),
           ),

@@ -11,8 +11,9 @@ class HostedStartScreen extends StatefulWidget {
   /// Makes the account; throws with what to tell the person.
   final Future<void> Function() signUp;
 
-  /// Shows this phone's code, for the account's phone to add.
-  final VoidCallback joinPhone;
+  /// Shows this phone's code, for the account's phone to add, once the
+  /// relay is reached; throws with what to tell the person.
+  final Future<void> Function() joinPhone;
 
   /// The join screen of a self-hosted relay.
   final VoidCallback ownRelay;
@@ -25,13 +26,15 @@ class _HostedStartScreenState extends State<HostedStartScreen> {
   var _busy = false;
   String? _error;
 
-  Future<void> _signUp() async {
+  // One at a time: a sign-up and a join never run together.
+  Future<void> _run(Future<void> Function() step) async {
+    if (_busy) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await widget.signUp();
+      await step();
     } on Object catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -58,7 +61,7 @@ class _HostedStartScreenState extends State<HostedStartScreen> {
             ),
             const SizedBox(height: 32),
             CupertinoButton.filled(
-              onPressed: _busy ? null : _signUp,
+              onPressed: _busy ? null : () => _run(widget.signUp),
               child: _busy ? const CupertinoActivityIndicator() : Text('Sign up', style: look.text(color: look.onAccent, weight: FontWeight.w600)),
             ),
             const SizedBox(height: 8),
@@ -66,7 +69,7 @@ class _HostedStartScreenState extends State<HostedStartScreen> {
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 16), child: Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed))),
             const SizedBox(height: 28),
             CupertinoButton(
-              onPressed: _busy ? null : widget.joinPhone,
+              onPressed: _busy ? null : () => _run(widget.joinPhone),
               child: Text('My account is on another phone', style: look.text(color: look.accent)),
             ),
             CupertinoButton(
