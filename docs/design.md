@@ -2596,12 +2596,18 @@ built; steps 14 and 15 are not finished.
           and asking once more. The version without it is signed with the
           counter file, built on the newest read just then, published, taken
           as the newest, and the names sealed again without it; the probes
-          of 8b2 give it to every running process. An unanswered publish
-          makes the phone read the newest again before signing anything
-          else. The account's phone is on every version and has no Remove.
+          of 8b2 give it to every running process. The phone signs one
+          change of the list at a time, removals and additions alike, each
+          built on the version the one before published: the relay takes any
+          higher counter the phone signed, so two built on one version would
+          have the second undo the first. An unanswered publish makes the
+          phone log in again, and nothing more is signed until it has read
+          the newest from the relay. The account's phone is on every version
+          and has no Remove.
           Tested against the Go relay: a computer removed stops, saying so,
           and its session leaves every list; a second phone removed is told
-          so and forgets the account.
+          so and forgets the account; two removals at once both hold, and no
+          name is kept for a device gone.
 
           The end to end tests (9b): a real pi in tmux with the extension
           (`extension/test/hosted-pi.ts`), joined by `/pirc join` typed at
@@ -2609,7 +2615,9 @@ built; steps 14 and 15 are not finished.
           phone (`app/test/hosted_pi_test.dart`): the computer added by the
           code pi shows, its session seen over a channel, prompted and the
           model's reply received, the turn's notice fetched with the
-          read-only key, then the computer removed and pi saying so. It runs
+          read-only key, then the computer removed as Settings removes it
+          and pi saying so; pi and its tmux server end with the test
+          however it ends. It runs
           with the app's tests where go, node, tmux and pi are on PATH. On
           the iOS simulator, `app/integration_test/hosted_test.dart` signs
           up with the phone's own key store and prefs against a local relay,

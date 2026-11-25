@@ -13,17 +13,16 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pirc/app/app.dart';
+import 'package:pirc/app/hosted_devices.dart';
 import 'package:pirc/core/client.dart';
 import 'package:pirc/core/protocol.dart' as v1;
 import 'package:pirc/core/view.dart';
 import 'package:pirc/e2e/list.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart';
 import 'package:pirc/hosted/account.dart';
-import 'package:pirc/hosted/connection.dart';
 import 'package:pirc/hosted/join.dart';
 import 'package:pirc/hosted/link.dart';
 import 'package:pirc/hosted/notices.dart';
-import 'package:pirc/hosted/sessions.dart';
 import 'package:pirc/hosted/setup.dart';
 import 'package:pirc/keys/key_store.dart';
 
@@ -53,10 +52,14 @@ void main() {
 
     // pi shows the code; the phone adds it.
     final pi = await TsComputer.start(relay.origin, script: 'hosted-pi.ts');
+    // Ended by stdin closing, or by a signal, it ends pi and its tmux
+    // server first.
     addTearDown(() async {
       await pi.close();
-      await Future<void>.delayed(const Duration(seconds: 2));
-      pi.kill();
+      await pi.exited.timeout(const Duration(seconds: 15), onTimeout: () {
+        pi.kill();
+        return pi.exited;
+      });
     });
     final text = await pi.until((l) => l.startsWith('PIRC1') || l.startsWith('failed'), timeout: const Duration(seconds: 60));
     expect(text, startsWith('PIRC1'));
@@ -81,27 +84,19 @@ void main() {
     }
     await pi.until((l) => l == 'joined', timeout: const Duration(seconds: 120));
 
-    // The phone's sessions: pi's, over a channel.
+    await link.close();
+
+    // The phone's sessions, as the app runs them: pi's, over a channel.
     final events = <ViewEvent>[];
     late final Client client;
-    late final HostedSessions sessions;
-    final conn = HostedConnection(
-      origin: a.origin,
-      accountId: a.accountId,
-      publicKey: open.main.signing.publicKey,
-      sign: (m) async => open.main.sign(m),
-      listCounter: () => a.newest.counter,
-      onFrame: (f) => sessions.onFrame(f),
-      onState: (s) => sessions.onState(s),
-      minBackoff: const Duration(milliseconds: 50),
-    );
-    sessions = HostedSessions(e2e: e2e, account: a, main: open.main, sendRelay: conn.send, toClient: (f) => client.onFrame(f), relayState: (r) => client.onState(r), values: prefs);
-    client = Client(send: sessions.fromClient, onEvent: events.add, publicKey: open.main.signing.publicKey);
-    conn.start();
+    final run = HostedRun(e2e: e2e, open: open, toClient: (f) => client.onFrame(f), relayState: (r) => client.onState(r), values: prefs);
+    client = Client(send: run.send, onEvent: events.add, publicKey: open.main.signing.publicKey);
+    run.start();
     addTearDown(() {
-      sessions.dispose();
-      conn.stop();
+      run.sessions.dispose();
+      run.conn.stop();
     });
+    final devices = AppHostedDevices(e2e: e2e, run: run, values: prefs, counter: MemoryCounter());
     Future<T> until<T>(String what, T? Function() find, {Duration timeout = const Duration(seconds: 30)}) async {
       final deadline = DateTime.now().add(timeout);
       for (;;) {
@@ -129,12 +124,10 @@ void main() {
     }
     expect(notes, hasLength(1));
 
-    // Removed: its session ends here, and pi says so.
-    final body = Uint8List.sublistView(a.newest.bytes, signatureBytes);
-    final without = e2e.makeList(phone: open.main.signing, devices: [a.self], previousBody: body, accountId: a.accountId, counter: a.newest.counter + 1);
-    link.send(Frame(publishList: PublishList(requestId: 'rm', list: without)));
-    await frames.firstWhere((f) => f.hasDone()).timeout(const Duration(seconds: 10));
-    await link.close();
+    // Removed, as Settings removes it: its session ends here, and pi says so.
+    final computer = a.newest.body.devices.singleWhere((d) => d.role == roleComputer);
+    expect(await devices.remove(keyText(computer.signingKey)), isNull);
+    expect(a.newest.body.devices.map((d) => d.role), [roleClient]);
     await until('the session gone', () => client.snapshot().sessions.isEmpty ? true : null);
     pi.say('status');
     await Future<void>.delayed(const Duration(seconds: 1));

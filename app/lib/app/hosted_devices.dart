@@ -13,6 +13,7 @@ import 'package:flutter/cupertino.dart';
 import '../e2e/bytes.dart';
 import '../e2e/list.dart';
 import '../hosted/account.dart';
+import '../hosted/connection.dart' show HostedReady;
 import '../hosted/join.dart';
 import '../hosted/names.dart';
 import '../hosted/setup.dart';
@@ -38,29 +39,34 @@ String? _hexOfKeyText(String key) {
 /// anything else is signed: a version built on an older one would drop
 /// the device the relay took.
 class _Rereading implements DeviceAdder {
-  _Rereading(this._add, this._reread, this._account) : _base = _account.newest.counter;
+  _Rereading(this._add, this._devices) : _base = _devices._account.newest.counter;
   final AddDevice _add;
-  final void Function() _reread;
-  final HostedAccount _account;
+  final AppHostedDevices _devices;
   // The version the join was started from, and so would build on.
   final Int64 _base;
   @override
   Future<Offered> start(String text) => _add.start(text);
   @override
-  Future<Uint8List> confirm() async {
-    // A newer version came while the person was asked: one built on the
-    // older would drop what it added.
-    if (_account.newest.counter != _base) {
-      _add.cancel();
-      throw const JoinFailed('the account changed while you were asked; nothing was added, start again');
-    }
-    try {
-      return await _add.confirm();
-    } on JoinFailed catch (e) {
-      if (e.published == null && e.message.startsWith(uncertainPublish)) _reread();
-      rethrow;
-    }
-  }
+  Future<Uint8List> confirm() => _devices._exclusive(() async {
+        final blocked = _devices._blocked();
+        if (blocked != null) {
+          _add.cancel();
+          throw JoinFailed(blocked);
+        }
+        // A newer version came while the person was asked, or another change
+        // of this phone's was signed meanwhile: one built on the older would
+        // drop what that added or put back what it removed.
+        if (_devices._account.newest.counter != _base) {
+          _add.cancel();
+          throw const JoinFailed('the account changed while you were asked; nothing was added, start again');
+        }
+        try {
+          return await _add.confirm();
+        } on JoinFailed catch (e) {
+          if (e.published == null && e.message.startsWith(uncertainPublish)) _devices._unanswered();
+          rethrow;
+        }
+      });
 
   @override
   void cancel() => _add.cancel();
@@ -74,6 +80,37 @@ class AppHostedDevices implements HostedDevices {
   }
 
   Map<String, String> _kept = {};
+
+  // One change of the list at a time, from this phone: each is built on the
+  // version the one before it published. The relay takes any higher
+  // counter its phone signed, so two built on one version would have the
+  // second undo the first.
+  Future<void> _signing = Future.value();
+
+  Future<T> _exclusive<T>(Future<T> Function() step) {
+    final run = _signing.then((_) => step());
+    _signing = run.then((_) {}, onError: (Object _) {});
+    return run;
+  }
+
+  // A publish the relay did not answer: nothing more is signed until the
+  // phone has logged in again and read the newest from the relay.
+  int? _unansweredAt;
+
+  void _unanswered() {
+    _unansweredAt = run.conn.logins;
+    run.conn.switchAccount(_account.accountId);
+  }
+
+  String? _blocked() {
+    final at = _unansweredAt;
+    if (at == null) return null;
+    if (run.conn.logins > at && run.conn.current is HostedReady) {
+      _unansweredAt = null;
+      return null;
+    }
+    return 'PiRC is reading the account from the relay again, after a change it did not hear answered; try again in a moment.';
+  }
 
   final E2e e2e;
   final HostedRun run;
@@ -119,16 +156,13 @@ class AppHostedDevices implements HostedDevices {
     final computers = _account.newest.body.devices.where((d) => d.role == roleComputer).length;
     Navigator.of(context).push(CupertinoPageRoute<void>(
       builder: (_) => AddDeviceScreen(
-        adder: () => _Rereading(
-          AddDevice(e2e: e2e, account: _phone(), frames: run.sessions.frames, send: (f) => run.sessions.sendRaw(f)),
-          () => run.conn.switchAccount(_account.accountId),
-          _account,
-        ),
+        adder: () => _Rereading(AddDevice(e2e: e2e, account: _phone(), frames: run.sessions.frames, send: (f) => run.sessions.sendRaw(f)), this),
         computers: computers,
         // The relay took it: the newest from now on, whatever the join did;
         // and the names sealed again, so that a client added has them.
         published: (list) async {
           await _account.take(list);
+          _kept = await keptNames(values);
           if (_kept.isEmpty) return;
           try {
             await publishNames(e2e: e2e, open: run.open, sessions: run.sessions, values: values, names: {});
@@ -154,7 +188,11 @@ class AppHostedDevices implements HostedDevices {
     }
   }
   @override
-  Future<String?> remove(String key) async {
+  Future<String?> remove(String key) => _exclusive(() => _remove(key));
+
+  Future<String?> _remove(String key) async {
+    final blocked = _blocked();
+    if (blocked != null) return blocked;
     final hex = _hexOfKeyText(key);
     final a = _account;
     final newest = a.newest;
@@ -186,11 +224,12 @@ class AppHostedDevices implements HostedDevices {
     } on Object {
       // Unanswered: perhaps taken. The phone reads the newest again before
       // it signs anything else.
-      run.conn.switchAccount(a.accountId);
+      _unanswered();
       return 'The relay did not say whether it took the change. Look again once PiRC has connected.';
     }
     await a.take(list);
     // The names, sealed again without it.
+    _kept = await keptNames(values);
     if (_kept.isNotEmpty) {
       try {
         await publishNames(e2e: e2e, open: run.open, sessions: run.sessions, values: values, names: {});

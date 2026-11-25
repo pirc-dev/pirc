@@ -16,6 +16,13 @@ import { Harness, sleep, startPi } from "../../test/harness.ts";
 const [origin] = process.argv.slice(2);
 const out = (s: string) => process.stdout.write(`${s}\n`);
 const h = new Harness();
+// Ended however this ends: stdin closing, or a signal, pi and its tmux
+// server go with it.
+const end = () => void h.close().then(() => process.exit(0));
+process.once("SIGTERM", end);
+process.once("SIGINT", end);
+const commands = createInterface({ input: process.stdin });
+commands.on("close", end);
 const pi = await startPi(h, undefined, "", "pi");
 
 async function until<T>(what: string, find: () => T | undefined, ms = 20_000): Promise<T> {
@@ -41,14 +48,10 @@ out(text);
 await until("joined", () => (/joined the account/.test(pi.screen()) ? true : undefined), 120_000);
 out("joined");
 
-createInterface({ input: process.stdin })
-  .on("line", (line) => {
-    if (line === "status") pi.keys("/pirc status", "Enter");
-    if (line === "screen") {
-      for (const l of pi.screen().split("\n")) out(`| ${l}`);
-      out("end");
-    }
-  })
-  .on("close", () => {
-    void h.close().then(() => process.exit(0));
-  });
+commands.on("line", (line) => {
+  if (line === "status") pi.keys("/pirc status", "Enter");
+  if (line === "screen") {
+    for (const l of pi.screen().split("\n")) out(`| ${l}`);
+    out("end");
+  }
+});

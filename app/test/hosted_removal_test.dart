@@ -16,7 +16,10 @@ import 'package:pirc/core/protocol.dart';
 import 'package:pirc/core/view.dart';
 import 'package:pirc/e2e/list.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart' as v2;
+import 'package:pirc/app/hosted_devices.dart';
 import 'package:pirc/hosted/account.dart';
+import 'package:pirc/hosted/connection.dart';
+import 'package:pirc/hosted/names.dart';
 import 'package:pirc/hosted/join.dart';
 import 'package:pirc/hosted/link.dart';
 import 'package:pirc/hosted/setup.dart';
@@ -79,6 +82,7 @@ void main() {
     await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Remove'));
     await tester.pumpAndSettle();
     expect(d.removed, [keyText(host)]);
+    expect(removalText(const DeviceView(key: 'k', role: 'client', label: '', addedAt: 0, online: false, self: false, push: false)), contains('loses every computer'));
     // This phone's sheet: no Remove.
     await tester.tap(find.text('This phone'));
     await tester.pumpAndSettle();
@@ -146,6 +150,47 @@ void main() {
         open.dispose();
       }
     }
+
+    test('two removals at once: each built on the one before, both hold; the names sealed again without them', () async {
+      final store = MemoryKeyStore();
+      final prefs = MemoryPrefs();
+      final open = await signUp(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false);
+      await prefs.setRelay(hostedRelayKey(relay.origin));
+      final computer = await TsComputer.start(relay.origin);
+      addTearDown(computer.kill);
+      await add(store, prefs, await computer.until((l) => l.startsWith('PIRC1')));
+      await computer.until((l) => l == 'status ready');
+      final joining = await JoiningPhone.start(e2e: e2e, store: MemoryKeyStore(), values: MemoryPrefs(), origin: relay.origin, attest: testAttest, protect: false);
+      await add(store, prefs, joining.text);
+      final second = await joining.done;
+      addTearDown(second.dispose);
+      // The account as this phone runs it, the versions above taken.
+      final again = (await openAccount(e2e: e2e, store: store, values: prefs, relay: hostedRelayKey(relay.origin)))!;
+      open.dispose();
+      final run = HostedRun(e2e: e2e, open: again, toClient: (_) {}, relayState: (_) {}, values: prefs);
+      addTearDown(run.dispose);
+      run.start();
+      for (var i = 0; i < 100 && run.conn.current is! HostedReady; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      final devices = AppHostedDevices(e2e: e2e, run: run, values: prefs, counter: MemoryCounter());
+      final a = again.account;
+      final pc = a.newest.body.devices.singleWhere((d) => d.role == roleComputer);
+      final phone2 = second.account.self;
+      expect(await devices.rename(keyText(phone2.signingKey), 'Old phone'), isNull);
+      final before = a.newest.counter;
+      final both = await Future.wait([devices.remove(keyText(pc.signingKey)), devices.remove(keyText(phone2.signingKey))]);
+      expect(both, [null, null]);
+      expect(a.newest.counter, before + 2);
+      expect(a.newest.body.devices.map((d) => d.role), [roleClient]);
+      // As the relay has it too.
+      final link = await HostedLink.connect(origin: a.origin, publicKey: again.main.signing.publicKey, sign: (m) async => again.main.sign(m), accountId: a.accountId);
+      await link.close();
+      expect(link.welcome.listCounter, a.newest.counter);
+      await computer.until((l) => l == 'status removed');
+      // No name kept for a device gone.
+      expect(await keptNames(prefs), isEmpty);
+    }, skip: !ready);
 
     testWidgets('a computer removed stops and its session goes; a second phone removed is told so', (tester) async {
       tester.view.physicalSize = const Size(1170, 7000);

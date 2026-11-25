@@ -108,6 +108,11 @@ class HostedConnection {
   final _random = Random();
 
   HostedState get current => _state;
+
+  /// How many logins have reached Welcome: a later one has read the
+  /// account's newest from the relay.
+  int get logins => _logins;
+  var _logins = 0;
   Uint8List get accountId => _accountId;
 
   void start() {
@@ -242,6 +247,7 @@ class HostedConnection {
             _loginTimer?.cancel();
             _attempt = 0;
             ws.pingInterval = pingInterval;
+            _logins++;
             _setState(HostedReady(frame.welcome));
           default:
             return _retry('unexpected ${frame.whichBody().name} during login');

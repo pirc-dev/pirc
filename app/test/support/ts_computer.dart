@@ -28,6 +28,9 @@ class TsComputer {
   /// Closes its stdin, which ends a script that waits on it.
   Future<void> close() => _proc.stdin.close();
 
+  /// Its exit, once it has cleaned up.
+  Future<int> get exited => _proc.exitCode;
+
   void _wake() {
     final w = _waiting;
     _waiting = null;
