@@ -19,8 +19,13 @@ import 'look.dart';
 /// The account's phone's side of a join, as the screen uses it (AddDevice).
 abstract interface class DeviceAdder {
   Future<Offered> start(String text);
-  Future<void> confirm();
+
+  /// The version published; JoinFailed, perhaps carrying one, otherwise.
+  Future<Uint8List> confirm();
   void cancel();
+
+  /// Completes when the device ends the join.
+  Future<void> get ended;
 }
 
 /// AddDevice as the screen uses it.
@@ -30,9 +35,11 @@ class AddDeviceAdder implements DeviceAdder {
   @override
   Future<Offered> start(String text) => add.start(text);
   @override
-  Future<void> confirm() => add.confirm();
+  Future<Uint8List> confirm() => add.confirm();
   @override
   void cancel() => add.cancel();
+  @override
+  Future<void> get ended => add.ended;
 }
 
 /// What the phone says a device will be able to do, by role, before
@@ -50,7 +57,11 @@ String offeredText(Offered o, int computers) {
 enum _Step { code, checking, offered, adding, added, failed }
 
 class AddDeviceScreen extends StatefulWidget {
-  const AddDeviceScreen({super.key, required this.adder, required this.computers, this.scan});
+  const AddDeviceScreen({super.key, required this.adder, required this.computers, required this.published, this.scan});
+
+  /// A version of the list the relay took: the account's newest from now
+  /// on, whether or not the join then finished.
+  final void Function(Uint8List list) published;
 
   /// A fresh join's side, for each code tried.
   final DeviceAdder Function() adder;
@@ -95,11 +106,20 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
         _offered = o;
         _step = _Step.offered;
       });
-    } on JoinFailed catch (e) {
+      // The device may end the join while the person is asked.
+      unawaited(adder.ended.then((_) {
+        if (mounted && identical(_adder, adder) && _step == _Step.offered) {
+          setState(() {
+            _step = _Step.failed;
+            _error = 'the device ended the join; nothing was added';
+          });
+        }
+      }));
+    } catch (e) {
       if (mounted) {
         setState(() {
           _step = _Step.code;
-          _error = e.message;
+          _error = e is JoinFailed ? e.message : 'the join failed: $e';
         });
       }
     }
@@ -108,13 +128,14 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
   Future<void> _confirm() async {
     setState(() => _step = _Step.adding);
     try {
-      await _adder!.confirm();
+      widget.published(await _adder!.confirm());
       if (mounted) setState(() => _step = _Step.added);
-    } on JoinFailed catch (e) {
+    } catch (e) {
+      if (e is JoinFailed && e.published != null) widget.published(e.published!);
       if (mounted) {
         setState(() {
           _step = _Step.failed;
-          _error = e.message;
+          _error = e is JoinFailed ? e.message : 'the join failed: $e';
         });
       }
     }

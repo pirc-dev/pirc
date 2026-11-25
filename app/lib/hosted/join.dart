@@ -31,6 +31,7 @@ import '../gen/pirc/v1alpha1/common.pb.dart' as common;
 import '../gen/pirc/v1alpha1/common.pbenum.dart';
 import '../gen/pirc/v1alpha2/account.pb.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart';
+import 'link.dart';
 
 /// How long the code works, on the new device's clock.
 const joinDuration = Duration(minutes: 10);
@@ -43,8 +44,12 @@ const phoneNameMaxBytes = 200;
 
 /// A join that ended without the device joining; [message] says why, for the person.
 class JoinFailed implements Exception {
-  const JoinFailed(this.message);
+  const JoinFailed(this.message, {this.published});
   final String message;
+
+  /// The version of the list the relay took although the join then failed:
+  /// the account's newest now, with the device on it.
+  final Uint8List? published;
   @override
   String toString() => message;
 }
@@ -90,38 +95,62 @@ class PhoneAccount {
   final String name;
 }
 
-/// Frames from the relay, one at a time, each taken once.
+/// Frames from the relay, each taken once, read from the start: a frame
+/// that comes while nothing waits is held, and [seen] tells of it at once.
 class _Frames {
-  _Frames(Stream<Frame> frames) : _it = StreamIterator(frames);
-  final StreamIterator<Frame> _it;
-  final List<Frame> _held = [];
+  _Frames(Stream<Frame> frames, [this._onFrame]) {
+    _sub = frames.listen((f) {
+      _held.add(f);
+      _onFrame?.call(f);
+      _wake();
+    }, onDone: () {
+      _closed = true;
+      _wake();
+    });
+  }
 
-  /// The first frame [pick] gives a value for, or null if [end] matches first.
+  late final StreamSubscription<Frame> _sub;
+  final void Function(Frame f)? _onFrame;
+  final List<Frame> _held = [];
+  var _closed = false;
+  var _cancelled = false;
+  Completer<void>? _waiting;
+
+  void _wake() {
+    final w = _waiting;
+    _waiting = null;
+    w?.complete();
+  }
+
+  /// The first frame [pick] gives a value for; others are held for later.
   Future<T> next<T>(T? Function(Frame f) pick, {Duration timeout = stepTimeout, String what = 'the relay', String? late}) async {
-    for (var i = 0; i < _held.length; i++) {
-      final v = pick(_held[i]);
-      if (v != null) {
-        _held.removeAt(i);
-        return v;
-      }
-    }
     final deadline = DateTime.now().add(timeout);
     for (;;) {
+      for (var i = 0; i < _held.length; i++) {
+        final v = pick(_held[i]);
+        if (v != null) {
+          _held.removeAt(i);
+          return v;
+        }
+      }
+      if (_cancelled) throw const JoinFailed('cancelled');
+      if (_closed) throw const JoinFailed('the connection to the relay was lost');
       final left = deadline.difference(DateTime.now());
-      final bool more;
+      final w = _waiting = Completer<void>();
       try {
-        more = await _it.moveNext().timeout(left.isNegative ? Duration.zero : left);
+        await w.future.timeout(left.isNegative ? Duration.zero : left);
       } on TimeoutException {
         throw JoinFailed(late ?? '$what did not answer in time');
       }
-      if (!more) throw const JoinFailed('the connection to the relay was lost');
-      final v = pick(_it.current);
-      if (v != null) return v;
-      _held.add(_it.current);
     }
   }
 
-  Future<void> cancel() => _it.cancel();
+  /// Stops reading; a step waiting ends with "cancelled".
+  Future<void> cancel() {
+    _cancelled = true;
+    _wake();
+    return _sub.cancel();
+  }
 }
 
 String _errorText(common.Error e) => switch (e.code) {
@@ -137,7 +166,11 @@ String _requestId(String kind) => '$kind${++_request}';
 
 /// The account's phone adding a device: [start], then [confirm] or [cancel].
 class AddDevice {
-  AddDevice({required this.e2e, required this.account, required Stream<Frame> frames, required this.send, @visibleForTesting this.listedAs}) : _frames = _Frames(frames);
+  AddDevice({required this.e2e, required this.account, required Stream<Frame> frames, required this.send, @visibleForTesting this.listedAs}) {
+    _frames = _Frames(frames, (f) {
+      if (_joinId.isNotEmpty && f.hasJoinEnded() && f.joinEnded.joinId == _joinId && !_ended.isCompleted) _ended.complete();
+    });
+  }
 
   /// For the tests: the device as the new version is to list it, in place
   /// of the one offered.
@@ -146,11 +179,16 @@ class AddDevice {
   final E2e e2e;
   final PhoneAccount account;
   final void Function(Frame f) send;
-  final _Frames _frames;
+  late final _Frames _frames;
+  final _ended = Completer<void>();
   String _joinId = '';
   NoiseTransport? _transport;
   Offered? _offered;
   bool _over = false;
+
+  /// Completes when the device ends the join: while the person is asked,
+  /// the screen says so.
+  Future<void> get ended => _ended.future;
 
   /// Looks up the code in [text], runs the handshake and checks the new
   /// device's offer; the device it offered itself as.
@@ -159,7 +197,8 @@ class AddDevice {
       return await _start(text);
     } catch (e) {
       _end();
-      rethrow;
+      if (e is JoinFailed) rethrow;
+      throw JoinFailed('the join failed: $e');
     }
   }
 
@@ -206,12 +245,16 @@ class AddDevice {
   ListBody _newest() => ListBody.fromBuffer(Uint8List.sublistView(account.newest, signatureBytes));
 
   /// The person confirmed: the list that adds the device signed and
-  /// published, then sent to it. The version published.
+  /// published, then sent to it. The version published. Nothing is signed
+  /// once the device has ended the join; should it end it after the relay
+  /// took the version, JoinFailed carries that version.
   Future<Uint8List> confirm() async {
     final offered = _offered;
     final t = _transport;
     if (offered == null || t == null || _over) throw StateError('confirm before the offer, or after the end');
+    Uint8List? published;
     try {
+      if (_ended.isCompleted) throw const JoinFailed('the device ended the join; nothing was added');
       final body = Uint8List.sublistView(account.newest, signatureBytes);
       final newest = ListBody.fromBuffer(body);
       final list = e2e.makeList(
@@ -223,12 +266,17 @@ class AddDevice {
       );
       final id = _requestId('p');
       send(Frame(publishList: PublishList(requestId: id, list: list)));
+      // The relay's answer, whatever the device does meanwhile: only it says
+      // whether the device is now on the list.
       await _frames.next((f) {
         if (f.hasDone() && f.done.requestId == id) return true;
         if (f.hasError() && f.error.requestId == id) throw JoinFailed('the relay did not take the new list: ${f.error.message}');
-        if (f.hasJoinEnded() && f.joinEnded.joinId == _joinId) throw const JoinFailed('the device ended the join');
         return null;
-      });
+      }, late: 'the relay did not say whether it took the new list');
+      published = list;
+      if (_ended.isCompleted) {
+        throw JoinFailed('the device ended the join after it was put on the list: it is on the list but did not join; remove it', published: list);
+      }
       final phoneOffer = JoinOffer.fromBuffer(makeOffer(
         account.phone,
         t.handshakeHash,
@@ -236,7 +284,7 @@ class AddDevice {
       ));
       final accept = JoinAccept(phone: phoneOffer, first: account.first, list: list, phoneName: utf8Cut(account.name, phoneNameMaxBytes));
       final sent = t.send(accept.writeToBuffer());
-      if (!sent.ok) throw const JoinFailed('the handshake failed');
+      if (!sent.ok) throw JoinFailed('the handshake failed', published: list);
       _step(sent.message!);
       _over = true;
       t.close();
@@ -244,7 +292,11 @@ class AddDevice {
       return list;
     } catch (e) {
       _end();
-      rethrow;
+      if (e is JoinFailed) {
+        if (e.published != null || published == null) rethrow;
+        throw JoinFailed(e.message, published: published);
+      }
+      throw JoinFailed('the join failed: $e', published: published);
     }
   }
 
@@ -271,8 +323,16 @@ class AddDevice {
 /// Why [d] cannot be added to the list [newest], or null if it can: a
 /// device whose keys are on it already, or one past the caps.
 String? refuseAdding(ListBody newest, Device d) {
-  if (newest.devices.any((x) => bytesEqual(x.signingKey, d.signingKey) || bytesEqual(x.channelKey, d.channelKey) || bytesEqual(x.boxKey, d.boxKey))) {
-    return 'that device is on the list already';
+  // The list holds each public key once, of any kind: a key of the
+  // device's that the list has, or that the device gives twice, is refused.
+  List<List<int>> keysOf(Device x) => [x.signingKey, x.channelKey, x.boxKey, x.readOnlyKey, x.notificationKey].where((k) => k.isNotEmpty).toList();
+  final held = [for (final x in newest.devices) ...keysOf(x)];
+  final mine = keysOf(d);
+  for (var i = 0; i < mine.length; i++) {
+    if (held.any((k) => bytesEqual(k, mine[i]))) return 'that device is on the list already';
+    for (var j = 0; j < i; j++) {
+      if (bytesEqual(mine[i], mine[j])) return 'that device gives one key for two';
+    }
   }
   final computers = newest.devices.where((x) => x.role == roleComputer).length;
   if (d.role == roleComputer ? computers >= maxComputers : newest.devices.length - computers >= maxClients) {
@@ -293,20 +353,20 @@ class Joined {
 }
 
 /// A phone joining an account as a client, logged in without an account:
-/// its [text] shown until [done] ends.
+/// its [text] shown until [done] ends. The joined phone then logs in again,
+/// to the account.
 class PhoneJoin {
   PhoneJoin({
     required this.e2e,
     required this.self,
     required this.channel,
-    required Stream<Frame> frames,
-    required this.send,
+    required this.link,
     required Uint8List Function(int n) random,
     required this.sign,
     this.attestation,
     Duration? duration,
     DateTime Function()? now,
-  })  : _frames = _Frames(frames),
+  })  : _frames = _Frames(link.frames),
         _secret = random(secretBytes),
         lookup = newLookup(random),
         _duration = duration ?? joinDuration,
@@ -321,7 +381,11 @@ class PhoneJoin {
 
   /// Its channel key's secret half, live for the join.
   final SecureKey channel;
-  final void Function(Frame f) send;
+
+  /// Its connection, logged in without an account, for this join alone:
+  /// closed when the join ends, which ends a wait not yet paired.
+  final HostedLink link;
+  void send(Frame f) => link.send(f);
   final Uint8List Function(Uint8List m) sign;
   final Attestation? attestation;
   final String lookup;
@@ -386,7 +450,8 @@ class PhoneJoin {
       return joined;
     } catch (e) {
       _finish();
-      rethrow;
+      if (e is JoinFailed) rethrow;
+      throw JoinFailed('the join failed: $e');
     }
   }
 
@@ -409,6 +474,7 @@ class PhoneJoin {
     if (_joinId.isNotEmpty) send(Frame(joinEnded: JoinEnded(joinId: _joinId)));
     _transport?.close();
     unawaited(_frames.cancel());
+    unawaited(link.close());
   }
 }
 

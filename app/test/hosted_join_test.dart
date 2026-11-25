@@ -131,6 +131,13 @@ void main() {
     return d;
   }
 
+  // The counter of the newest version the relay holds, as a login is told it.
+  Future<Int64> relayCounter() async {
+    final l = await HostedLink.connect(origin: relay.origin, publicKey: phone.signing.publicKey, sign: (m) => sign(phone.signing, m), accountId: account.accountId);
+    await l.close();
+    return l.welcome.listCounter;
+  }
+
   test('the phone adds a computer that runs the TypeScript: it offers itself as a computer, and joins once confirmed', () async {
     final d = await ts('computer');
     final (a, offered) = await add(await d.line());
@@ -153,12 +160,12 @@ void main() {
 
   test('declined at the phone: nothing published, and the device says the phone ended it', () async {
     final d = await ts('computer');
-    final before = account.newest;
+    final before = await relayCounter();
     final (a, offered) = await add(await d.line());
     expect(offered.isComputer, isTrue);
     a.cancel();
     expect(await d.line(), 'failed: the phone ended the join');
-    expect(account.newest, before);
+    expect(await relayCounter(), before);
   });
 
   test('a code with its secret changed: the device refuses it at the third step, and the phone learns', () async {
@@ -183,8 +190,7 @@ void main() {
       e2e: e2e,
       self: second.device,
       channel: second.channel.secretKey,
-      frames: waiting.frames,
-      send: waiting.send,
+      link: waiting,
       random: (n) => sodium.randombytes.buf(n),
       sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
       attestation: Attestation(test: [1]),
@@ -209,17 +215,16 @@ void main() {
       e2e: e2e,
       self: second.device,
       channel: second.channel.secretKey,
-      frames: again.frames,
-      send: again.send,
+      link: again,
       random: (n) => sodium.randombytes.buf(n),
       sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
       attestation: Attestation(test: [1]),
     );
     final ended = expectLater(j2.done(), throwsA(isA<JoinFailed>().having((e) => e.message, 'message', 'the phone ended the join')));
-    final before = account.newest;
+    final before = await relayCounter();
     await expectLater(add(j2.text), throwsA(isA<JoinFailed>().having((e) => e.message, 'message', 'that device is on the list already')));
     await ended;
-    expect(account.newest, before);
+    expect(await relayCounter(), before);
     await again.close();
   });
 
@@ -232,8 +237,7 @@ void main() {
       e2e: e2e,
       self: second.device,
       channel: second.channel.secretKey,
-      frames: waiting.frames,
-      send: waiting.send,
+      link: waiting,
       random: (n) => sodium.randombytes.buf(n),
       sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
       attestation: Attestation(test: [1]),
@@ -250,8 +254,7 @@ void main() {
       e2e: e2e,
       self: second.device,
       channel: second.channel.secretKey,
-      frames: late.frames,
-      send: late.send,
+      link: late,
       random: (n) => sodium.randombytes.buf(n),
       sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
       attestation: Attestation(test: [1]),
@@ -264,5 +267,49 @@ void main() {
     await expectLater(add(k.text), throwsA(isA<JoinFailed>()));
     await settled;
     await late.close();
+  });
+
+  test('the device ends the join while the person is asked: nothing is signed or published', () async {
+    final second = Keys(sodium);
+    final waiting = await HostedLink.connect(origin: relay.origin, publicKey: second.signing.publicKey, sign: (m) => sign(second.signing, m));
+    final j = PhoneJoin(
+      e2e: e2e,
+      self: second.device,
+      channel: second.channel.secretKey,
+      link: waiting,
+      random: (n) => sodium.randombytes.buf(n),
+      sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
+      attestation: Attestation(test: [1]),
+    );
+    final done = j.done().then<void>((_) => fail('joined'), onError: (Object _) {});
+    final before = await relayCounter();
+    final (a, _) = await add(j.text);
+    j.cancel();
+    await a.ended.timeout(const Duration(seconds: 10));
+    await expectLater(a.confirm(), throwsA(isA<JoinFailed>().having((e) => e.message, 'message', 'the device ended the join; nothing was added').having((e) => e.published, 'published', isNull)));
+    expect(await relayCounter(), before);
+    await done;
+  });
+
+  test('a second phone cancelled before the phone pairs: its wait is gone from the relay', () async {
+    final second = Keys(sodium);
+    final waiting = await HostedLink.connect(origin: relay.origin, publicKey: second.signing.publicKey, sign: (m) => sign(second.signing, m));
+    final j = PhoneJoin(
+      e2e: e2e,
+      self: second.device,
+      channel: second.channel.secretKey,
+      link: waiting,
+      random: (n) => sodium.randombytes.buf(n),
+      sign: (m) => sodium.crypto.sign.detached(message: m, secretKey: second.signing.secretKey),
+      attestation: Attestation(test: [1]),
+    );
+    final done = j.done().then<void>((_) => fail('joined'), onError: (Object _) {});
+    // Its wait reaches the relay, then it is cancelled before any lookup.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    j.cancel();
+    await done;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final b = AddDevice(e2e: e2e, account: account, frames: frames, send: link.send);
+    await expectLater(b.start(j.text), throwsA(isA<JoinFailed>().having((e) => e.message, 'message', startsWith('no device shows'))));
   });
 }

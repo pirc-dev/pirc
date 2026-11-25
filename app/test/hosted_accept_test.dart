@@ -101,6 +101,10 @@ void main() {
     expect(refuseAdding(list([phone]), computer), isNull);
     expect(refuseAdding(list([phone, computer]), computer.deepCopy()..signingKey = Uint8List(32)), 'that device is on the list already');
     expect(refuseAdding(list([phone]), phone.deepCopy()..channelKey = Uint8List(32)..boxKey = Uint8List(32)), 'that device is on the list already');
+    // A key of another kind: the phone's channel key offered as a box key, its read-only key as a signing key.
+    expect(refuseAdding(list([phone]), browser.deepCopy()..boxKey = phone.channelKey), 'that device is on the list already');
+    expect(refuseAdding(list([phone]), browser.deepCopy()..signingKey = phone.readOnlyKey), 'that device is on the list already');
+    expect(refuseAdding(list([phone]), browser.deepCopy()..boxKey = browser.channelKey), 'that device gives one key for two');
     final nine = [phone, for (var i = 0; i < 8; i++) keys(roleClient, false).device];
     final fortyNine = [for (var i = 0; i < 49; i++) keys(roleComputer, false).device];
     expect(refuseAdding(list([...nine, ...fortyNine]), browser), isNull);

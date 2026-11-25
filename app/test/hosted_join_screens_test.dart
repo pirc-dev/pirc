@@ -20,6 +20,8 @@ class FakeAdder implements DeviceAdder {
   FakeAdder(this.offered);
   final FutureOr<Offered> Function() offered;
   final calls = <String>[];
+  final endedBy = Completer<void>();
+  FutureOr<Uint8List> Function() confirmed = () => Uint8List.fromList([1, 2]);
   @override
   Future<Offered> start(String text) async {
     calls.add('start $text');
@@ -27,9 +29,15 @@ class FakeAdder implements DeviceAdder {
   }
 
   @override
-  Future<void> confirm() async => calls.add('confirm');
+  Future<Uint8List> confirm() async {
+    calls.add('confirm');
+    return confirmed();
+  }
+
   @override
   void cancel() => calls.add('cancel');
+  @override
+  Future<void> get ended => endedBy.future;
 }
 
 Widget frame(Widget child) => LookScope(
@@ -55,7 +63,8 @@ void main() {
 
   testWidgets('a computer: said before anything is added, added only once confirmed', (tester) async {
     final a = FakeAdder(() => computer);
-    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 2)));
+    final published = <Uint8List>[];
+    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 2, published: published.add)));
     await tester.enterText(find.byType(CupertinoTextField), 'PIRC1CODE');
     await tester.tap(find.text('Use the text'));
     await tester.pumpAndSettle();
@@ -65,6 +74,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(a.calls, ['start PIRC1CODE', 'confirm']);
     expect(find.text('Added'), findsOneWidget);
+    expect(published, [Uint8List.fromList([1, 2])]);
+  });
+
+  testWidgets('the device ends the join while the person is asked: said, and nothing to confirm', (tester) async {
+    final a = FakeAdder(() => computer);
+    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 1, published: (_) {})));
+    await tester.enterText(find.byType(CupertinoTextField), 'PIRC1CODE');
+    await tester.tap(find.text('Use the text'));
+    await tester.pumpAndSettle();
+    a.endedBy.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('the device ended the join; nothing was added'), findsOneWidget);
+    expect(find.text('It is mine: add it'), findsNothing);
+    expect(a.calls, ['start PIRC1CODE']);
+  });
+
+  testWidgets('a confirm that fails: any error said; a version the relay took passed on', (tester) async {
+    final published = <Uint8List>[];
+    for (final (error, said) in [
+      (ArgumentError('a key twice'), 'the join failed: Invalid argument(s): a key twice'),
+      (JoinFailed('the device ended the join after it was put on the list: it is on the list but did not join; remove it', published: Uint8List.fromList([9])), 'the device ended the join after it was put on the list: it is on the list but did not join; remove it'),
+    ]) {
+      final a = FakeAdder(() => computer)..confirmed = () => throw error;
+      await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 1, published: published.add)));
+      await tester.enterText(find.byType(CupertinoTextField), 'PIRC1CODE');
+      await tester.tap(find.text('Use the text'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('It is mine: add it'));
+      await tester.pumpAndSettle();
+      expect(find.text(said), findsOneWidget);
+      await tester.pumpWidget(frame(const SizedBox()));
+    }
+    expect(published, [Uint8List.fromList([9])]);
   });
 
   testWidgets('a code refused: its reason shown, and another can be tried', (tester) async {
@@ -77,6 +119,7 @@ void main() {
         return a;
       },
       computers: 4,
+      published: (_) {},
     )));
     await tester.enterText(find.byType(CupertinoTextField), 'nonsense');
     await tester.tap(find.text('Use the text'));
@@ -90,7 +133,7 @@ void main() {
 
   testWidgets('cancelled, or the screen left, at the question: the join ends, nothing is added', (tester) async {
     final a = FakeAdder(() => phone);
-    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 1)));
+    await tester.pumpWidget(frame(AddDeviceScreen(adder: () => a, computers: 1, published: (_) {})));
     await tester.enterText(find.byType(CupertinoTextField), 'PIRC1CODE');
     await tester.tap(find.text('Use the text'));
     await tester.pumpAndSettle();
