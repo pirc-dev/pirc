@@ -74,6 +74,7 @@ class PhoneAccount {
     required this.first,
     required this.newest,
     required this.name,
+    required this.counter,
   });
 
   final Uint8List accountId;
@@ -93,6 +94,10 @@ class PhoneAccount {
 
   /// The phone's name, as the new device will say who approved it.
   final String name;
+
+  /// The next counter, at least the one given, saved before it is used
+  /// (docs/e2e.md, section 3).
+  final Future<Int64> Function(Int64 atLeast) counter;
 }
 
 /// Frames from the relay, each taken once, read from the start: a frame
@@ -261,12 +266,14 @@ class AddDevice {
       if (_ended.isCompleted) throw const JoinFailed('the device ended the join; nothing was added');
       final body = Uint8List.sublistView(account.newest, signatureBytes);
       final newest = ListBody.fromBuffer(body);
+      final counter = await account.counter(newest.counter + Int64.ONE);
+      if (_ended.isCompleted || _over) throw const JoinFailed('the device ended the join; nothing was added');
       final list = e2e.makeList(
         phone: account.signing,
         devices: [...newest.devices, listedAs?.call(offered.device) ?? offered.device],
         previousBody: body,
         accountId: account.accountId,
-        counter: newest.counter + Int64.ONE,
+        counter: counter,
       );
       final id = _requestId('p');
       send(Frame(publishList: PublishList(requestId: id, list: list)));

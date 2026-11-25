@@ -2417,6 +2417,46 @@ built; steps 14 and 15 are not finished.
           6). Chosen at first run: a relay of one's own, as now, or the
           hosted one. The export compliance answer is looked at again
           before the first upload with this code in it.
+
+          The account's engine, without screens (8a, `app/lib/hosted`):
+          - **The phone's five keys from the two seeds the key store
+            already keeps** (`keys.dart`), so that the platforms' stores
+            stay as they are and each key is kept as `e2e.md` section 2
+            asks: the main seed, behind Face ID or the PIN, gives the
+            signing, channel and box keys; the read seed, readable from the
+            first unlock, the read-only and notification keys. Each is
+            libsodium's `crypto_kdf_derive_from_key` of its seed, under a
+            context and number of its own.
+          - **The account as the phone keeps it** (`account.dart`): its ID,
+            the phone's key, the origin, this phone as listed, version 1 and
+            the newest, both checked on every read; in the prefs the
+            notification extension shares, never written over a newer
+            version another writer kept. The account's phone's counter is a
+            file of the private folder, out of backups, saved before it is
+            used and never below the relay's newest.
+          - **The reconnecting `v1alpha2` connection** (`connection.dart`),
+            a port of `relay-client/hosted.ts`.
+          - **A channel's client end** (`channel.dart`): IK's initiator,
+            the list first, the computer's list state, pieces, and the
+            window both ways as `channel.proto` has it. At most 16 channels
+            at once, which keeps the relay's queue toward the phone under
+            its caps without holding counts back.
+          - **The Client's frames from the account** (`sessions.dart`):
+            the existing `Client` speaks `v1alpha1`, so the session list is
+            the sealed announcements opened and checked, a channel to each
+            process with a session replaces them with the whole
+            announcements and carries its messages as `Routed`, and the
+            devices come from the newest list. A newer list from a computer
+            goes to the relay too; computers no longer listed lose their
+            channels and sessions; a list without this phone ends it all as
+            removed.
+          - **Tested against a real computer**: the Dart phone signs up on
+            the Go relay and adds the extension's `Hosted`, joined by
+            `/pirc join`'s code (`extension/test/hosted-computer.ts`); the
+            session is seen sealed then whole, a request is answered, an
+            event comes, a version only the phone had reaches the computer
+            by a channel alone and the relay from it, and a removal ends the
+            session.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

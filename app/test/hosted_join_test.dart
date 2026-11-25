@@ -16,6 +16,7 @@ import 'package:pirc/e2e/bytes.dart';
 import 'package:pirc/e2e/list.dart';
 import 'package:pirc/gen/pirc/v1alpha2/account.pb.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart';
+import 'package:pirc/hosted/account.dart';
 import 'package:pirc/hosted/join.dart';
 import 'package:pirc/hosted/link.dart';
 
@@ -76,6 +77,7 @@ void main() {
   late HostedLink link;
   late Stream<Frame> frames;
   late PhoneAccount account;
+  final counter = MemoryCounter();
   final cleanup = <void Function()>[];
 
   Future<Uint8List> sign(KeyPair k, Uint8List m) async => sodium.crypto.sign.detached(message: m, secretKey: k.secretKey);
@@ -95,7 +97,7 @@ void main() {
     final accountId = e2e.sha256(Uint8List.sublistView(v1, signatureBytes));
     link = await HostedLink.connect(origin: relay.origin, publicKey: phone.signing.publicKey, sign: (m) => sign(phone.signing, m), accountId: accountId);
     frames = link.frames.asBroadcastStream();
-    account = PhoneAccount(accountId: accountId, phone: phone.device, signing: phone.signing, channel: phone.channel.secretKey, first: v1, newest: v1, name: 'Pixel 9');
+    account = PhoneAccount(accountId: accountId, phone: phone.device, signing: phone.signing, channel: phone.channel.secretKey, first: v1, newest: v1, name: 'Pixel 9', counter: counter.next);
   });
 
   tearDownAll(() async {
@@ -122,7 +124,7 @@ void main() {
 
   Future<void> confirmed(AddDevice a) async {
     final list = await a.confirm();
-    account = PhoneAccount(accountId: account.accountId, phone: account.phone, signing: account.signing, channel: account.channel, first: account.first, newest: list, name: account.name);
+    account = PhoneAccount(accountId: account.accountId, phone: account.phone, signing: account.signing, channel: account.channel, first: account.first, newest: list, name: account.name, counter: account.counter);
   }
 
   Future<TsDevice> ts(String role) async {
