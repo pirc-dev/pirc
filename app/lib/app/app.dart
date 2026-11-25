@@ -642,8 +642,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       return;
     }
     if (open == null) {
+      // The seeds are gone (a backup restored to another phone, the
+      // passcode removed, the app reinstalled): the account they open goes
+      // with them, and the phone is back at the first screen.
+      await widget.prefs.set(accountKey, null);
       await widget.prefs.setRelay(null);
-      setState(() => _relay = null);
+      if (mounted) setState(() => _relay = null);
       return;
     }
     await _connectHosted(relay, open);
@@ -699,6 +703,27 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       );
     }
     if (mounted && _relay == relay) await _removed(relay);
+  }
+
+  // What is kept cannot be read: asked first, since on the account's phone
+  // it cannot be undone.
+  Future<void> _startAgain() async {
+    final context = _nav.currentState?.overlay?.context;
+    final relay = _relay;
+    if (context == null || relay == null) return;
+    final sure = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Start again on this phone?'),
+        content: const Text("This phone's keys and its account are deleted here. If it was the account's phone, nothing can be added to that account or taken off it again: "
+            'run /pirc leave on each of its computers, then make a new account.'),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Start again')),
+        ],
+      ),
+    );
+    if (sure == true && mounted && _relay == relay) await _removed(relay);
   }
 
   // Makes an account on the hosted relay, this phone its phone.
@@ -1059,7 +1084,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         unlock: _unlock,
         error: _lockError,
         // What is kept cannot be read: this phone starts again.
-        reset: _lockReset && _relay != null ? () => _removed(_relay!) : null,
+        reset: _lockReset && _relay != null ? _startAgain : null,
       );
     } else {
       final model = _model!;

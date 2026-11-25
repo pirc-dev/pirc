@@ -304,6 +304,24 @@ void main() {
     await tester.pump(const Duration(minutes: 31));
   }, skip: !ready);
 
+  testWidgets('an account kept whose keys are gone: forgotten, and the phone may sign up again', (tester) async {
+    final store = MemoryKeyStore();
+    final prefs = MemoryPrefs();
+    (await tester.runAsync(() => signUp(e2e: e2e, store: store, values: prefs, origin: relay.origin, attest: testAttest, protect: false)))!.dispose();
+    await tester.runAsync(() => prefs.setRelay(hostedRelayKey(relay.origin)));
+    // As on a phone the backup was restored to: the prefs, not the keys.
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest));
+    await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty);
+    expect(find.byType(HostedStartScreen), findsOneWidget, reason: shown(tester));
+    expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
+    await tester.tap(find.text('Sign up'));
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready', reason: shown(tester));
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
   testWidgets('an account kept that cannot be read: said, and this phone may start again', (tester) async {
     final store = MemoryKeyStore();
     final prefs = MemoryPrefs(hostedRelayKey('ws://127.0.0.1:1'));
@@ -312,6 +330,14 @@ void main() {
     await until(tester, () => find.text('Start again on this phone').evaluate().isNotEmpty, tries: 30);
     expect(find.textContaining('cannot be read'), findsOneWidget, reason: shown(tester));
     await tester.tap(find.text('Start again on this phone'));
+    await tester.pumpAndSettle();
+    // Asked first; cancelled, nothing goes.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(await tester.runAsync(() => prefs.get(accountKey)), isNotNull);
+    await tester.tap(find.text('Start again on this phone'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start again'));
     await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty, tries: 30);
     expect(find.byType(HostedStartScreen), findsOneWidget, reason: shown(tester));
     expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
