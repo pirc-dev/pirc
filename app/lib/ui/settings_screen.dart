@@ -16,12 +16,13 @@ import '../hosted/try_stores.dart';
 import '../join.dart';
 import '../push/push.dart';
 import 'devices.dart';
+import 'hosted_devices.dart';
 import 'look.dart';
 import 'leave.dart';
 import 'relay_address.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.leave, this.version = appVersion, this.wide = false});
+  const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.leave, this.version = appVersion, this.wide = false, this.hosted});
   final PhoneSettings settings;
   // The relay's, for its hosts and clients; none before joining.
   final PircModel? model;
@@ -38,6 +39,9 @@ class SettingsScreen extends StatefulWidget {
   final Future<String?> Function() version;
   // Beside the list (a wide screen): no way back, as the web page's.
   final bool wide;
+  // A hosted account's devices, in place of the relay's address, hosts and
+  // clients.
+  final HostedDevices? hosted;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -123,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
               if (sub.access == Access.allowed) _Row(label: _subscribed(sub), sub: _until(sub), problem: sub.graceEnds != null ? _grace(sub) : null),
               if (widget.manage != null) _Link(label: 'Manage subscription', onTap: () => widget.manage!()),
             ]),
-            if (s.relay case final relay? when widget.follow != null)
+            if (s.relay case final relay? when widget.follow != null && widget.hosted == null)
               _Section(title: 'Relay', sub: 'Where this phone reaches your hosts.', rows: [
                 _Row(label: relay),
                 _Link(
@@ -137,7 +141,14 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                     onTap: () => leaveRelay(context, relay: relay, leave: widget.leave!, onlyClient: widget.model != null && onlyClient(widget.model!)),
                   ),
               ]),
-            if (widget.model != null) ...[
+            if (widget.model != null && widget.hosted != null) ...[
+              _Section(title: 'Computers', sub: 'Running pi, their sessions shown here. Each has its own keys: none can read another\'s sessions.', rows: [
+                HostedDeviceList(model: widget.model!, role: 'host', devices: widget.hosted!),
+              ]),
+              _Section(title: 'Phones and browsers', sub: 'Each reaches every computer. Only the account\'s phone adds devices.', rows: [
+                HostedDeviceList(model: widget.model!, role: 'client', devices: widget.hosted!),
+              ]),
+            ] else if (widget.model != null) ...[
               _Section(title: 'Hosts', sub: 'Computers running pi, whose sessions show here.', rows: [DeviceList(model: widget.model!, role: 'host', relay: s.relay)]),
               _Section(title: 'Clients', sub: 'This phone, the web app and the other phones, each reaching every host.', rows: [DeviceList(model: widget.model!, role: 'client', relay: s.relay)]),
             ],

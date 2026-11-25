@@ -11,8 +11,9 @@ import 'package:flutter/material.dart' show DefaultMaterialLocalizations;
 import 'package:flutter/services.dart';
 
 import '../core/protocol.dart';
+import '../e2e/join.dart' show readJoinText;
 import '../e2e/list.dart' show E2e;
-import '../hosted/account.dart' show AccountUnreadable, KeyValues, accountKey;
+import '../hosted/account.dart' show AccountUnreadable, KeyValues, MemoryCounter, PhoneCounter, accountKey;
 import '../hosted/attest.dart';
 import '../hosted/setup.dart';
 import '../hosted/try_stores.dart' show hostedBuild;
@@ -38,6 +39,7 @@ import '../ui/sessions_screen.dart';
 import '../ui/settings_screen.dart';
 import 'chat_cache.dart';
 import 'drafts.dart';
+import 'hosted_devices.dart';
 import 'links.dart';
 import 'model.dart';
 import 'outside.dart';
@@ -151,12 +153,15 @@ class MemoryPrefs extends AppPrefs {
 }
 
 class PircApp extends StatefulWidget {
-  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily, this.hosted = hostedBuild ? hostedRelay : null, this.attest = platformAttest});
+  const PircApp({super.key, required this.store, required this.prefs, this.cache, this.drafts, this.scan, this.camera = false, this.protect = true, this.push, this.links, this.subscription, this.fontFamily, this.hosted = hostedBuild ? hostedRelay : null, this.attest = platformAttest, this.counter});
 
   // PiRC's hosted relay, offered at first run; none in a build without
   // PIRC_HOSTED.
   final String? hosted;
   final Attest attest;
+  // The account's phone's counter (hosted/account.dart); one in memory when
+  // none is given, for the tests.
+  final PhoneCounter? counter;
 
   final KeyStore store;
   final AppPrefs prefs;
@@ -213,6 +218,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   RelayConnection? _conn;
   // The hosted account's connection, in place of _conn.
   HostedRun? _hosted;
+  AppHostedDevices? _hostedDevices;
+  late final PhoneCounter _counter = widget.counter ?? MemoryCounter();
   // A relay of one's own chosen at the hosted build's first screen.
   var _ownRelay = false;
   PircModel? _model;
@@ -537,6 +544,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       _key = null;
       _conn = null;
       _hosted = null;
+      _hostedDevices = null;
       _model = null;
       _lockError = null;
       _lockReset = false;
@@ -684,6 +692,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     setState(() {
       _key = key;
       _hosted = run;
+      _hostedDevices = AppHostedDevices(e2e: e2e, run: run, values: widget.prefs, counter: _counter, scan: widget.scan ?? (widget.camera ? _scanText : null));
       _model = model;
     });
     model.restore().whenComplete(run.start);
@@ -854,7 +863,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave)));
+    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, hosted: _hostedDevices)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -911,6 +920,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _conn?.stop();
     _hosted?.dispose();
     _hosted = null;
+    _hostedDevices = null;
     await widget.store.delete(relay);
     if (hostedOriginOf(relay) != null) await widget.prefs.set(accountKey, null);
     await widget.cache?.clear();
@@ -1020,6 +1030,20 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     ));
   }
 
+  // The camera's scan of a device's code, for adding it to a hosted account.
+  Future<String?> _scanText() async {
+    final explained = await widget.prefs.cameraExplained();
+    return _nav.currentState!.push<String>(CupertinoPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => ScanScreen(
+        explained: explained,
+        onExplained: widget.prefs.setCameraExplained,
+        accepts: (t) => readJoinText(t) != null,
+        wrong: "That code is not a device's PiRC code.",
+      ),
+    ));
+  }
+
   Future<void> _join(JoinLink link) async {
     final keys = await join(link, widget.store, protect: _settings!.lock);
     await widget.prefs.setRelay(link.relay);
@@ -1125,7 +1149,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                 Container(width: 0.5, color: look.rule),
                 Expanded(
                   child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true)
+                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true, hosted: _hostedDevices)
                       : _chat.value != null
                           ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
                           : CupertinoPageScaffold(

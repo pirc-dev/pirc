@@ -8,6 +8,7 @@ import 'app/files.dart';
 import 'app/links.dart';
 import 'app/notices.dart';
 import 'app/store.dart';
+import 'hosted/account.dart' show FolderCounter;
 import 'keys/key_store.dart';
 import 'push/push.dart';
 import 'push/wake.dart';
@@ -18,7 +19,7 @@ Future<void> main() async {
   addAndroidNotices();
   final id = await const MethodChannel('dev.pirc.app/about').invokeMethod<String>('id');
   if (!pushes(id)) debugPrint('push: none, built as $id, not $appId');
-  runApp(PircApp(store: ChannelKeyStore(), prefs: ChannelPrefs(), camera: true, push: pushes(id) ? PushPlatform() : null, links: LinkPlatform(), subscription: _subscription(), cache: await keptChats(files), drafts: await keptDrafts(files)));
+  runApp(PircApp(store: ChannelKeyStore(), prefs: ChannelPrefs(), counter: FolderCounter(files.folder, protect: files.protect), camera: true, push: pushes(id) ? PushPlatform() : null, links: LinkPlatform(), subscription: _subscription(), cache: await keptChats(files), drafts: await keptDrafts(files)));
 }
 
 // The App Store's subscription, or Google Play's, in a store build only.

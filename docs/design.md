@@ -2479,6 +2479,23 @@ built; steps 14 and 15 are not finished.
             nothing** (D1); the account's, as the relay says it, does, with
             the locked screen in 8b2. The session list and chats run over
             8a's engine.
+
+          The devices (8b2, `app/lib/ui/hosted_devices.dart`,
+          `app/lib/app/hosted_devices.dart`, `app/lib/hosted/names.dart`):
+          - **Settings lists the computers, then the phones and browsers**,
+            from the newest list, online or not, under the name the
+            account's phone gave each, or a computer's own name from what
+            it sealed; a computer whose channel said a counter below the
+            newest says that it has not yet confirmed the latest change. A
+            hosted account has no relay address to change and no relay to
+            leave there.
+          - **Only the account's phone adds and renames.** "Add a device"
+            opens part 7's screen on the running connection's frames, with
+            the counter file of the private folder; the version the relay
+            took becomes the account's newest. A name given is signed with
+            the list's counter, sealed to every client and published; the
+            sessions of a computer renamed show its new name at once.
+            Another phone sees the same list and changes nothing.
        9. **Removal and the end to end tests** across apps, relay and pi.
 
        **Decisions for the app**:

@@ -79,6 +79,15 @@ class _Process {
   var backoff = reopenMin;
 }
 
+/// The relay's Error for a request.
+class HostedRefusal implements Exception {
+  const HostedRefusal(this.code, this.message);
+  final ErrorCode code;
+  final String message;
+  @override
+  String toString() => message.isEmpty ? 'the relay refused (${code.name})' : 'the relay refused: $message';
+}
+
 class HostedSessions implements ChannelEvents {
   HostedSessions({
     required this.e2e,
@@ -118,6 +127,13 @@ class HostedSessions implements ChannelEvents {
   final _highest = <String, Int64>{};
   Int64? _namesHighest;
   Map<String, String> _names = {};
+  // Each computer's own name, from what it sealed, by signing key in hex.
+  final _computerNames = <String, String>{};
+  // Frames for whoever else reads them (a join), and requests waiting for
+  // their Done or Error.
+  final _frames = StreamController<v2.Frame>.broadcast(sync: true);
+  final _waiting = <String, Completer<void>>{};
+  var _requests = 0;
   v2.Devices? _devices;
   // v1alpha1 push requests, answered by Done in v1alpha2.
   final _pushIds = <String>{};
@@ -139,6 +155,8 @@ class HostedSessions implements ChannelEvents {
     _disposed = true;
     _ready = false;
     _abandoned.clear();
+    _failWaiting('stopped');
+    _frames.close();
     _boxSecret.fillRange(0, _boxSecret.length, 0);
   }
 
@@ -149,6 +167,7 @@ class HostedSessions implements ChannelEvents {
     if (s is! HostedReady) {
       _ready = false;
       _abandoned.clear();
+      _failWaiting('the connection to the relay was lost');
       // A removed key is given the newest list, then refused: this phone
       // learns of its removal from that list, which it may hold already.
       if (s is HostedRefused && !account.listed) return _removedNow();
@@ -182,6 +201,7 @@ class HostedSessions implements ChannelEvents {
 
   void onFrame(v2.Frame f) {
     if (_removed || _disposed) return;
+    _frames.add(f);
     switch (f.whichBody()) {
       case v2.Frame_Body.list:
         unawaited(_take(f.list.list, fromRelay: true));
@@ -217,12 +237,14 @@ class HostedSessions implements ChannelEvents {
       case v2.Frame_Body.closeChannel:
         _byId(f.closeChannel.channelId)?.close(f.closeChannel.code, 'the relay closed it (${f.closeChannel.code.name})', tell: false);
       case v2.Frame_Body.done:
+        _waiting.remove(f.done.requestId)?.complete();
         if (_pushIds.remove(f.done.requestId)) toClient(v1.Frame(pushChanged: v1.PushChanged(requestId: f.done.requestId)));
       case v2.Frame_Body.error:
         final e = f.error;
         if (e.requestId.isEmpty) return debugPrint('hosted: relay: ${e.message}');
         _pushIds.remove(e.requestId);
         _abandoned.remove(e.requestId);
+        _waiting.remove(e.requestId)?.completeError(HostedRefusal(e.code, e.message));
         for (final p in _processes.values) {
           final ch = p.channel;
           if (ch != null && ch.requestId == e.requestId && ch.id == null) ch.refused('the relay: ${e.message}');
@@ -314,6 +336,11 @@ class HostedSessions implements ChannelEvents {
     final p = _process(ref.hostKey, ref.instanceId);
     final s = p.sessions.putIfAbsent(ref.sessionId, () => _Session(common.SessionRef(hostKey: ref.hostKey, sessionId: ref.sessionId, instanceId: ref.instanceId)));
     s.sealed = r.body;
+    final own = r.body!.computerName;
+    if (own.isNotEmpty && _computerNames[hexOf(ref.hostKey)] != own) {
+      _computerNames[hexOf(ref.hostKey)] = own;
+      if (_devices != null) _sendKeys();
+    }
     s.announcedAt = e.hasAnnouncedAt() ? e.announcedAt : null;
     return _entry(s);
   }
@@ -489,7 +516,16 @@ class HostedSessions implements ChannelEvents {
       return;
     }
     _namesHighest = r.ordering;
+    final before = _names;
     _names = {for (final n in r.names) hexOf(n.signingKey): n.name};
+    // A computer's sessions show under its name: given again when it changed.
+    for (final p in _processes.values) {
+      final k = hexOf(p.hostKey);
+      if (before[k] == _names[k]) continue;
+      for (final s in p.sessions.values) {
+        toClient(v1.Frame(sessionUpdated: v1.SessionUpdated(entry: _entry(s))));
+      }
+    }
   }
 
   void _sendKeys() {
@@ -500,7 +536,7 @@ class HostedSessions implements ChannelEvents {
           v1.RegisteredKey(
             publicKey: d.signingKey,
             role: d.role == roleComputer ? v1.Role.ROLE_HOST : v1.Role.ROLE_CLIENT,
-            label: _names[hexOf(d.signingKey)] ?? '',
+            label: _names[hexOf(d.signingKey)] ?? _computerNames[hexOf(d.signingKey)] ?? '',
             online: status[hexOf(d.signingKey)]?.online ?? false,
             push: status[hexOf(d.signingKey)]?.push ?? false,
             readKey: d.readOnlyKey.isNotEmpty,
@@ -515,6 +551,49 @@ class HostedSessions implements ChannelEvents {
         for (final p in _processes.values)
           if (p.channel?.hostCounter != null) hexOf(p.hostKey): p.channel!.hostCounter!,
       };
+
+  // --- For the account's screens ----------------------------------------
+
+  /// Every frame from the relay, as it comes, for a join (AddDevice).
+  Stream<v2.Frame> get frames => _frames.stream;
+
+  /// Sends a frame to the relay as it is; false when it could not.
+  bool sendRaw(v2.Frame f) => _connected && sendRelay(f);
+
+  /// The names the account's phone sealed, as last opened, by signing key
+  /// in hex; and the highest ordering seen, for the phone's next.
+  Map<String, String> get names => Map.unmodifiable(_names);
+  Int64? get namesOrdering => _namesHighest;
+
+  /// The computers whose channel said a list counter below the newest:
+  /// a change not yet confirmed by them, by signing key in hex.
+  Set<String> get behind => {
+        for (final MapEntry(key: k, value: c) in hostCounters.entries)
+          if (c < account.newest.counter) k,
+      };
+
+  /// A fresh request ID.
+  String requestId(String kind) => '$kind${++_requests}';
+
+  /// Sends [f], whose request ID is [id], and completes on its Done; with
+  /// HostedRefusal on its Error, StateError when not sent or the
+  /// connection goes, TimeoutException after [timeout].
+  Future<void> request(String id, v2.Frame f, {Duration timeout = const Duration(seconds: 20)}) {
+    if (!sendRaw(f)) return Future.error(StateError('not connected to the relay'));
+    final c = _waiting[id] = Completer<void>();
+    return c.future.timeout(timeout, onTimeout: () {
+      _waiting.remove(id);
+      throw TimeoutException('the relay did not answer');
+    });
+  }
+
+  void _failWaiting(String why) {
+    final all = [..._waiting.values];
+    _waiting.clear();
+    for (final c in all) {
+      c.completeError(StateError(why));
+    }
+  }
 
   // --- From the Client -----------------------------------------------------
 

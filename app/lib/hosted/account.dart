@@ -307,3 +307,23 @@ class FileCounter implements PhoneCounter {
     return n;
   }
 }
+
+/// A FileCounter in a folder had only when first needed: the private
+/// folder, which the phone may not give while it is locked.
+class FolderCounter implements PhoneCounter {
+  FolderCounter(this.folder, {this.name = 'hosted-counter', this.protect});
+  final Future<String> Function() folder;
+  final String name;
+  final Future<void> Function(String path)? protect;
+  // One file for every call, also those made while the folder is asked.
+  Future<FileCounter>? _file;
+
+  @override
+  Future<Int64> next(Int64 atLeast) async {
+    final file = _file ??= folder().then((d) => FileCounter('$d/$name', protect: protect));
+    file.then((_) {}, onError: (Object _) {
+      if (identical(_file, file)) _file = null;
+    });
+    return (await file).next(atLeast);
+  }
+}

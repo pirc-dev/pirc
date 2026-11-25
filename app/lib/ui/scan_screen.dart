@@ -11,7 +11,11 @@ const _white = Color(0xFFFFFFFF);
 const _black = Color(0xFF000000);
 
 class ScanScreen extends StatefulWidget {
-  const ScanScreen({super.key, required this.explained, required this.onExplained});
+  const ScanScreen({super.key, required this.explained, required this.onExplained, this.accepts, this.wrong = 'That code is not a PiRC join link.'});
+
+  // What it closes on: a PiRC join link unless given.
+  final bool Function(String text)? accepts;
+  final String wrong;
 
   // Whether what the camera is for has been said before.
   final bool explained;
@@ -33,13 +37,13 @@ class _ScanScreenState extends State<ScanScreen> {
     for (final b in capture.barcodes) {
       final v = b.rawValue;
       if (v == null) continue;
-      if (parseJoinLink(v) != null) {
+      if (widget.accepts?.call(v) ?? parseJoinLink(v) != null) {
         _done = true;
         Navigator.of(context).pop(v);
         return;
       }
       if (_wrong == null) {
-        setState(() => _wrong = 'That code is not a PiRC join link.');
+        setState(() => _wrong = widget.wrong);
       }
     }
   }
