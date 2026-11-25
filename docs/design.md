@@ -2574,7 +2574,14 @@ built; steps 14 and 15 are not finished.
             stays.
           - **iOS's hosted path is compiled in only for a hosted build** (D3),
             under `#if PIRC_HOSTED`, which an optional
-            `ios/Flutter/Hosted.xcconfig` sets (`app/README.md`).
+            `ios/Flutter/Hosted.xcconfig` sets (`app/README.md`); the build
+            stops when that and the build's `PIRC_HOSTED` disagree.
+          - **A relay cannot replay, reorder or repeat a notice**: each is
+            checked against the highest seen for its session, before the
+            fetch and in it; a session first seen shows a notice made up to
+            five minutes before the last wake, for a computer's clock behind
+            the phone's. A fetch takes at most 512 notices, and values older
+            than 30 days are dropped from what is kept.
           - **Tested against the Go relay and a TypeScript computer** that
             ends a turn: the Dart wake shows the notice once, a later one
             again, none after a removal; the Swift wake, run by the same

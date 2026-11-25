@@ -57,6 +57,8 @@ public struct HostedWake: Equatable, Sendable {
     public var newer: Data?
     /// The newest list no longer has this phone.
     public var removed: Bool
+    /// The notices could not be fetched after the login: the fixed text.
+    public var failed: Bool = false
 }
 
 extension Data {
@@ -71,23 +73,39 @@ private let readContext = "pircread"
 private let authContext2 = "pirc-auth-v1alpha2"
 
 /// The read seed's two keys: the read-only signing key, and the
-/// notification key's secret half.
-struct ReadKeys {
+/// notification key's secret half; the secrets zeroed when it goes.
+final class ReadKeys {
     let readOnlyPublic: [UInt8]
-    let readOnlySecret: [UInt8]
-    let notificationSecret: Data
+    private(set) var readOnlySecret: [UInt8]
+    private(set) var notificationSecret: Data
 
     init?(seed: Data) {
-        guard let s1 = Sodium.deriveKey(master: seed, context: readContext, id: 1),
-              let s2 = Sodium.deriveKey(master: seed, context: readContext, id: 2),
-              let ro = Sodium.signKeyPair(seed: s1),
-              let n = Sodium.boxKeyPair(seed: s2)
-        else { return nil }
+        guard var s1 = Sodium.deriveKey(master: seed, context: readContext, id: 1) else { return nil }
+        guard var s2 = Sodium.deriveKey(master: seed, context: readContext, id: 2) else { return nil }
+        defer {
+            s1.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+            s2.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+        }
+        guard let ro = Sodium.signKeyPair(seed: s1), var n = Sodium.boxKeyPair(seed: s2) else { return nil }
         readOnlyPublic = ro.publicKey
         readOnlySecret = ro.secretKey
         notificationSecret = Data(n.secretKey)
+        n.secretKey.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+    }
+
+    deinit {
+        readOnlySecret.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+        notificationSecret.resetBytes(in: 0..<notificationSecret.count)
     }
 }
+
+/// How far a session first seen may have its notice before the last wake,
+/// for a computer's clock behind the phone's (lib/hosted/notices.dart).
+let firstSightSlackMs: UInt64 = 5 * 60_000
+/// How many notices one fetch takes at most.
+let noticesMax = 512
+/// Values older than this are dropped from what is kept.
+let keptForMs: UInt64 = 30 * 86_400_000
 
 private func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }
 
@@ -137,6 +155,10 @@ public enum HostedFetch {
                 try await login(url: url, account: account, keys: keys, counter: held)
             }
             if let w = fetched.list { try take(w) }
+            // Welcome's newer list is kept even when the fetch then failed.
+            if fetched.failed {
+                return HostedWake(notes: [], highest: [:], newer: newer, removed: !listed(), failed: true)
+            }
             stored = fetched.notices
         } catch let LoginRefusal.refused(message, given) {
             // Taken off the account: the relay gives the newest list first.
@@ -145,27 +167,38 @@ public enum HostedFetch {
             throw FetchError.refused(message)
         }
         if !listed() { return HostedWake(notes: [], highest: [:], newer: newer, removed: true) }
+        let (notes, seen) = try openNotices(account: account, list: list, notificationSecret: keys.notificationSecret, stored: stored, highest: highest, since: since, now: now)
+        return HostedWake(notes: notes, highest: seen, newer: newer, removed: false)
+    }
+
+    /// The notes for `stored`, opened and checked against `list`: each above
+    /// the highest seen for its session, before this fetch or in it, so
+    /// that neither a replay nor an older one after a newer shows; and each
+    /// session's highest now. A session first seen shows only a notice made
+    /// after `since`, less firstSightSlackMs.
+    static func openNotices(account: HostedAccount, list: DeviceList, notificationSecret: Data, stored: [Pirc_V1alpha2_StoredNotice], highest: [String: UInt64], since: UInt64?, now: UInt64) throws -> ([Note], [String: UInt64]) {
         var notes: [Note] = []
         var seen: [String: UInt64] = [:]
         for n in stored where n.hasSession {
             let ref = n.session
             let sessionId = Data(ref.sessionID.utf8)
             let key = hex(ref.hostKey) + "/" + ref.sessionID
-            let had = highest[key] ?? seen[key]
+            let had = [highest[key], seen[key]].compactMap { $0 }.max()
             guard case .accepted(let ordering, let body) = try openNotice(
                 sealed: n.sealed,
                 slot: Slot(accountId: account.accountId, computerKey: ref.hostKey, sessionId: sessionId),
-                recipientSecretKey: keys.notificationSecret,
+                recipientSecretKey: notificationSecret,
                 list: list,
                 highest: had,
                 now: now
             ) else { continue }
+            // Above had, so only ever raised.
             seen[key] = ordering
-            if had == nil, since.map({ ordering <= $0 }) ?? true { continue }
+            if had == nil, since.map({ ordering <= ($0 > firstSightSlackMs ? $0 - firstSightSlackMs : 0) }) ?? true { continue }
             let title = [body.sessionName, body.computerName].filter { !$0.isEmpty }.joined(separator: " · ")
             notes.append(Note(session: Session.id(hostKey: ref.hostKey, instanceID: ref.instanceID), title: cut(title.isEmpty ? "PiRC" : title, 80), body: body.notice.isEmpty ? "Finished" : body.notice))
         }
-        return HostedWake(notes: notes, highest: seen, newer: newer, removed: !listed())
+        return (notes, seen)
     }
 
     /// The highest values as the app and the extension keep them
@@ -175,10 +208,12 @@ public enum HostedFetch {
         return f.compactMapValues { UInt64($0) }
     }
 
-    /// The kept values with these raised into them; none lowered.
-    public static func raise(_ json: String?, _ seen: [String: UInt64]) -> String {
+    /// The kept values with these raised into them; none lowered, and
+    /// those older than keptForMs before `now` dropped.
+    public static func raise(_ json: String?, _ seen: [String: UInt64], now: UInt64? = nil) -> String {
         var kept = highest(json)
         for (k, v) in seen where v > (kept[k] ?? 0) { kept[k] = v }
+        if let now, now > keptForMs { kept = kept.filter { $0.value >= now - keptForMs } }
         let out = kept.mapValues { String($0) }
         guard let d = try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]) else { return json ?? "{}" }
         return String(decoding: d, as: UTF8.self)
@@ -209,8 +244,9 @@ public enum HostedFetch {
         case refused(String, Data?)
     }
 
-    /// Logs in and fetches the notices; with Welcome's newer list, if any.
-    static func login(url: URL, account: HostedAccount, keys: ReadKeys, counter: UInt64) async throws -> (list: Data?, notices: [Pirc_V1alpha2_StoredNotice]) {
+    /// Logs in and fetches the notices; with Welcome's newer list, if any,
+    /// and whether the fetch after the login failed.
+    static func login(url: URL, account: HostedAccount, keys: ReadKeys, counter: UInt64) async throws -> (list: Data?, notices: [Pirc_V1alpha2_StoredNotice], failed: Bool) {
         let config = URLSessionConfiguration.ephemeral
         let urlSession = URLSession(configuration: config)
         defer { urlSession.invalidateAndCancel() }
@@ -258,7 +294,11 @@ public enum HostedFetch {
             }
         }
         let newer = welcome!.list.isEmpty ? nil : welcome!.list
-        return (newer, try await fetch(send: send, receive: receive))
+        do {
+            return (newer, try await fetch(send: send, receive: receive), false)
+        } catch {
+            return (newer, [], true)
+        }
     }
 
     static func fetch(send: (Pirc_V1alpha2_Frame.OneOf_Body) async throws -> Void, receive: () async throws -> Pirc_V1alpha2_Frame) async throws -> [Pirc_V1alpha2_StoredNotice] {
@@ -269,6 +309,7 @@ public enum HostedFetch {
             if case .error(let e) = f.body { throw FetchError.refused("\(e.code): \(e.message)") }
             guard case .notices(let n) = f.body, n.requestID == "n" else { continue }
             out += n.notices
+            if out.count > noticesMax { throw FetchError.unexpected("more notices than an account has") }
             if !n.more { return out }
         }
     }

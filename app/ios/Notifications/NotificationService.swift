@@ -96,7 +96,8 @@ final class NotificationService: UNNotificationServiceExtension {
     if let newer = wake.newer, let current = defaults.string(forKey: "hosted.v1"), let kept = HostedFetch.keepNewer(json: current, list: newer) {
       defaults.set(kept, forKey: "hosted.v1")
     }
-    defaults.set(HostedFetch.raise(defaults.string(forKey: "hosted.notices.v1"), wake.highest), forKey: "hosted.notices.v1")
+    if wake.failed { return nil }
+    defaults.set(HostedFetch.raise(defaults.string(forKey: "hosted.notices.v1"), wake.highest, now: now), forKey: "hosted.notices.v1")
     if let next = try? JSONEncoder().encode(Shown(numbers: shown.numbers, since: now)) { defaults.set(String(decoding: next, as: UTF8.self), forKey: "notices.v1") }
     guard let first = wake.notes.first else { return nil }
     for note in wake.notes.dropFirst() {

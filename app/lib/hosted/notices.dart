@@ -58,13 +58,72 @@ Future<Map<String, Int64>> _keptHighest(KeyValues values) async {
 
 // Each value only raised: one kept meanwhile by the other writer stays if
 // higher.
-Future<void> raiseHighest(KeyValues values, Map<String, Int64> seen) async {
+Future<void> raiseHighest(KeyValues values, Map<String, Int64> seen, {int? now}) async {
   final kept = await _keptHighest(values);
   for (final MapEntry(key: k, value: v) in seen.entries) {
     final had = kept[k];
     if (had == null || v > had) kept[k] = v;
   }
+  // A session's values from long ago go: its notices went with it.
+  if (now != null) kept.removeWhere((_, v) => v < Int64(now - keptFor.inMilliseconds));
   await values.set(noticesKey, jsonEncode({for (final MapEntry(key: k, value: v) in kept.entries) k: '$v'}));
+}
+
+/// How far a session first seen may have its notice before the last wake,
+/// for a computer's clock behind the phone's: a notice stays fetchable for
+/// ten minutes after its session ends, and one older than that is gone.
+const firstSightSlack = Duration(minutes: 5);
+
+/// How many notices one fetch takes at most: the relay keeps one per
+/// session, and an account has at most 256 sessions.
+const noticesMax = 512;
+
+/// Values older than this are dropped from what is kept.
+const keptFor = Duration(days: 30);
+
+/// The notes for [stored], opened and checked against the account's newest
+/// list: each above the highest seen for its session, before this fetch or
+/// in it, so that neither a replay nor an older one after a newer shows;
+/// and what each session's highest is now. A session first seen shows only
+/// a notice made after [since], less [firstSightSlack].
+({List<HostedNote> notes, Map<String, Int64> seen}) openNotices({
+  required E2e e2e,
+  required HostedAccount account,
+  required List<int> notificationSecret,
+  required List<StoredNotice> stored,
+  required Map<String, Int64> highest,
+  int? since,
+  required int now,
+}) {
+  final seen = <String, Int64>{};
+  final notes = <HostedNote>[];
+  for (final n in stored) {
+    if (!n.hasSession()) continue;
+    final ref = n.session;
+    final sessionId = utf8.encode(ref.sessionId);
+    if (!goodSessionId(sessionId)) continue;
+    final key = '${hexOf(ref.hostKey)}/${ref.sessionId}';
+    final kept = highest[key];
+    final now2 = seen[key];
+    final had = kept == null ? now2 : now2 == null || kept > now2 ? kept : now2;
+    final r = e2e.openNotice(
+      sealed: n.sealed,
+      slot: Slot(accountId: account.accountId, computerKey: ref.hostKey, sessionId: sessionId),
+      recipientSecretKey: notificationSecret,
+      list: account.newest.body,
+      highest: had,
+      now: Int64(now),
+    );
+    if (r.result != 'accepted') continue;
+    // Above had, so only ever raised.
+    final ordering = r.ordering!;
+    seen[key] = ordering;
+    if (had == null && (since == null || ordering <= Int64(since - firstSightSlack.inMilliseconds))) continue;
+    final t = r.body!;
+    final title = cut([t.sessionName, t.computerName].where((x) => x.isNotEmpty).join(' · '), 80);
+    notes.add(HostedNote(viewId(ref), title.isEmpty ? 'PiRC' : title, t.notice.isNotEmpty ? t.notice : 'Finished'));
+  }
+  return (notes: notes, seen: seen);
 }
 
 /// The notes for a wake: notices newer than any shown for their session;
@@ -119,6 +178,7 @@ Future<List<HostedNote>> hostedNotes({
         if (f.hasError()) throw NoticesUnreadable(f.error.message);
         if (!f.hasNotices() || f.notices.requestId != 'n') continue;
         stored.addAll(f.notices.notices);
+        if (stored.length > noticesMax) throw const NoticesUnreadable('more notices than an account has');
         if (!f.notices.more) break;
       }
     } on TimeoutException {
@@ -126,38 +186,16 @@ Future<List<HostedNote>> hostedNotes({
     } finally {
       await link.close();
     }
-    final highest = await _keptHighest(values);
     final secret = read.notification.secretKey.extractBytes();
-    final seen = <String, Int64>{};
-    final notes = <HostedNote>[];
+    final ({List<HostedNote> notes, Map<String, Int64> seen}) opened;
     try {
-      for (final n in stored) {
-        if (!n.hasSession()) continue;
-        final ref = n.session;
-        final sessionId = utf8.encode(ref.sessionId);
-        if (!goodSessionId(sessionId)) continue;
-        final key = '${hexOf(ref.hostKey)}/${ref.sessionId}';
-        final r = e2e.openNotice(
-          sealed: n.sealed,
-          slot: Slot(accountId: account.accountId, computerKey: ref.hostKey, sessionId: sessionId),
-          recipientSecretKey: secret,
-          list: account.newest.body,
-          highest: highest[key] ?? seen[key],
-          now: Int64(now),
-        );
-        if (r.result != 'accepted') continue;
-        final ordering = r.ordering!;
-        final firstSight = highest[key] == null && seen[key] == null;
-        seen[key] = ordering;
-        if (firstSight && (since == null || ordering <= Int64(since))) continue;
-        final t = r.body!;
-        final title = cut([t.sessionName, t.computerName].where((x) => x.isNotEmpty).join(' · '), 80);
-        notes.add(HostedNote(viewId(ref), title.isEmpty ? 'PiRC' : title, t.notice.isNotEmpty ? t.notice : 'Finished'));
-      }
+      opened = openNotices(e2e: e2e, account: account, notificationSecret: secret, stored: stored, highest: await _keptHighest(values), since: since, now: now);
     } finally {
       secret.fillRange(0, secret.length, 0);
     }
-    await raiseHighest(values, seen);
+    final seen = opened.seen;
+    final notes = opened.notes;
+    await raiseHighest(values, seen, now: now);
     return notes;
   } finally {
     read.dispose();

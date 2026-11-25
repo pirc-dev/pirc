@@ -170,7 +170,9 @@ a test verifier; `PIRC_HOSTED_ORIGIN` names another relay than the test
 one. On iOS the notification extension's hosted path is compiled in only
 when `ios/Flutter/Hosted.xcconfig` exists, holding
 `OTHER_SWIFT_FLAGS = $(inherited) -DPIRC_HOSTED`; write it for a hosted
-build and remove it after, since git ignores it.
+build and remove it after, since git ignores it. Runner's first build
+phase (`ios/store-build.sh`) stops a build whose `PIRC_HOSTED` and that
+file disagree.
 
 ## Android release
 

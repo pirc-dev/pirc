@@ -88,3 +88,46 @@ func aWakeAgainstTheRelay() async throws {
     let kept = try #require(HostedFetch.keepNewer(json: json, list: try version(4)))
     #expect(try HostedAccount(json: kept).newest == (try version(4)))
 }
+
+/// The two notices app/test/hosted_notices_test.dart captured from the
+/// relay, run through the opening in the orders a relay could give them.
+@Test(.enabled(if: ProcessInfo.processInfo.environment["PIRC_HOSTED_WAKE"] != nil))
+func replayedNoticesShowOnce() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["PIRC_HOSTED_WAKE"])
+    let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path)))
+    let f = try #require(raw as? [String: Any])
+    let captured = try #require(f["captured"] as? [String: [String: String]])
+    let json = try #require(f["account"] as? String)
+    let account = try HostedAccount(json: json)
+    let seedText = try #require(f["seed"] as? String)
+    let seed = try #require(Data(base64URL: seedText))
+    let keys = try #require(ReadKeys(seed: seed))
+    guard case .accepted(let list, _, _) = try checkList(bytes: account.newest, phoneKey: account.phoneKey, mode: .later, accountId: account.accountId, highest: 1) else {
+        Issue.record("the account's newest does not check out")
+        return
+    }
+    func stored(_ name: String) throws -> Pirc_V1alpha2_StoredNotice {
+        let c = try #require(captured[name])
+        return try Pirc_V1alpha2_StoredNotice.with {
+            $0.session = Pirc_V1alpha1_SessionRef.with {
+                $0.hostKey = Data(base64URL: c["hostKey"]!)!
+                $0.sessionID = c["sessionId"]!
+                $0.instanceID = c["instanceId"]!
+            }
+            $0.sealed = try #require(Data(base64URL: c["sealed"]!))
+        }
+    }
+    let one = try stored("one"), two = try stored("two")
+    let key = one.session.hostKey.map { String(format: "%02x", $0) }.joined() + "/" + one.session.sessionID
+    let now = UInt64(Date().timeIntervalSince1970 * 1000)
+    func run(_ s: [Pirc_V1alpha2_StoredNotice], _ highest: [String: UInt64]) throws -> ([Note], [String: UInt64]) {
+        try HostedFetch.openNotices(account: account, list: list, notificationSecret: keys.notificationSecret, stored: s, highest: highest, since: 0, now: now)
+    }
+    let low = [key: UInt64(1)]
+    #expect(try run([two, one], low).0.map(\.body) == ["Two"])
+    #expect(try run([one, one, one], low).0.map(\.body) == ["One"])
+    let inOrder = try run([one, two], low)
+    #expect(inOrder.0.map(\.body) == ["One", "Two"])
+    #expect(try run([two], inOrder.1).0.isEmpty)
+    #expect(try run([one], inOrder.1).0.isEmpty)
+}

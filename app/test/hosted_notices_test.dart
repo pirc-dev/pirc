@@ -15,6 +15,7 @@ import 'package:pirc/e2e/list.dart';
 import 'package:pirc/gen/pirc/v1alpha2/relay.pb.dart';
 import 'package:pirc/hosted/account.dart';
 import 'package:pirc/hosted/join.dart';
+import 'package:pirc/hosted/keys.dart';
 import 'package:pirc/hosted/link.dart';
 import 'package:pirc/hosted/notices.dart';
 import 'package:pirc/hosted/setup.dart';
@@ -105,6 +106,65 @@ void main() {
     expect(got.single.body, 'May I push?');
   }, skip: !ready);
 
+  // Two real notices of one session, as the relay kept them in turn.
+  Future<List<StoredNotice>> fetchRaw() async {
+    final seed = (await store.load(relayKey, KeyKind.read))!;
+    final read = ReadKeys.fromSeed(e2e.sodium, seed);
+    final a = open.account;
+    final l = await HostedLink.connect(origin: a.origin, publicKey: read.readOnly.publicKey, sign: (m) async => read.sign(m), accountId: a.accountId);
+    l.send(Frame(fetchNotices: FetchNotices(requestId: 'raw')));
+    final got = <StoredNotice>[];
+    await for (final f in l.frames) {
+      if (!f.hasNotices()) continue;
+      got.addAll(f.notices.notices);
+      if (!f.notices.more) break;
+    }
+    await l.close();
+    read.dispose();
+    return got;
+  }
+
+  test('a relay replaying, reordering or repeating notices shows each at most once, the newest last', () async {
+    computer.say('notice One');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final one = (await fetchRaw()).single;
+    computer.say('notice Two');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final two = (await fetchRaw()).single;
+    expect(two.sealed, isNot(one.sealed));
+    final seed = (await store.load(relayKey, KeyKind.read))!;
+    final read = ReadKeys.fromSeed(e2e.sodium, seed);
+    addTearDown(read.dispose);
+    final secret = read.notification.secretKey.extractBytes();
+    final key = '${_hex(one.session.hostKey)}/${one.session.sessionId}';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    ({List<HostedNote> notes, Map<String, Int64> seen}) run(List<StoredNotice> stored, Map<String, Int64> highest) =>
+        openNotices(e2e: e2e, account: open.account, notificationSecret: secret, stored: stored, highest: highest, since: 0, now: now);
+    // Both newer than what was seen: the newer first, the older after it refused.
+    final low = {key: Int64(1)};
+    final r1 = run([two, one], low);
+    expect(r1.notes.map((n) => n.body), ['Two']);
+    expect(r1.seen[key], isNot(lessThan(Int64(now - 60000))));
+    // One notice three times: once.
+    expect(run([one, one, one], low).notes.map((n) => n.body), ['One']);
+    // In order: both, the highest the newer's.
+    final r2 = run([one, two], low);
+    expect(r2.notes.map((n) => n.body), ['One', 'Two']);
+    // A session first seen, its notice a minute before the last wake by
+    // a computer's clock behind the phone's: shown; ten minutes before, not.
+    final oneAt = run([one], low).seen[key]!.toInt();
+    expect(openNotices(e2e: e2e, account: open.account, notificationSecret: secret, stored: [one], highest: {}, since: oneAt + 60000, now: now).notes.map((n) => n.body), ['One']);
+    expect(openNotices(e2e: e2e, account: open.account, notificationSecret: secret, stored: [one], highest: {}, since: oneAt + 600000, now: now).notes, isEmpty);
+    // Again after: nothing.
+    expect(run([two], r2.seen).notes, isEmpty);
+    expect(run([one], r2.seen).notes, isEmpty);
+    // For the Swift test.
+    File('${dir.path}/captured.json').writeAsStringSync(jsonEncode({
+      for (final (name, n) in [('one', one), ('two', two)])
+        name: {'hostKey': base64Url.encode(n.session.hostKey), 'sessionId': n.session.sessionId, 'instanceId': n.session.instanceId, 'sealed': base64Url.encode(n.sealed)},
+    }));
+  }, skip: !ready);
+
   // The iOS notification extension's Swift (PircNotices' HostedFetch), on
   // the same relay and computer: given the account as the app keeps it and
   // the read seed, it shows the same notice.
@@ -114,16 +174,19 @@ void main() {
     computer.say('notice Swift sees this');
     await Future<void>.delayed(const Duration(milliseconds: 500));
     final seed = (await store.load(relayKey, KeyKind.read))!;
+    final captured = File('${dir.path}/captured.json');
     final state = File('${dir.path}/wake.json')
       ..writeAsStringSync(jsonEncode({
         'account': await prefs.get(accountKey),
         'seed': base64Url.encode(seed).replaceAll('=', ''),
         'since': before,
         'expect': 'fix the build · build box: Swift sees this',
+        if (captured.existsSync()) 'captured': jsonDecode(captured.readAsStringSync()),
       }));
-    final r = await Process.run('swift', ['test', '--filter', 'aWakeAgainstTheRelay'], workingDirectory: 'ios/PircNotices', environment: {'PIRC_HOSTED_WAKE': state.path});
+    final r = await Process.run('swift', ['test', '--filter', 'aWakeAgainstTheRelay|replayedNoticesShowOnce'], workingDirectory: 'ios/PircNotices', environment: {'PIRC_HOSTED_WAKE': state.path});
     expect(r.exitCode, 0, reason: '${r.stdout}\n${r.stderr}');
     expect('${r.stdout}', contains('aWakeAgainstTheRelay() passed'));
+    expect('${r.stdout}', contains('replayedNoticesShowOnce() passed'));
   }, skip: !ready || !hasSwift ? 'needs go, node and swift on macOS' : false, timeout: const Timeout(Duration(minutes: 10)));
 
   test('the highest values are only raised', () async {
@@ -155,7 +218,8 @@ void main() {
     // As a phone that never saw this session: its notice is older than
     // the last wake.
     await prefs.set(noticesKey, null);
-    expect(await notes(since: DateTime.now().millisecondsSinceEpoch), isEmpty);
+    // Past the slack for a computer's clock behind the phone's.
+    expect(await notes(since: DateTime.now().millisecondsSinceEpoch + firstSightSlack.inMilliseconds + 60000), isEmpty);
   }, skip: !ready);
 
   test('through the wake, as Android runs it', () async {
@@ -202,13 +266,24 @@ void main() {
     addTearDown(theirs.dispose);
     // Before: the second phone reads notices.
     await prefs2.setRelay(relayKey);
-    expect(await hostedNotes(e2e: e2e, values: prefs2, store: store2, relay: relayKey, now: DateTime.now().millisecondsSinceEpoch), isEmpty);
+    final before = DateTime.now().millisecondsSinceEpoch - 1;
+    computer.say('notice For both phones');
+    List<HostedNote> seenBefore = [];
+    for (var i = 0; i < 50 && seenBefore.isEmpty; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      seenBefore = await hostedNotes(e2e: e2e, values: prefs2, store: store2, relay: relayKey, now: DateTime.now().millisecondsSinceEpoch, since: before);
+    }
+    expect(seenBefore.single.body, 'For both phones');
+    computer.say('notice After the removal');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     final body = Uint8List.sublistView(a.newest.bytes, signatureBytes);
     final without = e2e.makeList(phone: open.main.signing, devices: [for (final d in a.newest.body.devices) if (!sameDevice(d, theirs.account.self)) d], previousBody: body, accountId: a.accountId, counter: a.newest.counter + 1);
     link.send(Frame(publishList: PublishList(requestId: 'rm', list: without)));
     await frames.firstWhere((f) => f.hasDone()).timeout(const Duration(seconds: 10));
     await link.close();
-    expect(await hostedNotes(e2e: e2e, values: prefs2, store: store2, relay: relayKey, now: DateTime.now().millisecondsSinceEpoch), isEmpty);
+    expect(await hostedNotes(e2e: e2e, values: prefs2, store: store2, relay: relayKey, now: DateTime.now().millisecondsSinceEpoch, since: before), isEmpty);
     expect((await HostedAccount.load(e2e, prefs2))!.listed, isFalse);
   }, skip: !ready);
 }
+
+String _hex(List<int> b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
