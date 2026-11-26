@@ -231,6 +231,10 @@ func serveHosted(args []string) error {
 	if gateway == "" {
 		log.Info("no push gateway: phones registered for push are not woken (--push-gateway)")
 	}
+	for _, a := range sharedAddrs {
+		// The demo's deploy reads this line (pirc-setup's setup/pirc-demo-gra1.sh).
+		log.Info("shared address", "addr", a)
+	}
 	var verifier hosted.Verifier
 	switch {
 	case *testAtt:
