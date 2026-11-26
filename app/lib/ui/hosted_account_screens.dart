@@ -93,7 +93,7 @@ Future<bool> confirmDelete(BuildContext context, List<String> stores) async =>
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Delete this account?'),
         content: Text('The relay deletes the account and everything it holds of it, and every computer, phone and browser on it stops reaching the others. '
-            'Your sessions stay on your computers. This cannot be undone.'
+            'Your sessions stay on your computers. This cannot be undone. The relay\'s backups keep the deleted account for up to ten weeks.'
             '${stores.isEmpty ? '' : ' It does not cancel the subscription: cancel it in ${stores.join(' and in ')}.'}'),
         actions: [
           CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),

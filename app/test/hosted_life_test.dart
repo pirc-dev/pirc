@@ -161,6 +161,7 @@ void main() {
       await tester.pumpAndSettle();
       // Its one subscription has lapsed: no store to cancel in.
       expect(find.textContaining('This cannot be undone.'), findsOneWidget);
+      expect(find.textContaining('keep the deleted account for up to ten weeks'), findsOneWidget);
       expect(find.textContaining('cancel it in'), findsNothing);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();

@@ -1892,8 +1892,8 @@ built; steps 14 and 15 are not finished.
        - App Attest or Play Integrity when a phone creates or joins an
          account, and the subscription check above, per account. These
          stop abuse only; they never stand in for the device list.
-       - A domain of its own for the relay, not pirc.dev, so that abuse
-         reported against it does not reach the site or the push gateway.
+       - A hostname of its own for the relay, `relay.pirc.dev`, on a server
+         apart from the site and the push gateway.
        - Caps per account and per address, sized so that the server
          in 3 holds 500 accounts.
        - A switch that closes sign-ups (new accounts then need an invite
@@ -2724,6 +2724,18 @@ built; steps 14 and 15 are not finished.
        (`app/test/hosted_invite_test.dart`, and the screens in
        `hosted_app_test.dart`: the code asked, a wrong one said, a review
        code signing up with a store that would refuse a purchase).
+       Deleting an account removes every row of it, its attestations and
+       store IDs among them (`store.go`, DeleteAccount, all account
+       tables), and the app's confirmation says to cancel the store
+       subscription and that the relay's backups keep a deleted account
+       for up to ten weeks: the production relay's backups are kept 7
+       daily and 4 weekly, and the off-site copy keeps 30 daily snapshots
+       of them. The production relay is `wss://relay.pirc.dev`, a VM of
+       its own beside the test relay's on the shared server, refusing the
+       stores' sandbox purchases, its sign-ups by invite; the closed beta
+       stays on `wss://hosted-test.pirc.dev`, which takes them, and the
+       app's and the extension's built-in origin moves to relay.pirc.dev
+       with stage 8's release.
     7. **A closed beta**: sign-ups by invite code only, on TestFlight
        (whose outside testers bring Beta App Review) and Play's internal
        track; the extension on a prerelease channel (an npm dist-tag, which
