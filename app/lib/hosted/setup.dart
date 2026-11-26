@@ -72,6 +72,9 @@ Future<InviteCheck> checkInvite({required E2e e2e, required String origin, Strin
     try {
       link.send(Frame(checkInvite: CheckInvite(requestId: 'invite', inviteCode: code)));
       final f = await link.frames.firstWhere((f) => f.hasInviteChecked() || f.hasError()).timeout(const Duration(seconds: 15));
+      // A relay from before invites knows no CheckInvite: its sign-ups
+      // are open.
+      if (f.hasError() && f.error.code == ErrorCode.ERROR_CODE_PERMISSION_DENIED) return const InviteCheck(SignUpMode.SIGN_UP_MODE_OPEN);
       if (f.hasError()) throw SignUpFailed('the relay refused: ${f.error.message}');
       return InviteCheck(f.inviteChecked.mode, valid: f.inviteChecked.valid, review: f.inviteChecked.review);
     } finally {

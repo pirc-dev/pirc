@@ -810,24 +810,25 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   }
 
   // Makes an account on the hosted relay, this phone its phone.
-  Future<void> _signUp() async {
+  // [askCode]: asks for an invite or review code even when the relay's
+  // sign-ups are open, as a store's reviewer, given a review code, does.
+  Future<void> _signUp({bool askCode = false}) async {
     final origin = widget.hosted!;
     final e2e = await E2e.load();
     // Who may sign up, asked before anything is bought.
     final check = await checkInvite(e2e: e2e, origin: origin);
     var code = '';
     var review = false;
-    switch (check.mode) {
-      case SignUpMode.SIGN_UP_MODE_CLOSED:
-        throw 'Sign-ups are closed for now.';
-      case SignUpMode.SIGN_UP_MODE_INVITE:
-        final typed = await _askInvite();
-        if (typed == null || typed.trim().isEmpty) throw 'Signing up needs an invite code for now, so no account was made.';
-        final c = await checkInvite(e2e: e2e, origin: origin, code: typed);
-        if (!c.valid) throw 'That invite code is not valid, used up or expired.';
-        code = typed;
-        review = c.review;
-      default:
+    if (check.mode == SignUpMode.SIGN_UP_MODE_CLOSED) throw 'Sign-ups are closed for now.';
+    if (check.mode == SignUpMode.SIGN_UP_MODE_INVITE || askCode) {
+      final typed = await _askInvite();
+      if (typed == null || typed.trim().isEmpty) {
+        throw askCode ? 'No code given, so no account was made.' : 'Signing up needs an invite code for now, so no account was made.';
+      }
+      final c = await checkInvite(e2e: e2e, origin: origin, code: typed);
+      if (!c.valid) throw 'That invite code is not valid, used up or expired.';
+      code = typed;
+      review = c.review;
     }
     // A new account starts the store's trial or purchase before it is
     // made, and the store's proof goes in the sign-up (D1); a review
@@ -1208,7 +1209,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     } else if (_hostedOffered && _relay == null && !_ownRelay) {
       // Before the paywall: a hosted account is gated by its own
       // subscription, which the relay checks.
-      home = HostedStartScreen(signUp: _signUp, joinPhone: _joinPhone, ownRelay: () => setState(() => _ownRelay = true));
+      home = HostedStartScreen(signUp: _signUp, signUpWithCode: () => _signUp(askCode: true), joinPhone: _joinPhone, ownRelay: () => setState(() => _ownRelay = true));
     } else if (!_allowed && _relay == null && _joinFirst) {
       home = JoinScreen(join: _join, incoming: _incoming, scan: widget.scan ?? (widget.camera ? _scan : null), back: () => setState(() => _joinFirst = false));
     } else if (!_allowed) {

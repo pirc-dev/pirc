@@ -144,8 +144,11 @@ type Config struct {
 	// address, and the server, may have waiting at once.
 	MaxLookupsPerAccount int
 	MaxLookupsPerAddr    int
-	MaxWaitsPerAddr      int
-	MaxWaits             int
+	// Invite codes tried an hour from one address, by CheckInvite or
+	// SignUp.
+	MaxInviteTriesPerAddr int
+	MaxWaitsPerAddr       int
+	MaxWaits              int
 	// How long a connection logged in without an account may be in no
 	// wait or join before it is closed.
 	NoAccountIdle time.Duration
@@ -216,6 +219,7 @@ func (c *Config) defaults() error {
 	seti(&c.MaxChannelQueuedFrames, max(1, c.SendQueue/4))
 	seti(&c.MaxLookupsPerAccount, 20)
 	seti(&c.MaxLookupsPerAddr, 20)
+	seti(&c.MaxInviteTriesPerAddr, 30)
 	seti(&c.MaxWaitsPerAddr, 4)
 	seti(&c.MaxWaits, 1024)
 	seti(&c.MaxListPublishesPerAccount, 30)
@@ -251,6 +255,7 @@ type Server struct {
 	waker *waker
 	// List versions taken this hour, by account.
 	listPublishes     map[string]*counter
+	inviteTries       map[string]*counter
 	lastPublishesTrim time.Time
 	// Names published this hour, by account.
 	namesPublishes map[string]*counter
@@ -272,6 +277,7 @@ func New(cfg Config) (*Server, error) {
 		conns:          map[*conn]struct{}{},
 		joins:          newJoins(),
 		listPublishes:  map[string]*counter{},
+		inviteTries:    map[string]*counter{},
 		namesPublishes: map[string]*counter{},
 	}
 	if cfg.PushGateway != "" {

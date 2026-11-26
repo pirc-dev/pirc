@@ -1,6 +1,7 @@
 package hosted
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -17,10 +18,15 @@ import (
 // or the error.
 func (h *harness) trySignUp(phone dev, code string) ([]byte, *pb1.Error) {
 	h.t.Helper()
-	ta := newTestAccount(phone)
+	return h.trySignUpAs(newTestAccount(phone), code, testAttestation)
+}
+
+func (h *harness) trySignUpAs(ta *testAccount, code string, att *pb.Attestation) ([]byte, *pb1.Error) {
+	h.t.Helper()
+	phone := ta.phone
 	c, _ := h.login(phone, nil)
 	defer c.ws.Close(websocket.StatusNormalClosure, "")
-	c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "s", Attestation: testAttestation, InviteCode: code, List: ta.signed}}})
+	c.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "s", Attestation: att, InviteCode: code, List: ta.signed}}})
 	f := c.until("SignedUp", func(f *pb.Frame) bool { return f.GetSignedUp() != nil || f.GetError() != nil })
 	if e := f.GetError(); e != nil {
 		return nil, e
@@ -113,6 +119,14 @@ func TestReviewCode(t *testing.T) {
 	if e != nil {
 		t.Fatalf("review: %v", e)
 	}
+	// A second review account, which buys a subscription.
+	bought, e := h.trySignUp(newDev(3), rev)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if err := s.AddSubscription(bought, Subscription{Kind: "test", Ident: []byte("paid"), Expires: now.Add(365 * 24 * time.Hour)}, now.Add(ReviewFor+24*time.Hour).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
 	c, w := h.login(newDev(2), id)
 	if subs := w.GetSubscriptions(); len(subs) != 1 || subs[0].GetStore() != pb.SubscriptionStore_SUBSCRIPTION_STORE_REVIEW || !subs[0].GetEnds().AsTime().Equal(now.Add(ReviewFor)) {
 		t.Fatalf("subscriptions %v", subs)
@@ -127,15 +141,6 @@ func TestReviewCode(t *testing.T) {
 	if ok, _ := s.HasAccount(id); !ok {
 		t.Fatal("deleted before its end")
 	}
-	// A second review account, which bought a subscription meanwhile: kept
-	// at its end, the review subscription lapsed.
-	bought, e := h.trySignUp(newDev(3), rev)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if err := s.AddSubscription(bought, Subscription{Kind: "test", Ident: []byte("paid"), Expires: now.Add(365 * 24 * time.Hour)}, now.UnixMilli()); err != nil {
-		t.Fatal(err)
-	}
 	// At its end: deleted, its connections closed.
 	now = now.Add(2 * time.Hour)
 	h.srv.recheckDue(context.Background(), never)
@@ -145,8 +150,12 @@ func TestReviewCode(t *testing.T) {
 	if got := c.closedWith(); got != websocket.StatusPolicyViolation {
 		t.Fatalf("closed with %v", got)
 	}
+	// The one a bought subscription carries on: kept, its review lapsed.
 	if ok, _ := s.HasAccount(bought); !ok {
 		t.Fatal("an account a subscription carries on deleted")
+	}
+	if kept, _ := s.Subscriptions(bought); len(kept) != 2 || !kept[1].Lapsed && !kept[0].Lapsed {
+		t.Fatalf("subscriptions %+v", kept)
 	}
 	h.srv.recheckDue(context.Background(), never)
 	if ok, _ := s.HasAccount(bought); !ok {
@@ -189,5 +198,51 @@ func TestCheckInvite(t *testing.T) {
 	}
 	if e := ask("").GetError(); code(e) != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
 		t.Errorf("past the cap: %v", e)
+	}
+}
+
+// A sign-up tried again, its answer lost, whatever has changed since.
+func TestSignUpAgain(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.SignUps = SignUpsInvite })
+	s := h.cfg.Store
+	inv := NewInviteCode()
+	s.AddInvite(inv, false, 1, t0.Add(time.Hour), t0, "")
+	ta := newTestAccount(newDev(1))
+	id, e := h.trySignUpAs(ta, inv, testAttestation)
+	if e != nil {
+		t.Fatal(e)
+	}
+	// Its one use taken: the same key and version 1 still get the account.
+	if again, e := h.trySignUpAs(ta, inv, testAttestation); e != nil || !bytes.Equal(again, id) {
+		t.Fatalf("again: %x %v", again, e)
+	}
+	s.SetSignUps(SignUpsClosed)
+	if again, e := h.trySignUpAs(ta, "", testAttestation); e != nil || !bytes.Equal(again, id) {
+		t.Fatalf("again, closed: %x %v", again, e)
+	}
+}
+
+// Codes are tried only after the attestation, and at most
+// MaxInviteTriesPerAddr an hour from one address.
+func TestInviteTries(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.SignUps = SignUpsInvite; c.MaxInviteTriesPerAddr = 3 })
+	if _, e := h.trySignUpAs(newTestAccount(newDev(1)), "AAAA-BBBB-CCCC-DDDD", &pb.Attestation{}); code(e) != pb1.ErrorCode_ERROR_CODE_PERMISSION_DENIED {
+		t.Fatalf("no attestation: %v", e)
+	}
+	for i := 0; i < 3; i++ {
+		if _, e := h.trySignUp(newDev(byte(2+i)), "AAAA-BBBB-CCCC-DDDD"); code(e) != pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID {
+			t.Fatalf("try %d: %v", i, e)
+		}
+	}
+	if _, e := h.trySignUp(newDev(9), "AAAA-BBBB-CCCC-DDDD"); code(e) != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+		t.Fatalf("past the cap: %v", e)
+	}
+	c, _ := h.login(newDev(10), nil)
+	c.send(&pb.Frame{Body: &pb.Frame_CheckInvite{CheckInvite: &pb.CheckInvite{RequestId: "q", InviteCode: "x"}}})
+	if e := c.until("Error", func(f *pb.Frame) bool { return f.GetError() != nil || f.GetInviteChecked() != nil }).GetError(); code(e) != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+		t.Fatalf("CheckInvite past the cap: %v", e)
+	}
+	if _, err := h.cfg.Store.RevokeInvites("______"); err == nil {
+		t.Error("revoked by a pattern")
 	}
 }

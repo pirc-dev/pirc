@@ -114,6 +114,14 @@ void main() {
       ]);
     });
 
+    test('review access: until when, and ended once a subscription carried the account on', () {
+      final review = v2.AccountSubscription(store: v2.SubscriptionStore.SUBSCRIPTION_STORE_REVIEW, ends: _at(DateTime.utc(2027, 3, 20)));
+      final ended = v2.AccountSubscription(store: v2.SubscriptionStore.SUBSCRIPTION_STORE_REVIEW, ends: _at(DateTime.utc(2027, 2, 20)), lapsed: true);
+      expect(subscriptionLines([review], now), ["Review access until 20 Mar 2027, for the stores' reviewers: the account is deleted then, unless a subscription carries it on"]);
+      expect(subscriptionLines([ended], now), ['Review access ended on 20 Feb 2027']);
+      expect(storesOf([review], now), isEmpty);
+    });
+
     test('a purchase only when none carries the account on', () {
       final renewing = v2.AccountSubscription(store: v2.SubscriptionStore.SUBSCRIPTION_STORE_APP_STORE, ends: _at(DateTime.utc(2027, 3, 3)), renews: true);
       final ending = v2.AccountSubscription(store: v2.SubscriptionStore.SUBSCRIPTION_STORE_APP_STORE, ends: _at(DateTime.utc(2027, 3, 3)));

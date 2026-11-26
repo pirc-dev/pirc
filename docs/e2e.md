@@ -338,7 +338,8 @@ logs in, is given the newest version, and is then refused, so that it learns of 
   phone, as only it changes the list; and abuse reports go to an `abuse@` address.
 - Invite codes are 80 random bits, kept by their hash, each good for a number of accounts until it
   expires. The app asks the relay's mode, and whether a code may be used, before it buys anything
-  (`CheckInvite`). A review code, given only to the stores' reviewers, stands in for the
+  (`CheckInvite`), and a code can be given while sign-ups are open too. Codes are tried only after
+  a sign-up's attestation, and at most 30 an hour from one address. A review code, given only to the stores' reviewers, stands in for the
   subscription: its account has a review subscription for 30 days and is deleted when that ends,
   unless a subscription bought since carries it on.
 

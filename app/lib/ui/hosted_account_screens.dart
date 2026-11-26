@@ -62,7 +62,9 @@ bool live(AccountSubscription s, DateTime now) {
 List<String> subscriptionLines(List<AccountSubscription> subs, DateTime now) => [
       for (final s in subs)
         if (s.store == SubscriptionStore.SUBSCRIPTION_STORE_REVIEW)
-          'Review access${_ends(s) == null ? '' : ' until ${_date(_ends(s)!)}'}, for the stores\' reviewers: the account is deleted then'
+          live(s, now)
+              ? 'Review access${_ends(s) == null ? '' : ' until ${_date(_ends(s)!)}'}, for the stores\' reviewers: the account is deleted then, unless a subscription carries it on'
+              : 'Review access ended${_ends(s) == null ? '' : ' on ${_date(_ends(s)!)}'}'
         else if (live(s, now))
           '${s.trial ? 'Free trial' : 'Paid'} through ${_storeOf(s.store)}${_ends(s) == null ? '' : ' until ${_date(_ends(s)!)}'}${s.renews ? ', renewing' : ''}'
         else

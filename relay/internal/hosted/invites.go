@@ -110,8 +110,8 @@ func (s *Store) Invites() ([]Invite, error) {
 // RevokeInvites ends every code whose hash starts with prefix (hex, as
 // pirc-relay invites-hosted lists them); how many it ended.
 func (s *Store) RevokeInvites(prefix string) (int, error) {
-	if len(prefix) < 6 {
-		return 0, errors.New("give at least 6 characters of the code's ID")
+	if len(prefix) < 6 || strings.Trim(strings.ToLower(prefix), "0123456789abcdef") != "" {
+		return 0, errors.New("give at least 6 hex characters of the code's ID")
 	}
 	r, err := s.db.Exec(`DELETE FROM invites WHERE lower(hex(code_hash)) LIKE ? || '%'`, strings.ToLower(prefix))
 	if err != nil {
@@ -190,6 +190,9 @@ func (s *Server) checkInvite(c *conn, ci *pb.CheckInvite) *frameError {
 	if c.inviteChecks.Add(1) > maxInviteChecks {
 		return rateLimited("too many invite checks")
 	}
+	if ci.GetInviteCode() != "" && !s.countInviteTry(c) {
+		return rateLimited("too many invite codes tried from this address; try again in an hour")
+	}
 	mode, err := s.signUps()
 	if err != nil {
 		return internal()
@@ -210,4 +213,12 @@ func (s *Server) checkInvite(c *conn, ci *pb.CheckInvite) *frameError {
 	}
 	c.queue(&pb.Frame{Body: &pb.Frame_InviteChecked{InviteChecked: out}})
 	return nil
+}
+
+// countInviteTry counts a code tried, by CheckInvite or SignUp, from the
+// connection's address: false past MaxInviteTriesPerAddr an hour.
+func (s *Server) countInviteTry(c *conn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return count(s.inviteTries, c.addr, s.cfg.MaxInviteTriesPerAddr, s.cfg.Now())
 }

@@ -139,8 +139,13 @@ func OpenStore(dir string) (*Store, error) {
 		if _, err := t.Exec(schema + fmt.Sprintf("PRAGMA user_version = %d;", storeVersion)); err != nil {
 			return err
 		}
-		// A file from before held_lists has only each newest, and the
-		// version it was built on.
+		// A file from before held_lists: each newest, and the version it was
+		// built on. Once there are rows, there is nothing to seed: an admin
+		// command opening the live store writes nothing more.
+		var held int
+		if err := t.QueryRow(`SELECT count(*) FROM held_lists`).Scan(&held); err != nil || held > 0 {
+			return err
+		}
 		return seedHeld(t)
 	}); err != nil {
 		db.Close()
@@ -250,16 +255,23 @@ func seedHeld(t *sql.Tx) error {
 // device row and, when att is not nil, its attestation, in one
 // transaction.
 func (s *Store) CreateAccount(id []byte, l StoredList, att *Attested, nowMs int64) error {
-	return s.CreateAccountInvited(id, l, att, nowMs, "")
+	return s.CreateAccountInvited(id, l, att, nowMs, "", nil)
 }
 
 // CreateAccountInvited is CreateAccount using one of the invite code's
-// uses, when code is not empty, in the same transaction: errNoInvite
-// when it has none left.
-func (s *Store) CreateAccountInvited(id []byte, l StoredList, att *Attested, nowMs int64, code string) error {
+// uses, when code is not empty, and keeping sub, when not nil, in the
+// same transaction: errNoInvite when the code has no use left.
+func (s *Store) CreateAccountInvited(id []byte, l StoredList, att *Attested, nowMs int64, code string, sub *Subscription) error {
 	return s.tx(func(t *sql.Tx) error {
 		if code != "" {
 			if err := useInviteTx(t, code, time.UnixMilli(nowMs)); err != nil {
+				return err
+			}
+		}
+		if sub != nil {
+			// After the account's row below would do as well: the table has
+			// no foreign key.
+			if err := setSubscriptionIn(t, id, *sub, nowMs, ""); err != nil {
 				return err
 			}
 		}
@@ -474,11 +486,20 @@ func (s *Store) LapseSubscription(account []byte, sub Subscription, checkedMs in
 }
 
 func (s *Store) setSubscription(account []byte, sub Subscription, checkedMs int64, reason string) error {
+	return setSubscriptionIn(s.db, account, sub, checkedMs, reason)
+}
+
+// execer is a database or a transaction.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func setSubscriptionIn(db execer, account []byte, sub Subscription, checkedMs int64, reason string) error {
 	var expires int64
 	if !sub.Expires.IsZero() {
 		expires = sub.Expires.UnixMilli()
 	}
-	_, err := s.db.Exec(`INSERT INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason, lapsed_ms, renews)
+	_, err := db.Exec(`INSERT INTO subscriptions (account, kind, ident, expires_ms, trial, grace, sandbox, checked_ms, lapsed, reason, lapsed_ms, renews)
 		VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CASE WHEN ?9 THEN ?8 ELSE 0 END, ?11)
 		ON CONFLICT (account, kind, ident) DO UPDATE SET expires_ms = excluded.expires_ms, trial = excluded.trial, grace = excluded.grace,
 		  sandbox = excluded.sandbox, checked_ms = excluded.checked_ms, lapsed = excluded.lapsed, reason = excluded.reason,

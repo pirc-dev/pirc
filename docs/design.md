@@ -2713,7 +2713,11 @@ built; steps 14 and 15 are not finished.
        `--test-attestation`); invite codes made by `pirc-relay
        invite-hosted [--review] [--uses N] [--days D] [--note T]`, listed
        and revoked by `invites-hosted`; the app asks the mode and the code
-       before buying, and a review code's account skips the purchase
+       before buying ("I have a code" asks for one while sign-ups are
+       open, for a reviewer), and a review code's account skips the
+       purchase; a sign-up tried again is answered with its account
+       whatever the mode or the code's uses since; codes are tried only
+       after the attestation, 30 an hour from one address
        (`relay/internal/hosted/invites.go`, `app/lib/hosted/setup.dart`,
        checkInvite). Tested in Go (`invites_test.go`, the commands in
        `cmd/pirc-relay/hosted_test.go`) and against the Go relay

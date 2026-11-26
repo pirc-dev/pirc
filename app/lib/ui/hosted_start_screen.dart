@@ -6,10 +6,14 @@ import 'package:flutter/cupertino.dart';
 import 'look.dart';
 
 class HostedStartScreen extends StatefulWidget {
-  const HostedStartScreen({super.key, required this.signUp, required this.joinPhone, required this.ownRelay});
+  const HostedStartScreen({super.key, required this.signUp, required this.joinPhone, required this.ownRelay, this.signUpWithCode});
 
   /// Makes the account; throws with what to tell the person.
   final Future<void> Function() signUp;
+
+  /// Makes the account with an invite or review code asked first, when
+  /// the relay would not ask for one.
+  final Future<void> Function()? signUpWithCode;
 
   /// Shows this phone's code, for the account's phone to add, once the
   /// relay is reached; throws with what to tell the person.
@@ -66,6 +70,11 @@ class _HostedStartScreenState extends State<HostedStartScreen> {
             ),
             const SizedBox(height: 8),
             Text('No email and no password: this phone is the account.', textAlign: TextAlign.center, style: look.text(size: 13, color: look.secondary)),
+            if (widget.signUpWithCode != null)
+              CupertinoButton(
+                onPressed: _busy ? null : () => _run(widget.signUpWithCode!),
+                child: Text('I have a code', style: look.text(size: 15, color: look.accent)),
+              ),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 16), child: Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed))),
             const SizedBox(height: 28),
             CupertinoButton(

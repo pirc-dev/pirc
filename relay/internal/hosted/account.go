@@ -35,25 +35,26 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 		return e
 	}
 	id := r.Hash
-	// Who may sign up (invites.go): checked first and again when the
-	// account is made, which uses the code.
+	// A sign-up tried again, its answer lost: the account this key made
+	// with this version 1 is answered again, whatever the mode and
+	// however used the code is now.
+	if have, first, err := s.store.AccountOfPhone(c.key); err != nil {
+		return internal()
+	} else if have != nil {
+		return s.signedUpAgain(c, su, have, first)
+	}
+	// Who may sign up (invites.go): the mode first; the code once the
+	// attestation is checked, so that nothing else may try codes; its
+	// use when the account is made.
 	code := su.GetInviteCode()
 	mode, err := s.signUps()
 	if err != nil {
 		return internal()
 	}
-	review := false
 	switch {
 	case mode == SignUpsClosed:
 		return denied("sign-ups are closed")
-	case code != "":
-		if review, err = s.store.lookInvite(code, s.cfg.Now()); errors.Is(err, errNoInvite) {
-			s.log.Info("sign-up refused", "key", shortKey(c.key), "invite", "not valid")
-			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
-		} else if err != nil {
-			return internal()
-		}
-	case mode == SignUpsInvite:
+	case mode == SignUpsInvite && code == "":
 		return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: "sign-ups need an invite code"}
 	}
 	// Outside the lock: the real checks ask the stores.
@@ -61,6 +62,18 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 	if err != nil {
 		s.log.Info("sign-up refused", "key", shortKey(c.key), "kind", attestationKind(su.GetAttestation()), "err", err)
 		return denied("attestation refused: " + err.Error())
+	}
+	review := false
+	if code != "" {
+		if !s.countInviteTry(c) {
+			return rateLimited("too many invite codes tried from this address; try again in an hour")
+		}
+		if review, err = s.store.lookInvite(code, s.cfg.Now()); errors.Is(err, errNoInvite) {
+			s.log.Info("sign-up refused", "key", shortKey(c.key), "invite", "not valid")
+			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
+		} else if err != nil {
+			return internal()
+		}
 	}
 	var sub Subscription
 	if review {
@@ -83,18 +96,25 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 	case have == nil:
 		now := s.cfg.Now().UnixMilli()
 		l := StoredList{PhoneKey: c.key, Counter: r.Counter, Hash: r.Hash, Signed: su.GetList()}
-		if err := s.store.CreateAccountInvited(id, l, &att, now, code); errors.Is(err, errNoInvite) {
+		if err := s.store.CreateAccountInvited(id, l, &att, now, code, &sub); errors.Is(err, errNoInvite) {
 			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
 		} else if err != nil {
 			s.log.Error("cannot store an account", "err", err)
 			return internal()
 		}
-		if err := s.store.AddSubscription(id, sub, now); err != nil {
-			s.log.Error("cannot store a subscription", "err", err)
-		}
 		s.log.Info("account made", "account", shortKey(id), "attestation", att.Kind, "subscription", sub.Kind, "expires", sub.Expires, "trial", sub.Trial, "sandbox", sub.Sandbox, "invited", code != "")
 	}
 	c.queue(&pb.Frame{Body: &pb.Frame_SignedUp{SignedUp: &pb.SignedUp{RequestId: su.GetRequestId(), AccountId: id}}})
+	return nil
+}
+
+// signedUpAgain answers a sign-up from a key that made an account
+// already: SignedUp again for the same version 1, CONFLICT for another.
+func (s *Server) signedUpAgain(c *conn, su *pb.SignUp, have, first []byte) *frameError {
+	if !bytes.Equal(first, su.GetList()) {
+		return &frameError{code: pb1.ErrorCode_ERROR_CODE_CONFLICT, msg: "this key made an account with another version 1"}
+	}
+	c.queue(&pb.Frame{Body: &pb.Frame_SignedUp{SignedUp: &pb.SignedUp{RequestId: su.GetRequestId(), AccountId: have}}})
 	return nil
 }
 

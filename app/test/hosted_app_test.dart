@@ -180,6 +180,20 @@ void main() {
     await tester.pump(const Duration(minutes: 31));
   }, skip: !ready);
 
+  testWidgets('open sign-ups: a review code given through "I have a code", nothing bought', (tester) async {
+    final code = relay.cmd('invite-hosted', ['--review']);
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: relay.origin, attest: testAttest, subscription: _NoSubscription()));
+    await tester.pump();
+    await tester.tap(find.text('I have a code'));
+    await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
+    await tester.enterText(find.byType(CupertinoTextField), code);
+    await tester.tap(find.text('Continue'));
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready', reason: shown(tester));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
   testWidgets('a relay of one\'s own from the first screen, and back', (tester) async {
     await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest));
     await tester.pump();
