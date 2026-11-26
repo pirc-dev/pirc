@@ -1,9 +1,10 @@
 // A relay restored from an older copy lost versions of the list it had
 // taken. It takes a version built on one it never held, so the devices
 // that hold newer versions bring it back by giving theirs at login: the
-// phone its newest (hosted/sessions.dart), a computer its own
-// (extension/src/hosted.ts), even a version the phone signed and never
-// heard taken.
+// phone its newest (hosted/sessions.dart) and a removal it never heard
+// answered (app/hosted_devices.dart), a computer its own
+// (extension/src/hosted.ts).
+import 'dart:convert' show base64, base64Url;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -82,9 +83,9 @@ void main() {
     }
   }
 
-  // Signs up, keeps a copy of the relay's store at version 1, and joins
-  // two computers: versions 2 and 3.
-  Future<(HostedRelay, MemoryKeyStore, MemoryPrefs, Directory, TsComputer, TsComputer)> threeVersions() async {
+  // Signs up and joins two computers, versions 2 and 3, keeping a copy of
+  // the relay's store at version [kept].
+  Future<(HostedRelay, MemoryKeyStore, MemoryPrefs, Directory, TsComputer, TsComputer)> threeVersions({required int kept}) async {
     final relay = await relayOfItsOwn();
     final store = MemoryKeyStore();
     final prefs = MemoryPrefs();
@@ -92,14 +93,20 @@ void main() {
     open.dispose();
     await prefs.setRelay(hostedRelayKey(relay.origin));
     final backup = Directory('${relay.data.parent.path}/backup');
-    await relay.restart(() async {
-      final r = await Process.run('cp', ['-R', relay.data.path, backup.path]);
-      if (r.exitCode != 0) throw StateError('cp: ${r.stderr}');
-    });
+    Future<void> keep() => relay.restart(() async {
+          final r = await Process.run('cp', ['-R', relay.data.path, backup.path]);
+          if (r.exitCode != 0) throw StateError('cp: ${r.stderr}');
+        });
+    if (kept == 1) await keep();
     final one = await TsComputer.start(relay.origin);
     addTearDown(one.kill);
     await add(relay, store, prefs, await one.until((l) => l.startsWith('PIRC1')));
     await one.until((l) => l == 'status ready');
+    if (kept == 2) {
+      final mark = one.lines.length;
+      await keep();
+      await waitFor(() => one.lines.skip(mark).contains('status ready'), what: 'computer one back after the copy');
+    }
     final two = await TsComputer.start(relay.origin);
     addTearDown(two.kill);
     await add(relay, store, prefs, await two.until((l) => l.startsWith('PIRC1')));
@@ -115,14 +122,16 @@ void main() {
 
   // The phone's app on the account, as it runs: its newest given to the
   // relay at login when the relay is behind, newer ones taken.
-  Future<HostedAccount> run(HostedRelay relay, MemoryKeyStore store, MemoryPrefs prefs) async {
+  Future<(HostedAccount, AppHostedDevices)> runWith(HostedRelay relay, MemoryKeyStore store, MemoryPrefs prefs) async {
     final open = (await openAccount(e2e: e2e, store: store, values: prefs, relay: hostedRelayKey(relay.origin)))!;
     final run = HostedRun(e2e: e2e, open: open, toClient: (_) {}, relayState: (_) {}, values: prefs);
     addTearDown(run.dispose);
-    AppHostedDevices(e2e: e2e, run: run, values: prefs, counter: MemoryCounter());
+    final devices = AppHostedDevices(e2e: e2e, run: run, values: prefs, counter: MemoryCounter());
     run.start();
-    return open.account;
+    return (open.account, devices);
   }
+
+  Future<HostedAccount> run(HostedRelay relay, MemoryKeyStore store, MemoryPrefs prefs) async => (await runWith(relay, store, prefs)).$1;
 
   // The counter of the relay's newest, as a login's Welcome gives it.
   Future<Int64> relayCounter(OpenAccount open) async {
@@ -133,7 +142,7 @@ void main() {
   }
 
   test('a relay that lost versions the phone holds takes the phone\'s newest as it is', () async {
-    final (relay, store, prefs, backup, one, two) = await threeVersions();
+    final (relay, store, prefs, backup, one, two) = await threeVersions(kept: 1);
     final marks = [one.lines.length, two.lines.length];
     await restore(relay, backup);
 
@@ -155,10 +164,9 @@ void main() {
     }
   }, skip: !ready);
 
-  test('a removal the relay took and then lost comes back from a computer that holds it', () async {
-    final (relay, store, prefs, backup, one, two) = await threeVersions();
-    // The phone removes computer two, and the relay takes version 4, but
-    // the phone never hears it taken: its newest stays version 3.
+  // The phone removes computer two and the relay takes version 4, but the
+  // phone never hears it taken: its newest stays version 3.
+  Future<(OpenAccount, Uint8List)> removedUnheard(HostedRelay relay, MemoryKeyStore store, MemoryPrefs prefs, TsComputer one, TsComputer two) async {
     final open = (await openAccount(e2e: e2e, store: store, values: prefs, relay: hostedRelayKey(relay.origin)))!;
     addTearDown(open.dispose);
     final a = open.account;
@@ -173,21 +181,82 @@ void main() {
     await done.timeout(const Duration(seconds: 10));
     await link.close();
     await two.until((l) => l == 'status removed');
+    await one.until((l) => l == 'list 4');
+    return (open, v4);
+  }
+
+  test('a removal the relay took and then lost comes back from a computer that holds it, before the phone logs in', () async {
+    final (relay, store, prefs, backup, one, two) = await threeVersions(kept: 2);
+    final (open, v4) = await removedUnheard(relay, store, prefs, one, two);
     final mark = one.lines.length;
 
-    // The relay back at version 1, and the phone's app started with
-    // version 3 as its newest.
+    // The relay back at version 2, which computer one is on: it logs in
+    // and gives version 4, built on version 3, which the relay never held.
     await restore(relay, backup);
+    for (var i = 0; i < 100 && await relayCounter(open) < Int64(4); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(await relayCounter(open), Int64(4), reason: one.lines.skip(mark).join(' / '));
+
+    // Then the phone's app, with version 3 as its newest, takes it.
     final running = await run(relay, store, prefs);
     expect(running.newest.counter, Int64(3));
     for (var i = 0; i < 100 && running.newest.counter < Int64(4); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    // Version 4 everywhere, computer two not on it.
-    expect(running.newest.counter, Int64(4));
     expect(running.newest.bytes, v4);
     expect(await relayCounter(open), Int64(4));
     await waitFor(() => one.lines.skip(mark).contains('status ready'), what: 'computer one ready again: ${one.lines.skip(mark).join(' / ')}');
     expect(one.lines.skip(mark), isNot(anyOf(contains('status removed'), contains(startsWith('status conflict')))));
+  }, skip: !ready);
+
+  test('a removal the relay took and then lost comes back from the phone, which kept it unanswered', () async {
+    final (relay, store, prefs, backup, one, two) = await threeVersions(kept: 1);
+    final (open, v4) = await removedUnheard(relay, store, prefs, one, two);
+    // Kept as the app keeps a removal it did not hear answered; no
+    // computer that holds it comes back.
+    await prefs.set(unansweredListKey, base64.encode(v4));
+    one.kill();
+    await restore(relay, backup);
+
+    final running = await run(relay, store, prefs);
+    for (var i = 0; i < 100 && running.newest.counter < Int64(4); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(running.newest.bytes, v4);
+    expect(await relayCounter(open), Int64(4));
+    for (var i = 0; i < 50 && await prefs.get(unansweredListKey) != null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(await prefs.get(unansweredListKey), isNull);
+  }, skip: !ready);
+
+  test('a removal the relay did not answer is kept, nothing else signed meanwhile, and given at the next login', () async {
+    final (relay, store, prefs, _, one, two) = await threeVersions(kept: 1);
+    final (a, devices) = await runWith(relay, store, prefs);
+    final keys = (await openAccount(e2e: e2e, store: store, values: prefs, relay: hostedRelayKey(relay.origin)))!;
+    addTearDown(keys.dispose);
+    final twoKey = a.newest.body.devices.last.signingKey;
+    final oneKey = a.newest.body.devices[1].signingKey;
+    String text(List<int> k) => base64Url.encode(k).replaceAll('=', '');
+    expect(await relayCounter(keys), Int64(3));
+
+    // Removed while the relay is down: unanswered, kept.
+    await relay.restart(() async {
+      expect(await devices.remove(text(twoKey)), startsWith('The relay did not say'));
+      expect(await prefs.get(unansweredListKey), isNotNull);
+      expect(await devices.remove(text(oneKey)), contains('giving the relay a removal'));
+    });
+    for (var i = 0; i < 100 && a.newest.counter < Int64(4); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    expect(a.newest.counter, Int64(4));
+    bool listed(List<int> k) => a.newest.body.devices.any((d) => bytesEqual(d.signingKey, k));
+    expect(listed(twoKey), isFalse);
+    expect(listed(oneKey), isTrue);
+    expect(await relayCounter(keys), Int64(4));
+    await two.until((l) => l == 'status removed');
+    expect(await prefs.get(unansweredListKey), isNull);
+    expect(one.lines, isNot(contains('status removed')));
   }, skip: !ready);
 }

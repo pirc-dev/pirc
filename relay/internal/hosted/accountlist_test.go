@@ -210,7 +210,9 @@ func TestPublishListOverAGap(t *testing.T) {
 	h := newHarness(t, nil)
 	ta, phone, host, browser, p, hc, b, r := listAccount(h)
 	v2body := ta.body
-	ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient), entry(newDev(5), RoleComputer))
+	five := entry(newDev(5), RoleComputer)
+	ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient), five)
+	v3body := ta.body
 	v4 := ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient))
 	hc.send(publishFrame("h4", v4))
 	hc.done("h4")
@@ -222,14 +224,18 @@ func TestPublishListOverAGap(t *testing.T) {
 	if _, w := h.login(browser, ta.id); w.GetListCounter() != 4 {
 		t.Errorf("after the gap, %v", w)
 	}
-	fromV2 := sha256.Sum256(v2body)
-	l, _ := makeList(phone, &pb.ListBody{AccountId: ta.id, Counter: 5, PreviousHash: fromV2[:], Devices: ta.devices})
-	p.send(publishFrame("p5", l))
-	if l := p.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
-		t.Errorf("built on v2: List %x", l.List[:8])
-	}
-	if e := p.errorFor("p5"); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
-		t.Errorf("built on v2: %v", e)
+	// Built on v2, which the relay held; or on v3, which it never held
+	// but v4 was built on, putting back the computer v4 removed.
+	fromV2, fromV3 := sha256.Sum256(v2body), sha256.Sum256(v3body)
+	for name, prev := range map[string][]byte{"v2": fromV2[:], "v3": fromV3[:]} {
+		l, _ := makeList(phone, &pb.ListBody{AccountId: ta.id, Counter: 5, PreviousHash: prev, Devices: append(ta.devices, five)})
+		p.send(publishFrame(name, l))
+		if l := p.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
+			t.Errorf("built on %s: List %x", name, l.List[:8])
+		}
+		if e := p.errorFor(name); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
+			t.Errorf("built on %s: %v", name, e)
+		}
 	}
 }
 

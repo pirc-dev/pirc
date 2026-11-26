@@ -256,7 +256,7 @@ func (s *Server) takeListLocked(a *account, next *accountList) *frameError {
 			gone = append(gone, RemovedDevice{SigningKey: d.GetSigningKey(), BoxKey: d.GetBoxKey(), ReadOnlyKey: d.GetReadOnlyKey()})
 		}
 	}
-	stored := StoredList{PhoneKey: next.phoneKey, Counter: next.counter, Hash: next.hash, Signed: next.signed}
+	stored := StoredList{PhoneKey: next.phoneKey, Counter: next.counter, Hash: next.hash, Signed: next.signed, PreviousHash: next.body.GetPreviousHash()}
 	if err := s.store.TakeList(a.id, stored, gone, s.cfg.Now().UnixMilli()); err != nil {
 		s.log.Error("cannot store a list", "account", shortKey(a.id), "err", err)
 		return internal()

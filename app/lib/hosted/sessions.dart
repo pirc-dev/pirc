@@ -171,6 +171,11 @@ class HostedSessions implements ChannelEvents {
   // Opens given up before the relay answered them: closed when it does.
   final _abandoned = <String>{};
   var _publishes = 0;
+  final _welcomes = StreamController<void>.broadcast();
+
+  /// Each login that reached Welcome, after this phone's newest was given
+  /// to a relay behind it.
+  Stream<void> get welcomes => _welcomes.stream;
 
   bool get _connected => _ready && !_removed && !_disposed;
 
@@ -185,6 +190,7 @@ class HostedSessions implements ChannelEvents {
     _abandoned.clear();
     _failWaiting('stopped');
     _frames.close();
+    _welcomes.close();
     _boxSecret.fillRange(0, _boxSecret.length, 0);
   }
 
@@ -226,6 +232,7 @@ class HostedSessions implements ChannelEvents {
     // The relay is behind this phone: it is given the newer version.
     if (w.listCounter < account.newest.counter) _publish(account.newest.bytes);
     onWelcome?.call(w);
+    _welcomes.add(null);
     // Locked, the relay takes only a renewal or a deletion: the sessions
     // are not asked for.
     if (w.locked) return relayState(const RelayView(state: 'offline', reason: 'the account is locked'));

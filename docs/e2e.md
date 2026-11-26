@@ -128,16 +128,21 @@ this account, with a higher counter than its own. The signature is checked every
 is read, from the relay or from disk, and a list is refused by its size before it is parsed. One
 signer and one counter means no forks, withdrawals or races.
 
-**Each version built on the relay's.** The relay keeps the hash of every version it has held. It
-refuses a new version whose previous hash is that of an older one it held, answering with a
-conflict and sending the version it holds first. So two changes made from one version, the second
-of which would put back what the first removed, cannot both be taken, whatever client signed them:
-the phone builds the second again on the first. A version built on one the relay never held is
-taken. That is how a relay that lost versions it had taken (its store restored from an older
-copy) catches up: every device whose list is newer than the relay's gives the relay its own at
-login, the phone, another client or a computer, and the relay takes it over the gap. A removal the
-relay took and then lost comes back so from any computer that holds it, even when the phone never
-heard it taken.
+**Each version built on the relay's.** The relay keeps the hash of every version it has held,
+and of the version each was built on. It refuses a new version whose previous hash is one of
+those but not its newest's, answering with a conflict and sending the version it holds first. So
+two changes made from one version, the second of which would put back what the first removed,
+cannot both be taken, whatever client signed them: the phone builds the second again on the
+first. A version built on one the relay never knew is taken. That is how a relay that lost
+versions it had taken (its store restored from an older copy) catches up: every device whose list
+is newer than the relay's gives the relay its own at login, the phone, another client or a
+computer, and the relay takes it over the gap.
+
+A removal the phone published and never heard answered is kept by the phone, which signs nothing
+else until a later login has given it to the relay again: taken, it is the phone's newest;
+refused, the relay holds a newer version, which the phone takes. So a removal the relay took and
+then lost comes back from the phone, or sooner from a computer that holds it. An addition not
+heard answered is not kept; the phone reads the newest from the relay before it signs again.
 
 **Caps.** **Decided**: at most **10 clients**, the account's phone among them, and
 **50 computers**, in at most 16 KB, so that a list always fits in one Noise message. Every

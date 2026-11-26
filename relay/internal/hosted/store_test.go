@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
 
 // storeTables are every table of the store's layout.
@@ -107,7 +109,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	s.AddSubscription(id, Subscription{Kind: "test", Ident: []byte("s")}, 5)
 	s.db.Exec(`INSERT INTO names (account, recipient, sealed) VALUES (?, ?, x'00'), (?, ?, x'00')`, id, []byte("host box"), id, []byte("phone box"))
 
-	second := StoredList{PhoneKey: phone, Counter: 2, Hash: []byte("h2"), Signed: []byte("v2")}
+	second := StoredList{PhoneKey: phone, Counter: 2, Hash: []byte("h2"), Signed: []byte("v2"), PreviousHash: []byte("h1")}
 	if err := s.TakeList(id, second, []RemovedDevice{{SigningKey: host, BoxKey: []byte("host box")}}, 9); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +120,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	for _, h := range []struct {
 		account, hash []byte
 		want          bool
-	}{{id, id, true}, {id, []byte("h2"), true}, {id, other, false}, {other, []byte("h2"), false}} {
+	}{{id, id, true}, {id, []byte("h2"), true}, {id, []byte("h1"), true}, {id, other, false}, {other, []byte("h2"), false}} {
 		if got, err := s.Held(h.account, h.hash); err != nil || got != h.want {
 			t.Errorf("held %q in %x: %v %v", h.hash, h.account[:1], got, err)
 		}
@@ -175,7 +177,8 @@ func TestStoreSeedsHeld(t *testing.T) {
 	if err := s.CreateAccount(id, StoredList{PhoneKey: []byte("phone"), Counter: 1, Hash: id, Signed: []byte("v1")}, nil, 5); err != nil {
 		t.Fatal(err)
 	}
-	s.TakeList(id, StoredList{PhoneKey: []byte("phone"), Counter: 2, Hash: []byte("h2"), Signed: []byte("v2")}, nil, 6)
+	v3, _ := makeList(newDev(1), &pb.ListBody{AccountId: id, Counter: 3, PreviousHash: []byte("h2")})
+	s.TakeList(id, StoredList{PhoneKey: []byte("phone"), Counter: 3, Hash: []byte("h3"), Signed: v3}, nil, 6)
 	if _, err := s.db.Exec(`DELETE FROM held_lists`); err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +187,10 @@ func TestStoreSeedsHeld(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if ok, err := s.Held(id, []byte("h2")); err != nil || !ok {
-		t.Errorf("the newest not seeded: %v %v", ok, err)
+	for _, h := range []string{"h3", "h2"} {
+		if ok, err := s.Held(id, []byte(h)); err != nil || !ok {
+			t.Errorf("%s not seeded: %v %v", h, ok, err)
+		}
 	}
 	if ok, _ := s.Held(id, id); ok {
 		t.Error("an older version seeded from nowhere")

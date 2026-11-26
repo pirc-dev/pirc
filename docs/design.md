@@ -2633,18 +2633,21 @@ built; steps 14 and 15 are not finished.
             the text now comes first.
 
           After 9b, the relay refuses a version built on an older one it
-          held (docs/e2e.md, section 3), so the one-change-at-a-time rule
-          above no longer rests on the phone alone. It takes a version built
-          on one it never held, so a relay restored from an older store
+          held or knew of (docs/e2e.md, section 3), so the one-change-at-a-time
+          rule above no longer rests on the phone alone. It takes a version
+          built on one it never knew, so a relay restored from an older store
           catches up from whichever device logs in first with a newer list;
-          a computer now gives its own at login, as clients did. Tested in
-          Go (built on an older version: refused, the relay's sent first;
-          over a gap: taken; a store from before the hashes were kept seeded
-          with each newest) and against the Go relay restored to an older
-          store (`app/test/hosted_relay_behind_test.dart`): the phone's
-          newest taken as it is, and a removal the phone never heard taken
-          brought back by the computer that holds it, the removed computer
-          staying off.
+          a computer now gives its own at login, as clients did, and the
+          phone keeps a removal it did not hear answered and gives it at its
+          next login. Tested in Go (built on an older version, or on the one
+          a version taken over a gap was built on: refused, the relay's sent
+          first; over a gap: taken; a store from before the hashes were kept
+          seeded with each newest and its parent) and against the Go relay
+          (`app/test/hosted_relay_behind_test.dart`): restored to an older
+          store, the phone's newest taken as it is, and a removal the phone
+          never heard taken brought back by a computer that holds it, or by
+          the phone alone; and a removal made while the relay was down kept,
+          nothing else signed meanwhile, and given at the next login.
 
        **Decisions for the app**:
        - *What gates a hosted phone* (D1): the account, as the relay

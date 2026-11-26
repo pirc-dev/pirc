@@ -4,7 +4,7 @@
 // account's newest, and names given and sealed (hosted/names.dart); and
 // the account's life: renewing through the store, deleting the account.
 import 'dart:async';
-import 'dart:convert' show base64Url;
+import 'dart:convert' show base64, base64Url;
 import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
@@ -18,11 +18,16 @@ import '../hosted/join.dart';
 import '../hosted/names.dart';
 import '../hosted/setup.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart' as v2;
+import '../gen/pirc/v1alpha1/common.pbenum.dart' show ErrorCode;
 import '../hosted/sessions.dart' show HostedRefusal;
 import '../ui/hosted_account_screens.dart';
 import '../ui/hosted_devices.dart';
 import 'store.dart';
 import '../ui/hosted_join_screens.dart';
+
+/// A removal this phone published and never heard answered, kept until a
+/// later login gives it to the relay again (base64).
+const unansweredListKey = 'hosted.list.unanswered';
 
 String _keyText(List<int> b) => base64Url.encode(b).replaceAll('=', '');
 
@@ -77,6 +82,38 @@ class _Rereading implements DeviceAdder {
 class AppHostedDevices implements HostedDevices {
   AppHostedDevices({required this.e2e, required this.run, required this.values, required this.counter, this.scan}) {
     unawaited(keptNames(values).then((n) => _kept = n));
+    unawaited(values.get(unansweredListKey).then((v) => _held = _held || v != null));
+    run.sessions.welcomes.listen((_) => unawaited(_exclusive(_giveUnanswered)));
+  }
+
+  // A removal kept unanswered: nothing else is signed until it is given.
+  var _held = false;
+
+  // The removal the relay may have taken and then lost (restored from an
+  // older copy), given again: taken, it is this phone's newest; refused,
+  // the relay holds a version that overtook it, which this phone has
+  // taken from the relay's Welcome or List.
+  Future<void> _giveUnanswered() async {
+    final kept = await values.get(unansweredListKey);
+    if (kept == null) {
+      _held = false;
+      return;
+    }
+    final list = base64.decode(kept);
+    final id = run.sessions.requestId('again');
+    try {
+      await run.sessions.request(id, v2.Frame(publishList: v2.PublishList(requestId: id, list: list)));
+      await _account.take(list);
+    } on HostedRefusal catch (e) {
+      // Too many versions this hour: the next login tries again.
+      if (e.code == ErrorCode.ERROR_CODE_RATE_LIMITED) return;
+      debugPrint('hosted: the removal kept was refused: ${e.message}');
+    } on Object {
+      return;
+    }
+    await values.set(unansweredListKey, null);
+    _held = false;
+    await _sealNamesAgain();
   }
 
   Map<String, String> _kept = {};
@@ -103,6 +140,7 @@ class AppHostedDevices implements HostedDevices {
   }
 
   String? _blocked() {
+    if (_held) return 'PiRC is giving the relay a removal it did not hear answered; try again in a moment.';
     final at = _unansweredAt;
     if (at == null) return null;
     if (run.conn.logins > at && run.conn.current is HostedReady) {
@@ -223,12 +261,20 @@ class AppHostedDevices implements HostedDevices {
       return 'The relay refused: ${e.message}';
     } on Object {
       // Unanswered: perhaps taken. The phone reads the newest again before
-      // it signs anything else.
+      // it signs anything else, and gives this again at its next login, so
+      // that a relay that took it and then lost it has it.
+      _held = true;
+      await values.set(unansweredListKey, base64.encode(list));
       _unanswered();
       return 'The relay did not say whether it took the change. Look again once PiRC has connected.';
     }
     await a.take(list);
-    // The names, sealed again without it.
+    await _sealNamesAgain();
+    return null;
+  }
+
+  // The names, sealed again for the devices of the newest.
+  Future<void> _sealNamesAgain() async {
     _kept = await keptNames(values);
     if (_kept.isNotEmpty) {
       try {
@@ -238,7 +284,6 @@ class AppHostedDevices implements HostedDevices {
         debugPrint('hosted: names not sealed again: $e');
       }
     }
-    return null;
   }
 }
 

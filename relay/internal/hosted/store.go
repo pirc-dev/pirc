@@ -14,7 +14,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite"
+
+	pb "pirc.dev/relay/internal/pb/pirc/v1alpha2"
 )
 
 // storeVersion is the layout's PRAGMA user_version. A file with tables and
@@ -38,8 +41,9 @@ CREATE TABLE IF NOT EXISTS lists (
   taken_ms INTEGER NOT NULL
 );
 -- The hash of every version of each account's list the relay has held,
--- the newest's included: a version built on one of these but not on the
--- newest would undo what came after it.
+-- the newest's included, and of the version each was built on: a version
+-- built on one of these but not on the newest would undo what came after
+-- it.
 CREATE TABLE IF NOT EXISTS held_lists (
   account BLOB NOT NULL,
   hash BLOB NOT NULL,
@@ -120,9 +124,9 @@ func OpenStore(dir string) (*Store, error) {
 		if _, err := t.Exec(schema + fmt.Sprintf("PRAGMA user_version = %d;", storeVersion)); err != nil {
 			return err
 		}
-		// A file from before held_lists has only each newest.
-		_, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) SELECT account, hash FROM lists`)
-		return err
+		// A file from before held_lists has only each newest, and the
+		// version it was built on.
+		return seedHeld(t)
 	}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("%s: %w", path, err)
@@ -184,12 +188,47 @@ func (s *Store) tx(f func(*sql.Tx) error) error {
 	return t.Commit()
 }
 
-// StoredList is an account's newest list as the store has it.
+// StoredList is an account's newest list as the store has it, and the
+// hash of the version it was built on, none for version 1.
 type StoredList struct {
-	PhoneKey []byte
-	Counter  uint64
-	Hash     []byte
-	Signed   []byte
+	PhoneKey     []byte
+	Counter      uint64
+	Hash         []byte
+	Signed       []byte
+	PreviousHash []byte
+}
+
+// seedHeld puts each account's newest, and the version it was built on,
+// in held_lists.
+func seedHeld(t *sql.Tx) error {
+	rows, err := t.Query(`SELECT account, hash, signed FROM lists`)
+	if err != nil {
+		return err
+	}
+	type held struct{ account, hash []byte }
+	var hs []held
+	for rows.Next() {
+		var account, hash, signed []byte
+		if err := rows.Scan(&account, &hash, &signed); err != nil {
+			rows.Close()
+			return err
+		}
+		hs = append(hs, held{account, hash})
+		var body pb.ListBody
+		if len(signed) > ListSignatureBytes && proto.Unmarshal(signed[ListSignatureBytes:], &body) == nil && len(body.GetPreviousHash()) > 0 {
+			hs = append(hs, held{account, body.GetPreviousHash()})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, h := range hs {
+		if _, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) VALUES (?, ?)`, h.account, h.hash); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CreateAccount makes an account with its list's version 1, the phone's
@@ -280,8 +319,13 @@ func (s *Store) TakeList(account []byte, l StoredList, removed []RemovedDevice, 
 		if n, err := r.RowsAffected(); err != nil || n != 1 {
 			return fmt.Errorf("hosted: no older list to replace (%d, %v)", n, err)
 		}
-		if _, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) VALUES (?, ?)`, account, l.Hash); err != nil {
-			return err
+		for _, h := range [][]byte{l.Hash, l.PreviousHash} {
+			if len(h) == 0 {
+				continue
+			}
+			if _, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) VALUES (?, ?)`, account, h); err != nil {
+				return err
+			}
 		}
 		for _, d := range removed {
 			for _, q := range []struct {
