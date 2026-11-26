@@ -38,7 +38,7 @@ func TestStoreLayout(t *testing.T) {
 	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != storeVersion {
 		t.Fatalf("user_version %d %v", v, err)
 	}
-	if got := strings.Join(storeTables(t, s), " "); got != "accounts attestations devices lists names removed subscriptions" {
+	if got := strings.Join(storeTables(t, s), " "); got != "accounts attestations devices held_lists lists names removed subscriptions" {
 		t.Errorf("tables %s", got)
 	}
 	s.Close()
@@ -114,6 +114,15 @@ func TestStoreRoundTrip(t *testing.T) {
 	if l, ok, err := s.List(id); err != nil || !ok || l.Counter != 2 || string(l.Signed) != "v2" || string(l.Hash) != "h2" || !bytes.Equal(l.PhoneKey, phone) {
 		t.Errorf("list %v %v %v", l, ok, err)
 	}
+	// Every version held, by hash, per account.
+	for _, h := range []struct {
+		account, hash []byte
+		want          bool
+	}{{id, id, true}, {id, []byte("h2"), true}, {id, other, false}, {other, []byte("h2"), false}} {
+		if got, err := s.Held(h.account, h.hash); err != nil || got != h.want {
+			t.Errorf("held %q in %x: %v %v", h.hash, h.account[:1], got, err)
+		}
+	}
 	// Not over a version as new.
 	if err := s.TakeList(id, second, nil, 9); err == nil {
 		t.Error("took counter 2 twice")
@@ -152,6 +161,34 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if ok, _ := s.HasAccount(other); !ok {
 		t.Error("the other account went too")
+	}
+}
+
+// A file made before held_lists has each account's newest put there.
+func TestStoreSeedsHeld(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := bytes.Repeat([]byte{1}, 32)
+	if err := s.CreateAccount(id, StoredList{PhoneKey: []byte("phone"), Counter: 1, Hash: id, Signed: []byte("v1")}, nil, 5); err != nil {
+		t.Fatal(err)
+	}
+	s.TakeList(id, StoredList{PhoneKey: []byte("phone"), Counter: 2, Hash: []byte("h2"), Signed: []byte("v2")}, nil, 6)
+	if _, err := s.db.Exec(`DELETE FROM held_lists`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if s, err = OpenStore(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if ok, err := s.Held(id, []byte("h2")); err != nil || !ok {
+		t.Errorf("the newest not seeded: %v %v", ok, err)
+	}
+	if ok, _ := s.Held(id, id); ok {
+		t.Error("an older version seeded from nowhere")
 	}
 }
 

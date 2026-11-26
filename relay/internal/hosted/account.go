@@ -198,13 +198,22 @@ func (s *Server) publishList(c *conn, p *pb.PublishList) *frameError {
 		s.log.Info("list refused", "account", shortKey(a.id), "key", shortKey(c.key), "list", r.Result, "reason", r.Reason)
 		return e
 	}
-	// Built on the version held: one built on an older one would undo
-	// what the versions between changed. The publisher gets the version
-	// held, first, to build on.
-	if !bytes.Equal(r.List.GetPreviousHash(), cur.hash) {
-		s.log.Info("list not built on the relay's", "account", shortKey(a.id), "key", shortKey(c.key), "counter", r.Counter, "held", cur.counter)
-		c.queue(listFrameOf(cur))
-		return &frameError{code: pb1.ErrorCode_ERROR_CODE_CONFLICT, msg: "not built on the relay's list"}
+	// Built on the version held, or on one the relay never held: a relay
+	// restored from an older copy lost versions, which a device brings
+	// back by giving the newest it has. One built on an older version the
+	// relay held would undo what the versions after it changed; the
+	// publisher gets the version held, first, to build on.
+	if prev := r.List.GetPreviousHash(); !bytes.Equal(prev, cur.hash) {
+		held, err := s.store.Held(a.id, prev)
+		if err != nil {
+			return internal()
+		}
+		if held {
+			s.log.Info("list built on an older one", "account", shortKey(a.id), "key", shortKey(c.key), "counter", r.Counter, "held", cur.counter)
+			c.queue(listFrameOf(cur))
+			return &frameError{code: pb1.ErrorCode_ERROR_CODE_CONFLICT, msg: "built on an older list than the relay's"}
+		}
+		s.log.Info("list built on one the relay never held", "account", shortKey(a.id), "key", shortKey(c.key), "counter", r.Counter, "held", cur.counter)
 	}
 	if !count(s.listPublishes, string(a.id), s.cfg.MaxListPublishesPerAccount, now) {
 		return rateLimited("too many list versions; try again in an hour")

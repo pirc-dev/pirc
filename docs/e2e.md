@@ -128,13 +128,16 @@ this account, with a higher counter than its own. The signature is checked every
 is read, from the relay or from disk, and a list is refused by its size before it is parsed. One
 signer and one counter means no forks, withdrawals or races.
 
-**Each version built on the relay's.** The relay takes a new version only if its previous hash is
-the hash of the version it holds; otherwise it answers with a conflict and sends the version it
-holds first. So two changes made from one version, the second of which would put back what the
-first removed, cannot both be taken, whatever client signed them: the phone builds the second
-again on the first. A relay that lost versions it had taken (its store restored from an older
-copy) refuses the phone's newest at its next login, and the phone signs a new version with the
-newest's devices on top of the relay's, so the account does not stay at the older version.
+**Each version built on the relay's.** The relay keeps the hash of every version it has held. It
+refuses a new version whose previous hash is that of an older one it held, answering with a
+conflict and sending the version it holds first. So two changes made from one version, the second
+of which would put back what the first removed, cannot both be taken, whatever client signed them:
+the phone builds the second again on the first. A version built on one the relay never held is
+taken. That is how a relay that lost versions it had taken (its store restored from an older
+copy) catches up: every device whose list is newer than the relay's gives the relay its own at
+login, the phone, another client or a computer, and the relay takes it over the gap. A removal the
+relay took and then lost comes back so from any computer that holds it, even when the phone never
+heard it taken.
 
 **Caps.** **Decided**: at most **10 clients**, the account's phone among them, and
 **50 computers**, in at most 16 KB, so that a list always fits in one Noise message. Every

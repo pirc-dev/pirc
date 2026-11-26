@@ -94,6 +94,7 @@ func TestPublishList(t *testing.T) {
 	h := newHarness(t, nil)
 	ta, phone, host, browser, p, hc, b, r := listAccount(h)
 	id := ta.id
+	v2body := ta.body
 
 	// From a client that is not the phone: taken, Done to it, List to
 	// every other connection.
@@ -147,11 +148,12 @@ func TestPublishList(t *testing.T) {
 	if e := b.errorFor("forged"); e.Code != pb1.ErrorCode_ERROR_CODE_INVALID {
 		t.Errorf("forged: %v", e)
 	}
-	// Newer, but built on the version before the relay's (a second change
-	// made from v3 would undo v4's), or on one the relay never had:
-	// CONFLICT and the relay's, to build on.
+	// Newer, but built on a version the relay held before its own (a
+	// second change made from v3 would undo v4's): CONFLICT and the
+	// relay's, to build on.
 	fromV3 := sha256.Sum256(v3[ListSignatureBytes:])
-	for name, prev := range map[string][]byte{"stale": fromV3[:], "unknown": bytes.Repeat([]byte{7}, 32)} {
+	fromV2 := sha256.Sum256(v2body)
+	for name, prev := range map[string][]byte{"stale": fromV3[:], "older": fromV2[:]} {
 		l, _ := makeList(phone, &pb.ListBody{AccountId: id, Counter: 5, PreviousHash: prev, Devices: ta.devices})
 		b.send(publishFrame(name, l))
 		if l := b.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
@@ -201,6 +203,36 @@ func TestPublishList(t *testing.T) {
 
 // A version is committed before anyone is told of it: a store that
 // cannot take it leaves every device as it was.
+// A relay restored from an older copy lost versions: a device gives the
+// newest it has, built on one the relay never held, and the relay takes
+// it; one built on a version the relay held before its own is refused.
+func TestPublishListOverAGap(t *testing.T) {
+	h := newHarness(t, nil)
+	ta, phone, host, browser, p, hc, b, r := listAccount(h)
+	v2body := ta.body
+	ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient), entry(newDev(5), RoleComputer))
+	v4 := ta.next(phoneEntry(phone), entry(host, RoleComputer), entry(browser, RoleClient))
+	hc.send(publishFrame("h4", v4))
+	hc.done("h4")
+	for _, c := range []*client{p, b, r} {
+		if l := c.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
+			t.Errorf("List %x", l.List[:8])
+		}
+	}
+	if _, w := h.login(browser, ta.id); w.GetListCounter() != 4 {
+		t.Errorf("after the gap, %v", w)
+	}
+	fromV2 := sha256.Sum256(v2body)
+	l, _ := makeList(phone, &pb.ListBody{AccountId: ta.id, Counter: 5, PreviousHash: fromV2[:], Devices: ta.devices})
+	p.send(publishFrame("p5", l))
+	if l := p.until("List", isList).GetList(); !bytes.Equal(l.List, v4) {
+		t.Errorf("built on v2: List %x", l.List[:8])
+	}
+	if e := p.errorFor("p5"); e.Code != pb1.ErrorCode_ERROR_CODE_CONFLICT {
+		t.Errorf("built on v2: %v", e)
+	}
+}
+
 func TestPublishListCommitFirst(t *testing.T) {
 	h := newHarness(t, nil)
 	ta, phone, host, _, p, hc, b, _ := listAccount(h)

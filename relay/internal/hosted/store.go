@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS lists (
   signed BLOB NOT NULL,
   taken_ms INTEGER NOT NULL
 );
+-- The hash of every version of each account's list the relay has held,
+-- the newest's included: a version built on one of these but not on the
+-- newest would undo what came after it.
+CREATE TABLE IF NOT EXISTS held_lists (
+  account BLOB NOT NULL,
+  hash BLOB NOT NULL,
+  PRIMARY KEY (account, hash)
+);
 -- The account's phone's names, sealed to each client's box key.
 CREATE TABLE IF NOT EXISTS names (
   account BLOB NOT NULL,
@@ -109,7 +117,11 @@ func OpenStore(dir string) (*Store, error) {
 		if err := checkVersion(t); err != nil {
 			return err
 		}
-		_, err := t.Exec(schema + fmt.Sprintf("PRAGMA user_version = %d;", storeVersion))
+		if _, err := t.Exec(schema + fmt.Sprintf("PRAGMA user_version = %d;", storeVersion)); err != nil {
+			return err
+		}
+		// A file from before held_lists has only each newest.
+		_, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) SELECT account, hash FROM lists`)
 		return err
 	}); err != nil {
 		db.Close()
@@ -191,6 +203,9 @@ func (s *Store) CreateAccount(id []byte, l StoredList, att *Attested, nowMs int6
 		if _, err := t.Exec(`INSERT INTO lists (account, phone_key, counter, hash, signed, taken_ms) VALUES (?, ?, ?, ?, ?, ?)`, id, l.PhoneKey, int64(l.Counter), l.Hash, l.Signed, nowMs); err != nil {
 			return err
 		}
+		if _, err := t.Exec(`INSERT INTO held_lists (account, hash) VALUES (?, ?)`, id, l.Hash); err != nil {
+			return err
+		}
 		if _, err := t.Exec(`INSERT INTO devices (account, device) VALUES (?, ?)`, id, l.PhoneKey); err != nil {
 			return err
 		}
@@ -238,6 +253,14 @@ func (s *Store) List(account []byte) (l StoredList, ok bool, err error) {
 	return l, err == nil, err
 }
 
+// Held says whether the relay has held a version of the account's list
+// with this hash.
+func (s *Store) Held(account, hash []byte) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM held_lists WHERE account = ? AND hash = ?`, account, hash).Scan(&n)
+	return n > 0, err
+}
+
 // RemovedDevice is a device a version removed: its signing key, its
 // box key, and a phone's read-only key.
 type RemovedDevice struct {
@@ -256,6 +279,9 @@ func (s *Store) TakeList(account []byte, l StoredList, removed []RemovedDevice, 
 		}
 		if n, err := r.RowsAffected(); err != nil || n != 1 {
 			return fmt.Errorf("hosted: no older list to replace (%d, %v)", n, err)
+		}
+		if _, err := t.Exec(`INSERT OR IGNORE INTO held_lists (account, hash) VALUES (?, ?)`, account, l.Hash); err != nil {
+			return err
 		}
 		for _, d := range removed {
 			for _, q := range []struct {
@@ -484,7 +510,7 @@ func (s *Store) SubscriptionsDue(nowMs int64) ([]KeptSubscription, error) {
 }
 
 // accountTables are every table with an account column.
-var accountTables = []string{"lists", "names", "removed", "devices", "attestations", "subscriptions"}
+var accountTables = []string{"lists", "held_lists", "names", "removed", "devices", "attestations", "subscriptions"}
 
 // DeleteAccount removes the account and everything of it.
 func (s *Store) DeleteAccount(account []byte) error {

@@ -165,6 +165,9 @@ export class Hosted implements ChannelHost {
         if (!this.check()) return;
         if (s.welcome.list.length) this.take(this.lists.offer(s.welcome.list), false);
         if (this.over) return;
+        // The relay is behind this computer, restored from an older copy:
+        // it is given the newest held.
+        if (this.lists.newest && s.welcome.listCounter < this.lists.newest.counter) this.publish(this.lists.newest.bytes);
         this.setStatus({ kind: "ready" });
         return;
       case "offline":
@@ -191,10 +194,12 @@ export class Hosted implements ChannelHost {
     if (o.result === "gone") this.check();
     if (o.result !== "newer") return o;
     this.newer(o.list);
-    if (fromClient && !this.over) {
-      this.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: randomBytes(8).toString("hex"), list: o.list.bytes } } }));
-    }
+    if (fromClient && !this.over) this.publish(o.list.bytes);
     return o;
+  }
+
+  private publish(list: Uint8Array): void {
+    this.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: randomBytes(8).toString("hex"), list } } }));
   }
 
   private newer(list: HeldList): void {
