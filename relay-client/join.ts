@@ -42,6 +42,10 @@ export interface DeviceJoinOptions {
   joinMs?: number;
   /** The wall clock in milliseconds, Date.now by default. */
   now?(): number;
+  /** The wait asked of the relay, at each login; a refusal follows as a failure. */
+  onWaiting?(): void;
+  /** A phone has the code and the handshake has begun. */
+  onPaired?(): void;
 }
 
 const sameDevice = (a: DeviceKeys, b: DeviceKeys) =>
@@ -87,6 +91,7 @@ export class DeviceJoin {
           // A connection lost after the phone paired loses the join.
           if (this.joinId) return this.fail("the connection to the relay was lost; start the join again");
           this.send({ case: "joinWait", value: { lookup: this.lookup } });
+          d.onWaiting?.();
         } else if (s.kind === "unsupported") this.fail(`the relay: ${s.reason}`);
       },
       onError: (where, e) => d.log(`join ${where}: ${(e as Error).message}`),
@@ -147,6 +152,7 @@ export class DeviceJoin {
         if (this.joinId) return this.fail("the relay paired the join twice");
         this.joinId = b.value.joinId;
         this.handshake = this.d.noise.xxpsk3Responder({ staticKey: this.d.staticKey, prologue: joinPrologue(this.lookup), psk: this.secret });
+        this.d.onPaired?.();
         return;
       case "joinMessage":
         if (b.value.joinId !== this.joinId || !this.joinId) return this.fail("a step of another join");

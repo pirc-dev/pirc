@@ -115,7 +115,7 @@ func (s *Server) joinWait(ctx context.Context, c *conn, w *pb.JoinWait) *frameEr
 	if c.wait != nil || c.joinID != "" {
 		return invalid("already waiting for a join")
 	}
-	if j.waitsByAddr[c.addr] >= s.cfg.MaxWaitsPerAddr || len(j.waits) >= s.cfg.MaxWaits {
+	if j.waitsByAddr[c.addr] >= s.addrCap(c.addr, s.cfg.MaxWaitsPerAddr) || len(j.waits) >= s.cfg.MaxWaits {
 		return rateLimited("too many joins waiting")
 	}
 	if j.waits[w.GetLookup()] != nil {
@@ -159,7 +159,7 @@ func (s *Server) joinLookup(c *conn, l *pb.JoinLookup) *frameError {
 	if c.role != pb.DeviceRole_DEVICE_ROLE_CLIENT || !bytes.Equal(c.key, c.acct.list.phoneKey) {
 		return denied("only the account's phone looks up a join")
 	}
-	if !count(j.lookupsByAcct, string(c.acct.id), s.cfg.MaxLookupsPerAccount, now) || !count(j.lookupsByAddr, c.addr, s.cfg.MaxLookupsPerAddr, now) {
+	if !count(j.lookupsByAcct, string(c.acct.id), s.cfg.MaxLookupsPerAccount, now) || !count(j.lookupsByAddr, c.addr, s.addrCap(c.addr, s.cfg.MaxLookupsPerAddr), now) {
 		return rateLimited("too many join lookups; try again in an hour")
 	}
 	w := j.waits[l.GetLookup()]

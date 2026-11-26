@@ -67,3 +67,14 @@ func TestInviteCommands(t *testing.T) {
 		t.Errorf("not revoked: %+v", is)
 	}
 }
+
+func TestParseSharedAddrs(t *testing.T) {
+	if got, err := parseSharedAddrs(" 10.70.5.10, ,10.0.0.1"); err != nil || len(got) != 2 || got[0] != "10.70.5.10" {
+		t.Errorf("%v %v", got, err)
+	}
+	for _, bad := range []string{"10.70.5", "::1", "relay.example"} {
+		if _, err := parseSharedAddrs(bad); err == nil {
+			t.Errorf("%q taken", bad)
+		}
+	}
+}

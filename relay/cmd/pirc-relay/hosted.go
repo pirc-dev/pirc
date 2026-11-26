@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -195,9 +196,14 @@ func serveHosted(args []string) error {
 	}
 	gatewayFlag := fs.String("push-gateway", envString("PIRC_RELAY_PUSH_GATEWAY", ""), "push gateway to wake the account's phones through when a computer announces a session with push; none when empty (PIRC_RELAY_PUSH_GATEWAY)")
 	recheck := fs.Duration("recheck-every", 10*time.Minute, "how often to look for subscriptions due to be asked about again")
+	shared := fs.String("shared-addresses", envString("PIRC_RELAY_SHARED_ADDRESSES", ""), "comma-separated IPv4 addresses many people's devices share (the app stores' reviewers' demo computers): their per-address caps are 8 times the others' (PIRC_RELAY_SHARED_ADDRESSES)")
 	signUps := fs.String("signups", envString("PIRC_RELAY_SIGNUPS", ""), "sign-ups while the store has none set (signups-hosted): open, invite or closed; open with --test-attestation, else invite, when empty (PIRC_RELAY_SIGNUPS)")
 	sandbox := fs.Bool("store-sandbox", sandboxDefault, "take App Attest's development environment and the stores' sandbox and test purchases: for a relay of test builds (PIRC_RELAY_STORE_SANDBOX)")
 	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	sharedAddrs, err := parseSharedAddrs(*shared)
+	if err != nil {
 		return err
 	}
 	switch *signUps {
@@ -274,6 +280,7 @@ func serveHosted(args []string) error {
 		Origin:         *origin,
 		Verifier:       verifier,
 		SignUps:        defaultSignUps(*signUps, *testAtt),
+		SharedAddrs:    sharedAddrs,
 		MaxFrameBytes:  *nf.maxFrame,
 		PushGateway:    gateway,
 		TrustedProxies: proxies,
@@ -309,4 +316,22 @@ func defaultSignUps(flag string, test bool) string {
 		return hosted.SignUpsOpen
 	}
 	return flag
+}
+
+// parseSharedAddrs reads --shared-addresses: IPv4 addresses, as the
+// relay's caps key them.
+func parseSharedAddrs(s string) ([]string, error) {
+	var out []string
+	for _, f := range strings.Split(s, ",") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		a, err := netip.ParseAddr(f)
+		if err != nil || !a.Is4() {
+			return nil, fmt.Errorf("--shared-addresses takes IPv4 addresses, not %q", f)
+		}
+		out = append(out, a.String())
+	}
+	return out, nil
 }

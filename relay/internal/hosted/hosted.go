@@ -147,8 +147,13 @@ type Config struct {
 	// Invite codes tried an hour from one address, by CheckInvite or
 	// SignUp.
 	MaxInviteTriesPerAddr int
-	MaxWaitsPerAddr       int
-	MaxWaits              int
+	// Addresses many devices of different people share, as the relay
+	// sees them (the app stores' reviewers' demo computers, behind one
+	// address): their per-address caps are SharedAddrFactor times the
+	// others'.
+	SharedAddrs     []string
+	MaxWaitsPerAddr int
+	MaxWaits        int
 	// How long a connection logged in without an account may be in no
 	// wait or join before it is closed.
 	NoAccountIdle time.Duration
@@ -320,7 +325,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 func (s *Server) startLogin(addr string) (done func(), ok bool) {
 	s.pendingMu.Lock()
 	defer s.pendingMu.Unlock()
-	if s.pendingByAddr[addr] >= s.cfg.MaxPendingLoginsPerAddr {
+	if s.pendingByAddr[addr] >= s.addrCap(addr, s.cfg.MaxPendingLoginsPerAddr) {
 		return nil, false
 	}
 	if s.pending.Add(1) > int64(s.cfg.MaxPendingLogins) {
@@ -857,4 +862,19 @@ func (s *Server) handleNoAccount(ctx context.Context, c *conn, f *pb.Frame) *fra
 	default:
 		return denied("logged in without an account: only signing up and joining")
 	}
+}
+
+// SharedAddrFactor is how many times the others' caps a shared address
+// gets (Config.SharedAddrs).
+const SharedAddrFactor = 8
+
+// addrCap is a per-address cap for addr: n, or SharedAddrFactor times n
+// for an address many people share.
+func (s *Server) addrCap(addr string, n int) int {
+	for _, a := range s.cfg.SharedAddrs {
+		if a == addr {
+			return n * SharedAddrFactor
+		}
+	}
+	return n
 }

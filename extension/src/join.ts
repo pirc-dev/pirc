@@ -30,6 +30,9 @@ export interface JoinDeps {
   joinMs?: number;
   /** The wall clock in milliseconds, Date.now by default. */
   now?(): number;
+  /** The wait asked of the relay; a phone pairing with it (DeviceJoinOptions). */
+  onWaiting?(): void;
+  onPaired?(): void;
 }
 
 /** One join of this computer, as a computer, with keys made fresh for it. */

@@ -191,3 +191,24 @@ func TestNoAccountIdleClose(t *testing.T) {
 		t.Fatal("a connection in a wait was closed")
 	}
 }
+
+// An address many people share gets SharedAddrFactor times the caps; the
+// harness's connections all come from 127.0.0.1.
+func TestSharedAddrCaps(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.MaxWaitsPerAddr = 1; c.SharedAddrs = []string{"127.0.0.1"} })
+	for i := 0; i < SharedAddrFactor; i++ {
+		d, _ := h.login(newDev(byte(10+i)), nil)
+		h.joinWait(d, fmt.Sprintf("K7QMK7%02d", i), nil)
+		if !h.waiting(fmt.Sprintf("K7QMK7%02d", i)) {
+			t.Fatalf("wait %d refused", i)
+		}
+	}
+	d, _ := h.login(newDev(40), nil)
+	d.send(&pb.Frame{Body: &pb.Frame_JoinWait{JoinWait: &pb.JoinWait{Lookup: "K7QMK799"}}})
+	if e := d.anError(); e.Code != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+		t.Fatalf("a wait past the shared cap: %v", e)
+	}
+	if h.srv.addrCap("10.0.0.9", 4) != 4 || h.srv.addrCap("127.0.0.1", 4) != 4*SharedAddrFactor {
+		t.Error("addrCap")
+	}
+}

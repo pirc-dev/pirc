@@ -236,12 +236,12 @@ func (s *Server) inviteTriesLeft(c *conn) bool {
 		}
 	}
 	n := s.inviteTries[c.addr]
-	return n == nil || now.Sub(n.since) >= time.Hour || n.n < s.cfg.MaxInviteTriesPerAddr
+	return n == nil || now.Sub(n.since) >= time.Hour || n.n < s.addrCap(c.addr, s.cfg.MaxInviteTriesPerAddr)
 }
 
 // countInviteFailure counts a code that was not valid.
 func (s *Server) countInviteFailure(c *conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	count(s.inviteTries, c.addr, s.cfg.MaxInviteTriesPerAddr+1, s.cfg.Now())
+	count(s.inviteTries, c.addr, s.addrCap(c.addr, s.cfg.MaxInviteTriesPerAddr)+1, s.cfg.Now())
 }
