@@ -10,6 +10,11 @@ import { FrameSchema, type Frame, type SessionFrame } from "@pirc/protocol/v1alp
 import { HostedConnection, type HostedState } from "@pirc/relay-client/hosted";
 import { wsSocket } from "@pirc/relay-client/hosted-ws";
 import { randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+/** Written in the account's folder when this computer stops for good on it. */
+export const ENDED_FILE = "ended";
 
 import { folderIdentity, keysOf, ListFolder, listsSelf, readInfo, readSecrets, selfDevice, type AccountInfo, type AccountKeys, type HeldList, type Offered } from "./account.ts";
 import { Channel, Channels, FRAME_MAX, type ChannelHost } from "./channel.ts";
@@ -68,7 +73,7 @@ export class Hosted implements ChannelHost {
     readonly noise: Noise,
     readonly info: AccountInfo,
     readonly keys: AccountKeys,
-    dir: string,
+    private readonly dir: string,
     private readonly sink: HostedSink,
     private readonly rescanMs: number,
   ) {
@@ -153,7 +158,17 @@ export class Hosted implements ChannelHost {
     clearInterval(this.rescan);
     this.channels.closeAll(ErrorCode.PERMISSION_DENIED, true);
     this.conn.stop();
-    this.setStatus(!ours ? { kind: "left" } : conflict !== undefined ? { kind: "conflict", counter: conflict } : { kind: "removed" });
+    const end: HostedStatus = !ours ? { kind: "left" } : conflict !== undefined ? { kind: "conflict", counter: conflict } : { kind: "removed" };
+    // Said in the folder too, for what watches a machine with no one at it
+    // (join.js's demo computers): ENDED_FILE, holding the kind.
+    if (ours) {
+      try {
+        writeFileSync(join(this.dir, ENDED_FILE), end.kind + "\n", { mode: 0o600 });
+      } catch {
+        // The folder may be gone with the account.
+      }
+    }
+    this.setStatus(end);
     return false;
   }
 

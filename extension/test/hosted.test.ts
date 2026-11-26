@@ -5,6 +5,8 @@
 // removed client's channel and sealing again. A pi process's whole use of
 // it, across apps, is the end to end test (design.md step 14, part 9).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, test } from "node:test";
 
 import { create } from "@bufbuild/protobuf";
@@ -17,7 +19,7 @@ import { wsSocket } from "@pirc/relay-client/hosted-ws";
 import { boxSecrets, notificationSecret, openNotice, readOnlyPair, signingPair } from "../../e2e/test/make.ts";
 
 import { Harness, startHostedRelay } from "../../test/harness.ts";
-import { Hosted, type HostedStatus } from "../src/hosted.ts";
+import { ENDED_FILE, Hosted, type HostedStatus } from "../src/hosted.ts";
 import type { Live } from "../src/live.ts";
 import { removeAccount } from "../src/account.ts";
 import { accountFolder, accountId, alice, bob, channelSecret, computer, phone, v1, version } from "./account-fixture.ts";
@@ -215,6 +217,8 @@ test("a computer in an account: sealed announcements, a channel, a removal", asy
   p.conn.send(create(FrameSchema, { body: { case: "publishList", value: { requestId: "p4", list: v4 } } }));
   await until("removed", () => (hosted!.current.kind === "removed" ? true : undefined));
   assert.ok(statuses.some((s) => s.kind === "removed"));
+  // Said in its folder, for a demo computer's watcher.
+  assert.equal(readFileSync(join(dir, ENDED_FILE), "utf8"), "removed\n");
   hosted.stop();
   for (const d of [p, a, b]) d.conn.stop();
 });
