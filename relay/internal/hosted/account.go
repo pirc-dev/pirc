@@ -65,10 +65,18 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 	}
 	review := false
 	if code != "" {
-		if !s.countInviteTry(c) {
+		if !s.inviteTriesLeft(c) {
 			return rateLimited("too many invite codes tried from this address; try again in an hour")
 		}
 		if review, err = s.store.lookInvite(code, s.cfg.Now()); errors.Is(err, errNoInvite) {
+			// Used up by this key's own first attempt, which made the account
+			// while this one was attesting: the account, again.
+			if have, first, err := s.store.AccountOfPhone(c.key); err != nil {
+				return internal()
+			} else if have != nil {
+				return s.signedUpAgain(c, su, have, first)
+			}
+			s.countInviteFailure(c)
 			s.log.Info("sign-up refused", "key", shortKey(c.key), "invite", "not valid")
 			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
 		} else if err != nil {

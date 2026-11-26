@@ -256,6 +256,7 @@ type Server struct {
 	// List versions taken this hour, by account.
 	listPublishes     map[string]*counter
 	inviteTries       map[string]*counter
+	inviteTriesTrim   time.Time
 	lastPublishesTrim time.Time
 	// Names published this hour, by account.
 	namesPublishes map[string]*counter

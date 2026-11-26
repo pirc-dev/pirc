@@ -198,6 +198,15 @@ func TestStoreSeedsHeld(t *testing.T) {
 	if ok, _ := s.Held(id, id); ok {
 		t.Error("an older version seeded from nowhere")
 	}
+	// Opened again with rows there: nothing seeded, nothing written.
+	s.db.Exec(`DELETE FROM held_lists WHERE hash = ?`, []byte("h2"))
+	s.Close()
+	if s, err = OpenStore(dir); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.Held(id, []byte("h2")); ok {
+		t.Error("seeded again into a table with rows")
+	}
 }
 
 // A file of this layout made before subscriptions had renews gets the

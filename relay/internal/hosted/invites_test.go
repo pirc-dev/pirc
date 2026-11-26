@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -154,8 +155,11 @@ func TestReviewCode(t *testing.T) {
 	if ok, _ := s.HasAccount(bought); !ok {
 		t.Fatal("an account a subscription carries on deleted")
 	}
-	if kept, _ := s.Subscriptions(bought); len(kept) != 2 || !kept[1].Lapsed && !kept[0].Lapsed {
-		t.Fatalf("subscriptions %+v", kept)
+	kept, _ := s.Subscriptions(bought)
+	for _, k := range kept {
+		if lapsed := k.Sub.Kind == reviewKind; k.Lapsed != lapsed || len(kept) != 2 {
+			t.Fatalf("subscriptions %+v", kept)
+		}
 	}
 	h.srv.recheckDue(context.Background(), never)
 	if ok, _ := s.HasAccount(bought); !ok {
@@ -244,5 +248,44 @@ func TestInviteTries(t *testing.T) {
 	}
 	if _, err := h.cfg.Store.RevokeInvites("______"); err == nil {
 		t.Error("revoked by a pattern")
+	}
+}
+
+// gatedVerifier holds the first attestation until released.
+type gatedVerifier struct {
+	TestVerifier
+	calls   *atomic.Int32
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (g gatedVerifier) Attest(ctx context.Context, a *pb.Attestation, d []byte) (Attested, error) {
+	if g.calls.Add(1) == 1 {
+		close(g.entered)
+		<-g.release
+	}
+	return g.TestVerifier.Attest(ctx, a, d)
+}
+
+// A retry that overlaps its first attempt: the first makes the account and
+// uses the code's one use while the retry attests; the retry gets the
+// account.
+func TestSignUpRetryOverlaps(t *testing.T) {
+	g := gatedVerifier{calls: &atomic.Int32{}, entered: make(chan struct{}), release: make(chan struct{})}
+	h := newHarness(t, func(c *Config) { c.SignUps = SignUpsInvite; c.Verifier = g })
+	inv := NewInviteCode()
+	h.cfg.Store.AddInvite(inv, false, 1, t0.Add(time.Hour), t0, "")
+	ta := newTestAccount(newDev(1))
+	retry, _ := h.login(ta.phone, nil)
+	retry.send(&pb.Frame{Body: &pb.Frame_SignUp{SignUp: &pb.SignUp{RequestId: "b", Attestation: testAttestation, InviteCode: inv, List: ta.signed}}})
+	<-g.entered
+	id, e := h.trySignUpAs(ta, inv, testAttestation)
+	if e != nil {
+		t.Fatal(e)
+	}
+	close(g.release)
+	f := retry.until("SignedUp", func(f *pb.Frame) bool { return f.GetSignedUp() != nil || f.GetError() != nil })
+	if !bytes.Equal(f.GetSignedUp().GetAccountId(), id) {
+		t.Fatalf("the retry: %v", f)
 	}
 }

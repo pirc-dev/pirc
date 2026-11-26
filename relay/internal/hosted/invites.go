@@ -190,7 +190,7 @@ func (s *Server) checkInvite(c *conn, ci *pb.CheckInvite) *frameError {
 	if c.inviteChecks.Add(1) > maxInviteChecks {
 		return rateLimited("too many invite checks")
 	}
-	if ci.GetInviteCode() != "" && !s.countInviteTry(c) {
+	if ci.GetInviteCode() != "" && !s.inviteTriesLeft(c) {
 		return rateLimited("too many invite codes tried from this address; try again in an hour")
 	}
 	mode, err := s.signUps()
@@ -207,7 +207,9 @@ func (s *Server) checkInvite(c *conn, ci *pb.CheckInvite) *frameError {
 		switch {
 		case err == nil:
 			out.Valid, out.Review = true, review
-		case !errors.Is(err, errNoInvite):
+		case errors.Is(err, errNoInvite):
+			s.countInviteFailure(c)
+		default:
 			return internal()
 		}
 	}
@@ -215,10 +217,31 @@ func (s *Server) checkInvite(c *conn, ci *pb.CheckInvite) *frameError {
 	return nil
 }
 
-// countInviteTry counts a code tried, by CheckInvite or SignUp, from the
-// connection's address: false past MaxInviteTriesPerAddr an hour.
-func (s *Server) countInviteTry(c *conn) bool {
+// Codes that were not valid, by CheckInvite or SignUp, are counted by the
+// connection's address: past MaxInviteTriesPerAddr in an hour, no more
+// codes are looked up from it. Valid ones are not counted, so that people
+// behind one address are not kept from signing up by their own codes.
+
+// inviteTriesLeft says whether the address may try a code now.
+func (s *Server) inviteTriesLeft(c *conn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return count(s.inviteTries, c.addr, s.cfg.MaxInviteTriesPerAddr, s.cfg.Now())
+	now := s.cfg.Now()
+	if now.Sub(s.inviteTriesTrim) >= time.Hour {
+		s.inviteTriesTrim = now
+		for k, n := range s.inviteTries {
+			if now.Sub(n.since) >= time.Hour {
+				delete(s.inviteTries, k)
+			}
+		}
+	}
+	n := s.inviteTries[c.addr]
+	return n == nil || now.Sub(n.since) >= time.Hour || n.n < s.cfg.MaxInviteTriesPerAddr
+}
+
+// countInviteFailure counts a code that was not valid.
+func (s *Server) countInviteFailure(c *conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count(s.inviteTries, c.addr, s.cfg.MaxInviteTriesPerAddr+1, s.cfg.Now())
 }
