@@ -179,6 +179,9 @@ class HostedSessions implements ChannelEvents {
 
   bool get _connected => _ready && !_removed && !_disposed;
 
+  /// Stopped for good: nothing more is sent.
+  bool get disposed => _disposed;
+
   /// Ends every channel and stops taking frames; the keys may be disposed
   /// after it.
   void dispose() {

@@ -89,6 +89,10 @@ class AppHostedDevices implements HostedDevices {
   // A removal kept unanswered: nothing else is signed until it is given.
   var _held = false;
 
+  void _giveLater() => Timer(const Duration(minutes: 2), () {
+        if (_held && !run.sessions.disposed) unawaited(_exclusive(_giveUnanswered));
+      });
+
   // The removal the relay may have taken and then lost (restored from an
   // older copy), given again: taken, it is this phone's newest; refused,
   // the relay holds a version that overtook it, which this phone has
@@ -105,10 +109,15 @@ class AppHostedDevices implements HostedDevices {
       await run.sessions.request(id, v2.Frame(publishList: v2.PublishList(requestId: id, list: list)));
       await _account.take(list);
     } on HostedRefusal catch (e) {
-      // Too many versions this hour: the next login tries again.
-      if (e.code == ErrorCode.ERROR_CODE_RATE_LIMITED) return;
+      // Overtaken by a version the relay holds, which this phone has from
+      // its Welcome or List, or not a version it can take: dropped. Any
+      // other refusal (too many versions this hour, the relay's store
+      // failing) is tried again later.
+      if (e.code != ErrorCode.ERROR_CODE_CONFLICT && e.code != ErrorCode.ERROR_CODE_INVALID) return _giveLater();
       debugPrint('hosted: the removal kept was refused: ${e.message}');
     } on Object {
+      // Unanswered again: a new login gives it again.
+      if (!run.sessions.disposed) run.conn.switchAccount(_account.accountId);
       return;
     }
     await values.set(unansweredListKey, null);

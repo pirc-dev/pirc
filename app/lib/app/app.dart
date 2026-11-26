@@ -696,6 +696,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       // passcode removed, the app reinstalled): the account they open goes
       // with them, and the phone is back at the first screen.
       await forgetNames(widget.prefs);
+      await widget.prefs.set(unansweredListKey, null);
       await widget.prefs.set(accountKey, null);
       await widget.prefs.set(deletingKey, null);
       await widget.prefs.setRelay(null);
@@ -1007,6 +1008,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     await widget.store.delete(relay);
     if (hostedOriginOf(relay) != null) {
       await forgetNames(widget.prefs);
+      await widget.prefs.set(unansweredListKey, null);
       await widget.prefs.set(accountKey, null);
       // The record of a deletion goes last (D5).
       await widget.prefs.set(deletingKey, null);

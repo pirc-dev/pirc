@@ -139,8 +139,9 @@ is newer than the relay's gives the relay its own at login, the phone, another c
 computer, and the relay takes it over the gap.
 
 A removal the phone published and never heard answered is kept by the phone, which signs nothing
-else until a later login has given it to the relay again: taken, it is the phone's newest;
-refused, the relay holds a newer version, which the phone takes. So a removal the relay took and
+else until it has given it to the relay again, at each later login and, after a refusal such
+as the hourly cap, every two minutes: taken, it is the phone's newest; refused as a conflict, the
+relay holds a newer version, which the phone takes. So a removal the relay took and
 then lost comes back from the phone, or sooner from a computer that holds it. An addition not
 heard answered is not kept; the phone reads the newest from the relay before it signs again.
 
