@@ -23,6 +23,20 @@ import (
 // bytes, after an answer that did not arrive, is told the same ID. The
 // phone then logs in again with it.
 func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError {
+	e := s.signUpNew(ctx, c, su)
+	if e == nil || e.code == pb1.ErrorCode_ERROR_CODE_INTERNAL {
+		return e
+	}
+	// Refused, perhaps while this key's own first attempt, its answer
+	// lost, made the account: the account, again, rather than a refusal
+	// after which the phone would drop its keys.
+	if have, first, err := s.store.AccountOfPhone(c.key); err == nil && have != nil {
+		return s.signedUpAgain(c, su, have, first)
+	}
+	return e
+}
+
+func (s *Server) signUpNew(ctx context.Context, c *conn, su *pb.SignUp) *frameError {
 	if s.cfg.Verifier == nil {
 		return denied("this relay takes no sign-ups")
 	}

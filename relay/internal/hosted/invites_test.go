@@ -246,6 +246,36 @@ func TestInviteTries(t *testing.T) {
 	if e := c.until("Error", func(f *pb.Frame) bool { return f.GetError() != nil || f.GetInviteChecked() != nil }).GetError(); code(e) != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
 		t.Fatalf("CheckInvite past the cap: %v", e)
 	}
+	// CheckInvite's bad codes count too, from another address's view the
+	// same: a fresh relay, three bad codes by CheckInvite, then SignUp
+	// limited.
+	h2 := newHarness(t, func(c *Config) { c.SignUps = SignUpsInvite; c.MaxInviteTriesPerAddr = 3 })
+	q, _ := h2.login(newDev(20), nil)
+	for i := 0; i < 3; i++ {
+		q.send(&pb.Frame{Body: &pb.Frame_CheckInvite{CheckInvite: &pb.CheckInvite{RequestId: "q", InviteCode: "bad"}}})
+		if got := q.until("InviteChecked", func(f *pb.Frame) bool { return f.GetInviteChecked() != nil || f.GetError() != nil }).GetInviteChecked(); got.GetValid() {
+			t.Fatalf("check %d: %v", i, got)
+		}
+	}
+	if _, e := h2.trySignUp(newDev(21), "AAAA-BBBB-CCCC-DDDD"); code(e) != pb1.ErrorCode_ERROR_CODE_RATE_LIMITED {
+		t.Fatalf("after three bad checks: %v", e)
+	}
+	// An hour on (the harness's clock is fixed, so by the trim's own
+	// rule): a stale count goes.
+	h2.srv.mu.Lock()
+	for _, n := range h2.srv.inviteTries {
+		n.since = n.since.Add(-2 * time.Hour)
+	}
+	h2.srv.inviteTriesTrim = time.Time{}
+	h2.srv.mu.Unlock()
+	if _, e := h2.trySignUp(newDev(22), "AAAA-BBBB-CCCC-DDDD"); code(e) != pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID {
+		t.Fatalf("an hour on: %v", e)
+	}
+	h2.srv.mu.Lock()
+	if len(h2.srv.inviteTries) != 1 {
+		t.Errorf("tries kept %d", len(h2.srv.inviteTries))
+	}
+	h2.srv.mu.Unlock()
 	if _, err := h.cfg.Store.RevokeInvites("______"); err == nil {
 		t.Error("revoked by a pattern")
 	}
