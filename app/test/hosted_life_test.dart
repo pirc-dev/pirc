@@ -511,6 +511,8 @@ class _StandIn {
           return;
         }
         _send(ws, v2.Frame(welcome: v2.Welcome(maxFrameBytes: 1 << 20, listCounter: account ? Int64.ONE : null, locked: account && locked)));
+      } else if (f.hasCheckInvite()) {
+        _send(ws, v2.Frame(inviteChecked: v2.InviteChecked(requestId: f.checkInvite.requestId, mode: v2.SignUpMode.SIGN_UP_MODE_OPEN)));
       } else if (f.hasSignUp()) {
         _send(ws, v2.Frame(signedUp: v2.SignedUp(requestId: f.signUp.requestId, accountId: e2e.sha256(f.signUp.list.sublist(signatureBytes)))));
       } else if (f.hasRenewSubscription()) {
