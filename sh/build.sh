@@ -107,6 +107,7 @@ $linked"
     # (extension/pi-parts.js), licences and a README.
     mkdir -p "$out/third_party"
     node --experimental-transform-types --no-warnings sh/bundle.ts extension "$version" "$out/pirc.js"
+    node --experimental-transform-types --no-warnings sh/bundle.ts extension-join "$version" "$out/join.js"
     cp extension/loader.js "$out/loader.js"
     cp extension/pi-parts.js "$out/pi-parts.js"
     node -e '

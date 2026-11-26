@@ -1,7 +1,7 @@
 // Bundles the extension or the web app's server into one ES module for
 // Node 22, for sh/build.sh (docs/design.md, section 12, step 9).
 //
-//   node sh/bundle.ts extension|web <version> <outfile>
+//   node sh/bundle.ts extension|extension-join|web <version> <outfile>
 //
 // For the extension, fails if the bundle takes in a package NOTICE does not
 // list: the third-party code it carries is exactly what third_party/
@@ -16,6 +16,8 @@ import { licenses, packageRoots } from "./licenses.ts";
 
 const ENTRIES: Record<string, string> = {
   extension: "extension/src/index.ts",
+  // node join.js: joining a machine with no one at it.
+  "extension-join": "extension/src/join-cli.ts",
   web: "web/server/main.ts",
 };
 
@@ -26,7 +28,7 @@ const PACKAGES = ["@bufbuild/protobuf@2.16.0", "libsodium-sumo@0.8.4", "libsodiu
 const [what, version, outfile] = process.argv.slice(2);
 const entry = ENTRIES[what ?? ""];
 if (!entry || !version || !outfile) {
-  console.error("usage: node sh/bundle.ts extension|web <version> <outfile>");
+  console.error("usage: node sh/bundle.ts extension|extension-join|web <version> <outfile>");
   process.exit(2);
 }
 
@@ -70,7 +72,7 @@ const unexpected = [...seen].filter((p) => !PACKAGES.includes(p));
 const missing = PACKAGES.filter((p) => !seen.has(p));
 if (what === "web") {
   writeFileSync(join(dirname(outfile), "third-party-licenses.txt"), licenses(`PiRC's web app ${version}: the server (pirc-web.mjs)`, packageRoots(Object.keys(result.metafile.inputs))));
-} else if (unexpected.length || missing.length) {
+} else if (unexpected.length || (what === "extension" && missing.length)) {
   console.error(`bundle: the ${what} carries packages NOTICE does not list: ${unexpected.join(", ") || "none"}; listed but absent: ${missing.join(", ") || "none"}`);
   process.exit(1);
 }
