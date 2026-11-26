@@ -23,6 +23,8 @@ type conn struct {
 	addr   string
 	remote string
 	key    []byte
+	// CheckInvite frames sent (invites.go).
+	inviteChecks atomic.Int32
 	// The login's challenge, which an attestation binds (AttestContext).
 	nonce []byte
 	// Logged in to a locked account (lock.go): it may only renew or

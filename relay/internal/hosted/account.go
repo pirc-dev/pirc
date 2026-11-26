@@ -7,6 +7,7 @@ package hosted
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -34,14 +35,38 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 		return e
 	}
 	id := r.Hash
+	// Who may sign up (invites.go): checked first and again when the
+	// account is made, which uses the code.
+	code := su.GetInviteCode()
+	mode, err := s.signUps()
+	if err != nil {
+		return internal()
+	}
+	review := false
+	switch {
+	case mode == SignUpsClosed:
+		return denied("sign-ups are closed")
+	case code != "":
+		if review, err = s.store.lookInvite(code, s.cfg.Now()); errors.Is(err, errNoInvite) {
+			s.log.Info("sign-up refused", "key", shortKey(c.key), "invite", "not valid")
+			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
+		} else if err != nil {
+			return internal()
+		}
+	case mode == SignUpsInvite:
+		return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: "sign-ups need an invite code"}
+	}
 	// Outside the lock: the real checks ask the stores.
 	att, err := s.cfg.Verifier.Attest(ctx, su.GetAttestation(), s.attestData(c))
 	if err != nil {
 		s.log.Info("sign-up refused", "key", shortKey(c.key), "kind", attestationKind(su.GetAttestation()), "err", err)
 		return denied("attestation refused: " + err.Error())
 	}
-	sub, err := s.cfg.Verifier.Subscribed(ctx, id, su.GetAttestation())
-	if err != nil {
+	var sub Subscription
+	if review {
+		// The stores' reviewers: no purchase, an account for ReviewFor.
+		sub = Subscription{Kind: reviewKind, Ident: id, Expires: s.cfg.Now().Add(ReviewFor)}
+	} else if sub, err = s.cfg.Verifier.Subscribed(ctx, id, su.GetAttestation()); err != nil {
 		s.log.Info("sign-up refused", "key", shortKey(c.key), "subscription", sub.Kind, "sandbox", sub.Sandbox, "err", err)
 		return denied("no live subscription: " + err.Error())
 	}
@@ -58,14 +83,16 @@ func (s *Server) signUp(ctx context.Context, c *conn, su *pb.SignUp) *frameError
 	case have == nil:
 		now := s.cfg.Now().UnixMilli()
 		l := StoredList{PhoneKey: c.key, Counter: r.Counter, Hash: r.Hash, Signed: su.GetList()}
-		if err := s.store.CreateAccount(id, l, &att, now); err != nil {
+		if err := s.store.CreateAccountInvited(id, l, &att, now, code); errors.Is(err, errNoInvite) {
+			return &frameError{code: pb1.ErrorCode_ERROR_CODE_TOKEN_INVALID, msg: errNoInvite.Error()}
+		} else if err != nil {
 			s.log.Error("cannot store an account", "err", err)
 			return internal()
 		}
 		if err := s.store.AddSubscription(id, sub, now); err != nil {
 			s.log.Error("cannot store a subscription", "err", err)
 		}
-		s.log.Info("account made", "account", shortKey(id), "attestation", att.Kind, "subscription", sub.Kind, "expires", sub.Expires, "trial", sub.Trial, "sandbox", sub.Sandbox)
+		s.log.Info("account made", "account", shortKey(id), "attestation", att.Kind, "subscription", sub.Kind, "expires", sub.Expires, "trial", sub.Trial, "sandbox", sub.Sandbox, "invited", code != "")
 	}
 	c.queue(&pb.Frame{Body: &pb.Frame_SignedUp{SignedUp: &pb.SignedUp{RequestId: su.GetRequestId(), AccountId: id}}})
 	return nil

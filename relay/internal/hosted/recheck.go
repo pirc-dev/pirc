@@ -43,6 +43,21 @@ func (s *Server) recheckDue(ctx context.Context, r Rechecker) {
 		if ctx.Err() != nil {
 			return
 		}
+		// A review code's: no store to ask; ended, its account goes, unless
+		// a subscription bought since carries it on.
+		if k.Sub.Kind == reviewKind {
+			if k.Lapsed || s.cfg.Now().Before(k.Sub.Expires) {
+				continue
+			}
+			if s.carriedOn(k.Account) {
+				if err := s.store.LapseSubscription(k.Account, k.Sub, s.cfg.Now().UnixMilli(), "review ended"); err != nil {
+					s.log.Error("cannot keep a subscription", "err", err)
+				}
+				continue
+			}
+			s.deleteAccountByID(k.Account, "review account ended")
+			continue
+		}
 		sub, err := r.Recheck(ctx, k.Sub)
 		now := s.cfg.Now().UnixMilli()
 		switch {
@@ -68,4 +83,20 @@ func (s *Server) recheckDue(ctx context.Context, r Rechecker) {
 			s.log.Error("cannot keep a subscription", "err", err)
 		}
 	}
+}
+
+// carriedOn says whether a subscription other than a review one carries
+// the account on.
+func (s *Server) carriedOn(account []byte) bool {
+	kept, err := s.store.Subscriptions(account)
+	if err != nil {
+		s.log.Error("cannot read an account's subscriptions", "err", err)
+		return true
+	}
+	for _, k := range kept {
+		if k.Sub.Kind != reviewKind && !k.Lapsed {
+			return true
+		}
+	}
+	return false
 }

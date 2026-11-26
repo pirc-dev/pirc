@@ -95,7 +95,10 @@ type Config struct {
 	Origin string
 	// Checks a phone's attestation and subscription; without one, nobody
 	// can sign up, and a phone's attestation in a join is refused.
-	Verifier      Verifier
+	Verifier Verifier
+	// The sign-up mode while the store has none set (invites.go);
+	// DefaultSignUps when empty.
+	SignUps       string
 	MaxFrameBytes int
 	LoginTimeout  time.Duration
 	HelloTimeout  time.Duration
@@ -829,6 +832,8 @@ func (s *Server) handleNoAccount(ctx context.Context, c *conn, f *pb.Frame) *fra
 	switch b := f.GetBody().(type) {
 	case *pb.Frame_SignUp:
 		return s.signUp(ctx, c, b.SignUp).withID(b.SignUp.GetRequestId())
+	case *pb.Frame_CheckInvite:
+		return s.checkInvite(c, b.CheckInvite).withID(b.CheckInvite.GetRequestId())
 	case *pb.Frame_JoinWait:
 		return s.joinWait(ctx, c, b.JoinWait)
 	case *pb.Frame_JoinMessage:

@@ -80,6 +80,8 @@ message Frame {
     RegisterPush register_push = 93;
     UnregisterPush unregister_push = 94;
     RenewSubscription renew_subscription = 95;
+    CheckInvite check_invite = 96;
+    InviteChecked invite_checked = 97;
 
     // Either direction, as in v1alpha1. A device is never removed by a
     // close: 1008 means only that the relay refuses its key now.
@@ -170,6 +172,9 @@ enum SubscriptionStore {
   SUBSCRIPTION_STORE_GOOGLE_PLAY = 2;
   // A test relay's, which takes any subscription.
   SUBSCRIPTION_STORE_TEST = 3;
+  // No store: the account was made with a review code, for the stores'
+  // reviewers, and is deleted when this ends.
+  SUBSCRIPTION_STORE_REVIEW = 4;
 }
 
 // One of an account's subscriptions, as its store last said. It names no
@@ -427,6 +432,35 @@ message SignUp {
   string invite_code = 4;
   // Version 1 of the account's list: the signature, then the body.
   bytes list = 5;
+}
+
+// A client to relay, logged in without an account, before it buys a
+// subscription to sign up: the relay's sign-up mode, and whether an
+// invite code may be used now. Answered by InviteChecked; at most 10 a
+// connection, then RATE_LIMITED.
+message CheckInvite {
+  string request_id = 1;
+  // Empty to ask only the mode.
+  string invite_code = 2;
+}
+
+// Who may sign up (relay/internal/hosted/invites.go).
+enum SignUpMode {
+  SIGN_UP_MODE_UNSPECIFIED = 0;
+  SIGN_UP_MODE_OPEN = 1;
+  // An invite code is needed.
+  SIGN_UP_MODE_INVITE = 2;
+  SIGN_UP_MODE_CLOSED = 3;
+}
+
+message InviteChecked {
+  string request_id = 1;
+  SignUpMode mode = 2;
+  // The code may be used now: kept, not used up, not expired.
+  bool valid = 3;
+  // A review code, for the stores' reviewers: its account needs no
+  // subscription, and is deleted when its review subscription ends.
+  bool review = 4;
 }
 
 message SignedUp {

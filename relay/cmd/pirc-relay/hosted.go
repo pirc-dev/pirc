@@ -7,6 +7,9 @@
 //	go build -tags hosted ./cmd/pirc-relay
 //	pirc-relay serve-hosted --origin wss://relay.example (--tls-cert F --tls-key F | --plaintext) [--push-gateway URL] [--test-attestation | stores' flags]
 //	pirc-relay backup-hosted [--data-dir DIR] OUT
+//	pirc-relay signups-hosted [--data-dir DIR] [open|invite|closed]
+//	pirc-relay invite-hosted [--data-dir DIR] [--review] [--uses N] [--days D] [--note TEXT]
+//	pirc-relay invites-hosted [--data-dir DIR] [--revoke ID]
 //
 // Its accounts are in hosted.db in the data directory, which a self-hosted
 // relay's registry may share: the two are apart. Besides serve's network
@@ -35,6 +38,120 @@ import (
 func init() {
 	extraCommands["serve-hosted"] = serveHosted
 	extraCommands["backup-hosted"] = backupHosted
+	extraCommands["signups-hosted"] = signUpsHosted
+	extraCommands["invite-hosted"] = inviteHosted
+	extraCommands["invites-hosted"] = invitesHosted
+}
+
+// openHosted opens the data directory's hosted.db for an admin command,
+// beside the running relay; it refuses a directory without one.
+func openHosted(dataDir string) (*hosted.Store, error) {
+	if _, err := os.Stat(dataDir + "/hosted.db"); err != nil {
+		return nil, fmt.Errorf("no hosted.db in %s: give the relay's --data-dir", dataDir)
+	}
+	return hosted.OpenStore(dataDir)
+}
+
+// signUpsHosted shows the sign-up mode, or sets it: open, invite (an
+// invite code needed) or closed. The running relay reads it at each
+// sign-up.
+//
+//	pirc-relay signups-hosted [--data-dir DIR] [open|invite|closed]
+func signUpsHosted(args []string) error {
+	fs, dataDir := flags("signups-hosted")
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	if fs.NArg() > 1 {
+		return errors.New("usage: pirc-relay signups-hosted [--data-dir DIR] [open|invite|closed]")
+	}
+	s, err := openHosted(*dataDir)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if fs.NArg() == 1 {
+		if err := s.SetSignUps(fs.Arg(0)); err != nil {
+			return err
+		}
+	}
+	m, err := s.SignUps()
+	if err != nil {
+		return err
+	}
+	if m == "" {
+		m = "not set: the relay's --signups, else " + hosted.DefaultSignUps
+	}
+	fmt.Println("sign-ups:", m)
+	return nil
+}
+
+// inviteHosted makes an invite code and prints it, once: only its hash is
+// kept. A review code is for the stores' reviewers: its accounts need no
+// subscription and are deleted after hosted.ReviewFor.
+//
+//	pirc-relay invite-hosted [--data-dir DIR] [--review] [--uses N] [--days D] [--note TEXT]
+func inviteHosted(args []string) error {
+	fs, dataDir := flags("invite-hosted")
+	review := fs.Bool("review", false, "a review code, for the stores' reviewers: its accounts need no subscription")
+	uses := fs.Int("uses", 1, "how many accounts it may make")
+	days := fs.Int("days", 30, "days until it expires")
+	note := fs.String("note", "", "who or what it is for, shown by invites-hosted")
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *days < 1 {
+		return errors.New("usage: pirc-relay invite-hosted [--data-dir DIR] [--review] [--uses N] [--days D] [--note TEXT]")
+	}
+	s, err := openHosted(*dataDir)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	code := hosted.NewInviteCode()
+	now := time.Now()
+	if err := s.AddInvite(code, *review, *uses, now.Add(time.Duration(*days)*24*time.Hour), now, *note); err != nil {
+		return err
+	}
+	fmt.Println(code)
+	return nil
+}
+
+// invitesHosted lists the invite codes kept, by an ID (the start of the
+// code's hash), or revokes those whose ID starts with --revoke.
+//
+//	pirc-relay invites-hosted [--data-dir DIR] [--revoke ID]
+func invitesHosted(args []string) error {
+	fs, dataDir := flags("invites-hosted")
+	revoke := fs.String("revoke", "", "end the codes whose ID starts with this")
+	if err := parse(fs, dataDir, args); err != nil {
+		return err
+	}
+	s, err := openHosted(*dataDir)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	if *revoke != "" {
+		n, err := s.RevokeInvites(*revoke)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%d revoked\n", n)
+		return nil
+	}
+	is, err := s.Invites()
+	if err != nil {
+		return err
+	}
+	for _, i := range is {
+		kind := "invite"
+		if i.Review {
+			kind = "review"
+		}
+		fmt.Printf("%x  %-6s  %d left  expires %s  %s\n", i.CodeHash[:6], kind, i.UsesLeft, i.Expires.UTC().Format("2006-01-02"), i.Note)
+	}
+	return nil
 }
 
 // backupHosted writes a consistent, checked copy of the data directory's
@@ -78,9 +195,15 @@ func serveHosted(args []string) error {
 	}
 	gatewayFlag := fs.String("push-gateway", envString("PIRC_RELAY_PUSH_GATEWAY", ""), "push gateway to wake the account's phones through when a computer announces a session with push; none when empty (PIRC_RELAY_PUSH_GATEWAY)")
 	recheck := fs.Duration("recheck-every", 10*time.Minute, "how often to look for subscriptions due to be asked about again")
+	signUps := fs.String("signups", envString("PIRC_RELAY_SIGNUPS", ""), "sign-ups while the store has none set (signups-hosted): open, invite or closed; open with --test-attestation, else invite, when empty (PIRC_RELAY_SIGNUPS)")
 	sandbox := fs.Bool("store-sandbox", sandboxDefault, "take App Attest's development environment and the stores' sandbox and test purchases: for a relay of test builds (PIRC_RELAY_STORE_SANDBOX)")
 	if err := parse(fs, dataDir, args); err != nil {
 		return err
+	}
+	switch *signUps {
+	case "", hosted.SignUpsOpen, hosted.SignUpsInvite, hosted.SignUpsClosed:
+	default:
+		return fmt.Errorf("--signups is open, invite or closed, not %q", *signUps)
 	}
 	stores := *appleApp != "" || *android != ""
 	if stores && *testAtt {
@@ -150,6 +273,7 @@ func serveHosted(args []string) error {
 		Store:          store,
 		Origin:         *origin,
 		Verifier:       verifier,
+		SignUps:        defaultSignUps(*signUps, *testAtt),
 		MaxFrameBytes:  *nf.maxFrame,
 		PushGateway:    gateway,
 		TrustedProxies: proxies,
@@ -176,4 +300,13 @@ func checkOrigin(s string) error {
 		return fmt.Errorf("--origin %q: a ws:// or wss:// origin is needed, with no path", s)
 	}
 	return nil
+}
+
+// defaultSignUps is the --signups flag, or open on a relay that takes
+// test attestations, which anyone can sign up to anyway.
+func defaultSignUps(flag string, test bool) string {
+	if flag == "" && test {
+		return hosted.SignUpsOpen
+	}
+	return flag
 }

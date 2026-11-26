@@ -38,6 +38,7 @@ String _storeOf(SubscriptionStore s) => switch (s) {
       SubscriptionStore.SUBSCRIPTION_STORE_APP_STORE => 'the App Store',
       SubscriptionStore.SUBSCRIPTION_STORE_GOOGLE_PLAY => 'Google Play',
       SubscriptionStore.SUBSCRIPTION_STORE_TEST => 'the test store',
+      SubscriptionStore.SUBSCRIPTION_STORE_REVIEW => 'review access',
       _ => 'a store',
     };
 
@@ -60,7 +61,9 @@ bool live(AccountSubscription s, DateTime now) {
 /// One line for each subscription the account has: who pays and until when.
 List<String> subscriptionLines(List<AccountSubscription> subs, DateTime now) => [
       for (final s in subs)
-        if (live(s, now))
+        if (s.store == SubscriptionStore.SUBSCRIPTION_STORE_REVIEW)
+          'Review access${_ends(s) == null ? '' : ' until ${_date(_ends(s)!)}'}, for the stores\' reviewers: the account is deleted then'
+        else if (live(s, now))
           '${s.trial ? 'Free trial' : 'Paid'} through ${_storeOf(s.store)}${_ends(s) == null ? '' : ' until ${_date(_ends(s)!)}'}${s.renews ? ', renewing' : ''}'
         else
           'Ended through ${_storeOf(s.store)}${_ends(s) == null ? '' : ' on ${_date(_ends(s)!)}'}',
@@ -78,7 +81,7 @@ bool offerPurchase(List<AccountSubscription> subs, DateTime now) {
 /// The stores the account's live subscriptions are through, as the screens
 /// name them.
 List<String> storesOf(List<AccountSubscription> subs, DateTime now) =>
-    {for (final s in subs) if (live(s, now) && s.store != SubscriptionStore.SUBSCRIPTION_STORE_TEST) _storeOf(s.store)}.toList();
+    {for (final s in subs) if (live(s, now) && s.store != SubscriptionStore.SUBSCRIPTION_STORE_TEST && s.store != SubscriptionStore.SUBSCRIPTION_STORE_REVIEW) _storeOf(s.store)}.toList();
 
 /// Asks before deleting, saying what it does and what it does not: the
 /// subscriptions to cancel are named by the stores they are through.

@@ -148,6 +148,38 @@ void main() {
     await tester.pump(const Duration(minutes: 31));
   }, skip: !ready);
 
+  testWidgets('by invite: the code asked before anything is bought, and a review code needs no purchase', (tester) async {
+    relay.cmd('signups-hosted', ['invite']);
+    addTearDown(() => relay.cmd('signups-hosted', ['open']));
+    final code = relay.cmd('invite-hosted', ['--review', '--uses', '1']);
+    final prefs = MemoryPrefs();
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest, subscription: _NoSubscription()));
+    await tester.pump();
+    await tester.tap(find.text('Sign up'));
+    await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
+    // Cancelled: no account, said so.
+    await tester.tap(find.text('Cancel'));
+    await until(tester, () => shown(tester).contains('needs an invite code'));
+    expect(shown(tester), contains('needs an invite code'));
+    // A wrong code, then the review code: signed up, nothing bought (the
+    // phone's store would cancel a purchase).
+    await tester.tap(find.text('Sign up'));
+    await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
+    await tester.enterText(find.byType(CupertinoTextField), 'AAAA-BBBB-CCCC-DDDD');
+    await tester.tap(find.text('Continue'));
+    await until(tester, () => shown(tester).contains('not valid'));
+    expect(shown(tester), contains('not valid'));
+    await tester.tap(find.text('Sign up'));
+    await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
+    await tester.enterText(find.byType(CupertinoTextField), code.toLowerCase());
+    await tester.tap(find.text('Continue'));
+    await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
+    expect(model(tester).relay.state, 'ready', reason: shown(tester));
+    expect(relay.cmd('invites-hosted'), contains('review  0 left'));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  }, skip: !ready);
+
   testWidgets('a relay of one\'s own from the first screen, and back', (tester) async {
     await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest));
     await tester.pump();

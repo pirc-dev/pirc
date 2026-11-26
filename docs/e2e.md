@@ -332,10 +332,15 @@ logs in, is given the newest version, and is then refused, so that it learns of 
   join and stored for its key only when the account's phone publishes a list version that has the
   key while the join is alive, so a join that fails leaves nothing behind. The relay passes at
   most 8 steps of the join, each at most 65,535 bytes, and keeps none of them.
-- Against abuse: the hosted relay has a domain of its own, not `pirc.dev`; there are caps per
-  account (section 3) and per address, join lookups among them; sign-ups can be closed, to invite
-  codes only; an account can be deleted, only from the account's phone, as only it changes the
-  list; and abuse reports go to an `abuse@` address.
+- Against abuse: the hosted relay has a domain of its own; there are caps per account (section 3)
+  and per address, join lookups among them; sign-ups are open, by invite code, or closed, which
+  the operator sets while the relay runs; an account can be deleted, only from the account's
+  phone, as only it changes the list; and abuse reports go to an `abuse@` address.
+- Invite codes are 80 random bits, kept by their hash, each good for a number of accounts until it
+  expires. The app asks the relay's mode, and whether a code may be used, before it buys anything
+  (`CheckInvite`). A review code, given only to the stores' reviewers, stands in for the
+  subscription: its account has a review subscription for 30 days and is deleted when that ends,
+  unless a subscription bought since carries it on.
 
 **Attestation only stops abuse.** It tells the relay that a real app on a real phone is signing
 up or joining, so that accounts cannot be made in bulk. It never stands in for the list: a

@@ -40,7 +40,7 @@ func TestStoreLayout(t *testing.T) {
 	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != storeVersion {
 		t.Fatalf("user_version %d %v", v, err)
 	}
-	if got := strings.Join(storeTables(t, s), " "); got != "accounts attestations devices held_lists lists names removed subscriptions" {
+	if got := strings.Join(storeTables(t, s), " "); got != "accounts attestations devices held_lists invites lists names removed settings subscriptions" {
 		t.Errorf("tables %s", got)
 	}
 	s.Close()
@@ -152,6 +152,9 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, table := range storeTables(t, s) {
+		if table == "invites" || table == "settings" {
+			continue // the relay's, not an account's
+		}
 		col := "account"
 		if table == "accounts" {
 			col = "id"

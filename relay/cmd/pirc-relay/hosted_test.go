@@ -2,7 +2,13 @@
 
 package main
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
+
+	"pirc.dev/relay/internal/hosted"
+)
 
 func TestCheckOrigin(t *testing.T) {
 	for _, s := range []string{"wss://relay.example", "ws://10.0.0.5:8443", "wss://[fd00::1]:8443"} {
@@ -20,5 +26,44 @@ func TestCheckOrigin(t *testing.T) {
 func TestServeHostedRegistered(t *testing.T) {
 	if extraCommands["serve-hosted"] == nil {
 		t.Error("no serve-hosted")
+	}
+}
+
+func TestInviteCommands(t *testing.T) {
+	dir := t.TempDir()
+	if err := signUpsHosted([]string{"--data-dir", dir, "open"}); err == nil {
+		t.Fatal("a directory with no hosted.db taken")
+	}
+	s, err := hosted.OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if err := signUpsHosted([]string{"--data-dir", dir, "open"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := signUpsHosted([]string{"--data-dir", dir, "often"}); err == nil {
+		t.Error("an unknown mode taken")
+	}
+	if err := inviteHosted([]string{"--data-dir", dir, "--review", "--uses", "20", "--days", "90", "--note", "App Review"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := invitesHosted([]string{"--data-dir", dir}); err != nil {
+		t.Fatal(err)
+	}
+	s, _ = hosted.OpenStore(dir)
+	defer s.Close()
+	if m, _ := s.SignUps(); m != hosted.SignUpsOpen {
+		t.Errorf("mode %q", m)
+	}
+	is, _ := s.Invites()
+	if len(is) != 1 || !is[0].Review || is[0].UsesLeft != 20 || is[0].Note != "App Review" || is[0].Expires.Before(time.Now().Add(89*24*time.Hour)) {
+		t.Fatalf("invites %+v", is)
+	}
+	if err := invitesHosted([]string{"--data-dir", dir, "--revoke", fmt.Sprintf("%x", is[0].CodeHash[:3])}); err != nil {
+		t.Fatal(err)
+	}
+	if is, _ := s.Invites(); len(is) != 0 {
+		t.Errorf("not revoked: %+v", is)
 	}
 }

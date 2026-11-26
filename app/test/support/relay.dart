@@ -102,6 +102,14 @@ class HostedRelay {
   /// The relay's data folder, which holds its store.
   Directory get data => Directory('${_dir.path}/hosted');
 
+  /// Runs one of the relay's admin commands on its store, beside it; its
+  /// output.
+  String cmd(String name, [List<String> args = const []]) {
+    final r = Process.runSync('${_dir.path}/pirc-relay-hosted', [name, '--data-dir', data.path, ...args]);
+    if (r.exitCode != 0) throw StateError('$name: ${r.stderr}');
+    return (r.stdout as String).trim();
+  }
+
   /// Stops the relay, runs [stopped] (to change its data), and starts it
   /// again on the same origin.
   Future<void> restart([Future<void> Function()? stopped]) async {

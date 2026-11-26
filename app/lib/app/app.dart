@@ -15,6 +15,7 @@ import '../e2e/join.dart' show readJoinText;
 import '../e2e/list.dart' show E2e;
 import '../hosted/account.dart' show AccountUnreadable, KeyValues, MemoryCounter, PhoneCounter, accountKey;
 import '../gen/pirc/v1alpha2/relay.pb.dart' as v2 show Welcome;
+import '../gen/pirc/v1alpha2/relay.pbenum.dart' show SignUpMode;
 import '../hosted/attest.dart';
 import '../hosted/names.dart' show forgetNames;
 import '../ui/hosted_account_screens.dart';
@@ -811,18 +812,61 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // Makes an account on the hosted relay, this phone its phone.
   Future<void> _signUp() async {
     final origin = widget.hosted!;
+    final e2e = await E2e.load();
+    // Who may sign up, asked before anything is bought.
+    final check = await checkInvite(e2e: e2e, origin: origin);
+    var code = '';
+    var review = false;
+    switch (check.mode) {
+      case SignUpMode.SIGN_UP_MODE_CLOSED:
+        throw 'Sign-ups are closed for now.';
+      case SignUpMode.SIGN_UP_MODE_INVITE:
+        final typed = await _askInvite();
+        if (typed == null || typed.trim().isEmpty) throw 'Signing up needs an invite code for now, so no account was made.';
+        final c = await checkInvite(e2e: e2e, origin: origin, code: typed);
+        if (!c.valid) throw 'That invite code is not valid, used up or expired.';
+        code = typed;
+        review = c.review;
+      default:
+    }
     // A new account starts the store's trial or purchase before it is
-    // made, and the store's proof goes in the sign-up (D1).
+    // made, and the store's proof goes in the sign-up (D1); a review
+    // code's needs none.
     final store = widget.subscription;
-    if (store != null && _access.value?.access != Access.allowed) {
+    if (!review && store != null && _access.value?.access != Access.allowed) {
       final bought = await store.buy();
       if (bought == Bought.cancelled) throw 'Not subscribed, so no account was made.';
       if (bought == Bought.pending) throw 'The purchase waits for approval. Sign up again once it is approved.';
       await _refresh();
     }
-    final e2e = await E2e.load();
-    final open = await signUp(e2e: e2e, store: widget.store, values: widget.prefs, origin: origin, attest: widget.attest, protect: _settings!.lock);
+    final open = await signUp(e2e: e2e, store: widget.store, values: widget.prefs, origin: origin, attest: widget.attest, protect: _settings!.lock, inviteCode: code);
     await _hostedJoined(open);
+  }
+
+  // The invite code, typed; null when the person cancels.
+  Future<String?> _askInvite() async {
+    final context = _nav.currentState?.overlay?.context;
+    if (context == null) return null;
+    final field = TextEditingController();
+    try {
+      return await showCupertinoDialog<String>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Invite code'),
+          content: Column(children: [
+            const Text('PiRC\'s relay takes new accounts by invite for now. Type the code you were given.'),
+            const SizedBox(height: 12),
+            CupertinoTextField(controller: field, autofocus: true, autocorrect: false, placeholder: 'XXXX-XXXX-XXXX-XXXX', textCapitalization: TextCapitalization.characters),
+          ]),
+          actions: [
+            CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(field.text), child: const Text('Continue')),
+          ],
+        ),
+      );
+    } finally {
+      field.dispose();
+    }
   }
 
   // Shows this phone's code until the account's phone adds it.

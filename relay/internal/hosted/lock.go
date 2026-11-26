@@ -62,6 +62,8 @@ func subscriptionStore(kind string) pb.SubscriptionStore {
 		return pb.SubscriptionStore_SUBSCRIPTION_STORE_GOOGLE_PLAY
 	case "test":
 		return pb.SubscriptionStore_SUBSCRIPTION_STORE_TEST
+	case reviewKind:
+		return pb.SubscriptionStore_SUBSCRIPTION_STORE_REVIEW
 	}
 	return pb.SubscriptionStore_SUBSCRIPTION_STORE_UNSPECIFIED
 }
@@ -146,21 +148,26 @@ func (s *Server) deleteExpired() {
 		return
 	}
 	for _, id := range ids {
-		s.mu.Lock()
-		if err := s.store.DeleteAccount(id); err != nil {
-			s.mu.Unlock()
-			s.log.Error("cannot delete a locked account", "err", err)
-			continue
-		}
-		if a := s.accounts[string(id)]; a != nil {
-			s.forgetDeletedLocked(a)
-			for o := range a.conns {
-				o.close(websocket.StatusPolicyViolation, "account deleted")
-			}
-		}
-		s.mu.Unlock()
-		s.log.Info("locked account deleted", "account", shortKey(id), "after", s.cfg.LockedFor)
+		s.deleteAccountByID(id, "locked account deleted")
 	}
+}
+
+// deleteAccountByID deletes an account and closes its connections, logging
+// why.
+func (s *Server) deleteAccountByID(id []byte, why string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.store.DeleteAccount(id); err != nil {
+		s.log.Error("cannot delete an account", "account", shortKey(id), "why", why, "err", err)
+		return
+	}
+	if a := s.accounts[string(id)]; a != nil {
+		s.forgetDeletedLocked(a)
+		for o := range a.conns {
+			o.close(websocket.StatusPolicyViolation, "account deleted")
+		}
+	}
+	s.log.Info(why, "account", shortKey(id))
 }
 
 // requestIDOf is the request_id of the frame's body, if it has one.

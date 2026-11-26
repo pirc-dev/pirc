@@ -51,7 +51,7 @@ func (h *harness) start(tweak func(*Config)) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	h.cfg = Config{Store: store, Origin: origin, Verifier: TestVerifier{}, Now: func() time.Time { return t0 }, Logger: testLogger()}
+	h.cfg = Config{Store: store, Origin: origin, Verifier: TestVerifier{}, SignUps: SignUpsOpen, Now: func() time.Time { return t0 }, Logger: testLogger()}
 	if tweak != nil {
 		tweak(&h.cfg)
 	}

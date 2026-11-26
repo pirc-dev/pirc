@@ -49,6 +49,21 @@ CREATE TABLE IF NOT EXISTS held_lists (
   hash BLOB NOT NULL,
   PRIMARY KEY (account, hash)
 );
+-- Invite codes, by SHA-256 of the code as typed after normalising: a sign-up
+-- uses one; a review code's accounts need no subscription (invites.go).
+CREATE TABLE IF NOT EXISTS invites (
+  code_hash BLOB PRIMARY KEY,
+  review INTEGER NOT NULL,
+  uses_left INTEGER NOT NULL,
+  expires_ms INTEGER NOT NULL,
+  made_ms INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT ''
+);
+-- The relay's own settings, by name: signups (open, invite or closed).
+CREATE TABLE IF NOT EXISTS settings (
+  name TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 -- The account's phone's names, sealed to each client's box key.
 CREATE TABLE IF NOT EXISTS names (
   account BLOB NOT NULL,
@@ -235,7 +250,19 @@ func seedHeld(t *sql.Tx) error {
 // device row and, when att is not nil, its attestation, in one
 // transaction.
 func (s *Store) CreateAccount(id []byte, l StoredList, att *Attested, nowMs int64) error {
+	return s.CreateAccountInvited(id, l, att, nowMs, "")
+}
+
+// CreateAccountInvited is CreateAccount using one of the invite code's
+// uses, when code is not empty, in the same transaction: errNoInvite
+// when it has none left.
+func (s *Store) CreateAccountInvited(id []byte, l StoredList, att *Attested, nowMs int64, code string) error {
 	return s.tx(func(t *sql.Tx) error {
+		if code != "" {
+			if err := useInviteTx(t, code, time.UnixMilli(nowMs)); err != nil {
+				return err
+			}
+		}
 		if _, err := t.Exec(`INSERT INTO accounts (id, created_ms) VALUES (?, ?)`, id, nowMs); err != nil {
 			return err
 		}

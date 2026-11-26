@@ -2707,6 +2707,19 @@ built; steps 14 and 15 are not finished.
        the store; and a way through for the stores' reviewers: review
        installs exempt from invites and the subscription, and a demo host
        that shows a fresh join code where a reviewer can read it.
+       Built so far: sign-ups open, by invite or closed, kept in the
+       store and set by `pirc-relay signups-hosted` while the relay runs
+       (a relay's `--signups` before any is set: invite, or open with
+       `--test-attestation`); invite codes made by `pirc-relay
+       invite-hosted [--review] [--uses N] [--days D] [--note T]`, listed
+       and revoked by `invites-hosted`; the app asks the mode and the code
+       before buying, and a review code's account skips the purchase
+       (`relay/internal/hosted/invites.go`, `app/lib/hosted/setup.dart`,
+       checkInvite). Tested in Go (`invites_test.go`, the commands in
+       `cmd/pirc-relay/hosted_test.go`) and against the Go relay
+       (`app/test/hosted_invite_test.dart`, and the screens in
+       `hosted_app_test.dart`: the code asked, a wrong one said, a review
+       code signing up with a store that would refuse a purchase).
     7. **A closed beta**: sign-ups by invite code only, on TestFlight
        (whose outside testers bring Beta App Review) and Play's internal
        track; the extension on a prerelease channel (an npm dist-tag, which

@@ -52,6 +52,40 @@ class SignUpFailed implements Exception {
   String toString() => message;
 }
 
+/// The relay's sign-up mode, and an invite code's state.
+class InviteCheck {
+  const InviteCheck(this.mode, {this.valid = false, this.review = false});
+  final SignUpMode mode;
+  // The code may be used now.
+  final bool valid;
+  // A review code: its account needs no subscription.
+  final bool review;
+}
+
+/// Asks the relay, before a purchase, whether it takes sign-ups and
+/// whether [code] may be used (relay.proto, CheckInvite), logged in
+/// without an account by a key made for it and dropped.
+Future<InviteCheck> checkInvite({required E2e e2e, required String origin, String code = ''}) async {
+  final kp = e2e.sodium.crypto.sign.keyPair();
+  try {
+    final link = await HostedLink.connect(origin: origin, publicKey: kp.publicKey, sign: (m) async => e2e.sodium.crypto.sign.detached(message: m, secretKey: kp.secretKey));
+    try {
+      link.send(Frame(checkInvite: CheckInvite(requestId: 'invite', inviteCode: code)));
+      final f = await link.frames.firstWhere((f) => f.hasInviteChecked() || f.hasError()).timeout(const Duration(seconds: 15));
+      if (f.hasError()) throw SignUpFailed('the relay refused: ${f.error.message}');
+      return InviteCheck(f.inviteChecked.mode, valid: f.inviteChecked.valid, review: f.inviteChecked.review);
+    } finally {
+      await link.close();
+    }
+  } on SignUpFailed {
+    rethrow;
+  } on Object catch (e) {
+    throw SignUpFailed('could not reach the relay: $e');
+  } finally {
+    kp.secretKey.dispose();
+  }
+}
+
 /// A new account's keys, before it exists.
 class _NewKeys {
   _NewKeys(this.e2e)
