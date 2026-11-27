@@ -569,8 +569,9 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
   key.
 - **Starting and stopping agents**: + on a tmux session or herdr
   workspace, or New agent in a session's actions, opens a pi beside it in
-  a folder chosen or typed, its window named after the folder unless a
-  name is typed, then its chat; Stop pi in the actions.
+  a folder chosen or typed (a tap only chooses it), its window named
+  after the folder unless a name is typed, once Start agent is pressed,
+  then its chat; Stop pi in the actions.
 - **pi's questions** (`design.md` section 8): a dialog an extension shows
   in pi's terminal shows in the app too, answered there or in the
   terminal. The question takes the composer's place while it waits, under

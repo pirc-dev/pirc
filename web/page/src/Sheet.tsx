@@ -100,12 +100,17 @@ export function SheetGroup(p: { children: React.ReactNode }) {
 }
 
 // A row of a sheet: a label, an optional line under it, and a value.
-export function SheetRow(p: { label: string; sub?: string; value?: React.ReactNode; danger?: boolean; disabled?: boolean; onClick?: () => void }) {
+// With [checked], one of a group's choices (role radio in a radiogroup):
+// a tap chooses it, marked with a tick, and does nothing more.
+export function SheetRow(p: { label: string; sub?: string; value?: React.ReactNode; danger?: boolean; disabled?: boolean; checked?: boolean; onClick?: () => void }) {
+  const choice = p.checked !== undefined;
   return (
     <button
       className={`flex min-h-13 w-full items-center gap-3 border-t border-rule px-5 py-2 text-left text-base disabled:opacity-40 active:bg-wash cards:px-3.5 cards:first:border-t-0 native:min-h-12 native:px-4 cockpit:min-h-[50px] cockpit:px-4 cockpit:text-[15px] ${p.danger ? "text-block" : ""}`}
       disabled={p.disabled}
       onClick={p.onClick}
+      role={choice ? "radio" : undefined}
+      aria-checked={choice ? p.checked : undefined}
     >
       {/* Wrapped anywhere: a label can be a long path. */}
       <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
@@ -113,6 +118,7 @@ export function SheetRow(p: { label: string; sub?: string; value?: React.ReactNo
         {p.sub && <small className="mt-px block truncate text-[13px] text-ink2 cockpit:font-mono cockpit:text-xs cockpit:text-ink3">{p.sub}</small>}
       </span>
       {p.value}
+      {choice && <span className={`w-5 flex-none text-center text-[17px] font-semibold text-accent ${p.checked ? "" : "invisible"}`} aria-hidden="true">✓</span>}
     </button>
   );
 }

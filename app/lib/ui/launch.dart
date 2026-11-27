@@ -1,8 +1,9 @@
 // Opening a new pi beside a running one, as the web page's Launch.tsx, in
 // its tmux session or herdr workspace (docs/design.md, section 4): in that
 // pi's folder, one this machine's sessions have used, or one typed in; its
-// window named after the folder unless named here. Once the new pi
-// connects, its chat opens.
+// window named after the folder unless named here. A folder tapped is only
+// chosen (this pi's at first); Start opens the new pi. Once it connects,
+// its chat opens.
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -53,6 +54,8 @@ class _LaunchSheetState extends State<LaunchSheet> {
   var _past = const <String>[];
   final _typed = TextEditingController();
   final _name = TextEditingController();
+  // The folder chosen from the list; one typed in wins while there is one.
+  late var _chosen = widget.beside.cwd;
   // Starting: the request and its folder; or why it failed.
   ({String requestId, String cwd})? _starting;
   String? _failed;
@@ -68,6 +71,7 @@ class _LaunchSheetState extends State<LaunchSheet> {
     });
     widget.model.addListener(_connected);
     _typed.addListener(() => setState(() {}));
+    _name.addListener(() => setState(() {}));
   }
 
   @override
@@ -156,35 +160,48 @@ class _LaunchSheetState extends State<LaunchSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(color: look.sheetCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: look.rule)),
         );
-    final typed = _typed.text.trim();
-    void openTyped() {
-      if (typed.isNotEmpty && !starting) _launch(typed);
+    final cwd = _typed.text.trim().isNotEmpty ? _typed.text.trim() : _chosen;
+    final can = cwd.isNotEmpty && !starting;
+    void start() {
+      if (can) _launch(cwd);
     }
 
-    return Sheet(title: 'New agent', sub: 'Beside this one, in ${besideWhere(s)}', done: 'Done', children: [
+    return Sheet(title: 'New agent', sub: 'Beside this one, in ${besideWhere(s)}', done: 'Cancel', children: [
       if (_starting != null) say('Opening pi in ${_starting!.cwd}…'),
       if (_failed != null) say(_failed!, bad: true),
-      Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12), child: field(_name, "Window name (the folder's if empty)")),
       SheetGroup(children: [
-        for (final (i, f) in folders.indexed) SheetRow(label: f, sub: i == 0 ? "This agent's folder" : null, disabled: starting, onTap: () => _launch(f)),
+        for (final (i, f) in folders.indexed)
+          SheetRow(
+            label: f,
+            sub: i == 0 ? "This agent's folder" : null,
+            disabled: starting,
+            checked: _typed.text.trim().isEmpty && f == _chosen,
+            onTap: () => setState(() {
+              _chosen = f;
+              _typed.clear();
+            }),
+          ),
       ]),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-        child: Row(spacing: 10, children: [
-          Expanded(child: field(_typed, 'Another folder: ~/src/…', mono: true, submitted: (_) => openTyped())),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 12, children: [
+          field(_typed, 'Another folder: ~/src/…', mono: true),
+          field(_name, folderName(cwd).isEmpty ? 'Window name' : 'Window name: ${folderName(cwd)}', submitted: (_) => start()),
           Semantics(
             button: true,
-            enabled: typed.isNotEmpty && !starting,
+            enabled: can,
+            label: 'Start agent',
+            excludeSemantics: true,
+            onTap: can ? start : null,
             child: GestureDetector(
-              onTap: openTyped,
+              onTap: start,
               child: Opacity(
-                opacity: typed.isNotEmpty && !starting ? 1 : 0.4,
+                opacity: can ? 1 : 0.4,
                 child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 50,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: look.accent, borderRadius: BorderRadius.circular(12)),
-                  child: Text('Open', style: look.text(size: 15, weight: FontWeight.w600, color: look.onAccent, spacing: 0)),
+                  decoration: BoxDecoration(color: look.accent, borderRadius: BorderRadius.circular(14)),
+                  child: Text('Start agent', style: look.text(size: 16, weight: FontWeight.w600, color: look.onAccent, spacing: 0)),
                 ),
               ),
             ),

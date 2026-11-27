@@ -1,7 +1,8 @@
 // Opening a new pi beside a running one, in its tmux session or herdr
 // workspace (docs/design.md, section 4): in that pi's folder, one this
 // machine's sessions have used, or one typed in; its window named after
-// the folder unless named here. Once the new pi connects, its chat opens.
+// the folder unless named here. A folder tapped is only chosen (this pi's
+// at first); Start opens the new pi. Once it connects, its chat opens.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { SessionView } from "../../core/view.ts";
 import { afterLayers } from "./layer.ts";
@@ -37,6 +38,8 @@ export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (
   const { sessions } = useSyncExternalStore(live.subscribe, live.getState);
   const [past, setPast] = useState<string[]>([]);
   const [typed, setTyped] = useState("");
+  // The folder chosen from the list; one typed in wins while there is one.
+  const [chosen, setChosen] = useState(s.cwd);
   const [name, setName] = useState("");
   const [state, setState] = useState<{ kind: "choosing" } | { kind: "starting"; requestId: string; cwd: string } | { kind: "failed"; message: string }>({ kind: "choosing" });
   const opened = useRef(false);
@@ -82,31 +85,27 @@ export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (
     }
   };
 
+  const cwd = typed.trim() || chosen;
+  const start = () => {
+    if (cwd && state.kind !== "starting") void launch(cwd);
+  };
   const say = (text: string, bad = false) => <p className={`px-5 pb-3 text-[14.5px] cards:px-3.5 ${bad ? "text-block" : "text-ink2"}`} role={bad ? "alert" : undefined}>{text}</p>;
   const starting = state.kind === "starting";
   return (
-    <Sheet title="New agent" sub={`Beside this one, in ${besideWhere(s)}`} done="Done" close={p.close}>
+    <Sheet title="New agent" sub={`Beside this one, in ${besideWhere(s)}`} done="Cancel" close={p.close}>
       {starting && say(`Opening pi in ${state.cwd}…`)}
       {state.kind === "failed" && say(state.message, true)}
-      <div className="flex px-5 pb-3 cards:px-3.5">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          aria-label="Window name"
-          placeholder="Window name (the folder's if empty)"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          disabled={starting}
-          className={field}
-        />
-      </div>
       <SheetGroup>
-        {folders.map((f, i) => <SheetRow key={f} label={f} sub={i === 0 ? "This agent's folder" : undefined} disabled={starting} onClick={() => void launch(f)} />)}
+        <div role="radiogroup" aria-label="Folder">
+          {folders.map((f, i) => <SheetRow key={f} label={f} sub={i === 0 ? "This agent's folder" : undefined} disabled={starting} checked={!typed.trim() && f === chosen} onClick={() => {
+            setChosen(f);
+            setTyped("");
+          }} />)}
+        </div>
       </SheetGroup>
-      <form className="flex gap-2.5 px-5 pt-1 cards:px-3.5" onSubmit={(e) => {
+      <form className="flex flex-col gap-3 px-5 pt-1 cards:px-3.5" onSubmit={(e) => {
         e.preventDefault();
-        if (typed.trim() && !starting) void launch(typed.trim());
+        start();
       }}>
         <input
           value={typed}
@@ -116,10 +115,22 @@ export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          enterKeyHint="go"
+          disabled={starting}
           className={`${field} font-mono`}
         />
-        <button className="min-h-11 rounded-full px-4 text-[15px] font-semibold text-paper bg-ink disabled:opacity-40 cards:rounded-[12px] cards:bg-accent cards:text-on-accent cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent" disabled={!typed.trim() || starting}>Open</button>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-label="Window name"
+          placeholder={folderName(cwd) ? `Window name: ${folderName(cwd)}` : "Window name"}
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="go"
+          disabled={starting}
+          className={field}
+        />
+        <button className="mt-1 h-12 rounded-full text-[15.5px] font-semibold text-paper bg-ink disabled:opacity-40 cards:h-13 cards:rounded-[14px] cards:bg-accent cards:text-on-accent cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent" disabled={!cwd || starting}>Start agent</button>
       </form>
     </Sheet>
   );

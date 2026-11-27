@@ -6,7 +6,9 @@
 // top, it follows the finger and closes past a third of its height or on a
 // flick; short of that it goes back.
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Icons;
 
+import 'adaptive.dart';
 import 'look.dart';
 
 // Opens a sheet; completes when it closes, with what it was closed with. On
@@ -193,14 +195,17 @@ class SheetGroup extends StatelessWidget {
   }
 }
 
-// A row of a sheet: a label, an optional line under it, and a value.
+// A row of a sheet: a label, an optional line under it, and a value. With
+// [checked], one of a group's choices: a tap chooses it, marked with a
+// tick, and does nothing more.
 class SheetRow extends StatefulWidget {
-  const SheetRow({super.key, required this.label, this.sub, this.value, this.danger = false, this.disabled = false, this.onTap});
+  const SheetRow({super.key, required this.label, this.sub, this.value, this.danger = false, this.disabled = false, this.checked, this.onTap});
   final String label;
   final String? sub;
   final Widget? value;
   final bool danger;
   final bool disabled;
+  final bool? checked;
   final VoidCallback? onTap;
 
   @override
@@ -216,7 +221,9 @@ class _SheetRowState extends State<SheetRow> {
     final w = widget;
     final on = !w.disabled && w.onTap != null;
     return Semantics(
-      button: true,
+      button: w.checked == null,
+      inMutuallyExclusiveGroup: w.checked != null,
+      checked: w.checked,
       enabled: on,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -242,6 +249,10 @@ class _SheetRowState extends State<SheetRow> {
                 ]),
               ),
               if (w.value != null) ...[const SizedBox(width: 12), w.value!],
+              if (w.checked != null) ...[
+                const SizedBox(width: 12),
+                SizedBox(width: 20, child: w.checked! ? Icon(onAndroid ? Icons.check : CupertinoIcons.checkmark_alt, size: 20, color: look.accent) : null),
+              ],
             ]),
           ),
         ),

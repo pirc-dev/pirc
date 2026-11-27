@@ -1746,7 +1746,11 @@ built; steps 14 and 15 are not finished.
         in one, and New agent in the session's actions, where its pi has a
         launcher; in that pi's folder, one of the host's live or saved
         sessions', or one typed in, its window named after the folder
-        unless named there; the new pi's chat opens once it connects, and
+        unless named there. A folder in the list is only chosen when
+        tapped (that pi's at first, with a tick), the name field's hint
+        saying the name it gives, and Start agent under them opens the new
+        pi: a tap that started one at once was taken for a choice, before
+        the name. The new pi's chat opens once it connects, and
         after 45 seconds the sheet says it has not yet. The + is right
         after the host's or group's name, before its counts, so that the
         chevron is always at the end of the line, with a + or not, and the

@@ -700,8 +700,16 @@ void main() {
     expect(find.text('/home/me/src/blog'), findsOneWidget);
     expect(find.text('/home/me/src/site'), findsOneWidget, reason: 'once, though live and saved');
     await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('launch_light.png')));
+    // A folder tapped is only chosen; Start opens pi there.
     sent.clear();
     await tester.tap(find.text('/home/me/src/blog'));
+    await tester.pump();
+    expect(sent.where((f) => f.hasRouted() && SessionMessage.fromBuffer(f.routed.payload).hasLaunch()), isEmpty);
+    expect(find.text('Window name: blog'), findsOneWidget, reason: 'the name it gives');
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('launch_chosen_light.png')));
+    await tester.ensureVisible(find.text('Start agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start agent'));
     await tester.pump();
     final launch = SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload).launch;
     expect(launch.cwd, '/home/me/src/blog');
@@ -734,8 +742,11 @@ void main() {
     expect(find.text('Another pi beside this one, in work on laptop'), findsOneWidget);
     await tester.tap(find.text('New agent'));
     await tester.pumpAndSettle();
+    // This agent's folder, chosen at first.
     sent.clear();
-    await tester.tap(find.text("This agent's folder"));
+    await tester.ensureVisible(find.text('Start agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start agent'));
     await tester.pump();
     final f = sent.lastWhere((f) => f.hasRouted() && SessionMessage.fromBuffer(f.routed.payload).hasLaunch());
     final launch = SessionMessage.fromBuffer(f.routed.payload).launch;
@@ -759,11 +770,13 @@ void main() {
     await tester.tap(find.bySemanticsLabel('New agent in work'));
     await tester.pumpAndSettle();
     final fields = find.descendant(of: find.byType(LaunchSheet), matching: find.byType(CupertinoTextField));
-    await tester.enterText(fields.first, 'notes');
-    await tester.enterText(fields.last, '~/nowhere');
+    await tester.enterText(fields.first, '~/nowhere');
+    await tester.enterText(fields.last, 'notes');
     await tester.pump();
     sent.clear();
-    await tester.tap(find.text('Open'));
+    await tester.ensureVisible(find.text('Start agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start agent'));
     await tester.pump();
     final launch = SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload).launch;
     expect(launch.cwd, '~/nowhere');
@@ -775,6 +788,10 @@ void main() {
     // Accepted, and nothing connects.
     sent.clear();
     await tester.tap(find.text('/home/me/src/pirc'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('Start agent'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start agent'));
     await tester.pump();
     final again = SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload).launch;
     model.client.onFrame(Frame(routed: Routed(session: f.routed.session, payload: SessionMessage(accepted: Accepted(requestId: again.requestId)).writeToBuffer())));

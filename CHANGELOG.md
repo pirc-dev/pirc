@@ -8,6 +8,9 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- New agent: tapping a folder in the list now only chooses it; name the
+  window if you like, then press Start agent. Before, a tap started the
+  agent at once.
 - While pi works, the message box has one Send, which steers as before;
   hold it (or right-click it) to queue the message instead. The
   Steer/Queue switch is gone. An empty Send now looks switched off in
