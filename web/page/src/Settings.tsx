@@ -8,6 +8,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { Devices } from "./Devices.tsx";
 import { Icon } from "./icons.tsx";
+import { SideToggle } from "./SideToggle.tsx";
 import { free, setKeys, useKey, useKeyboard, useKeys } from "./keys.ts";
 import { LOOKS, setLook, useLook } from "./look.ts";
 import { live } from "./live.ts";
@@ -25,8 +26,14 @@ export function Settings(p: { back: () => void; wide: boolean; devices: DeviceVi
   });
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-paper pb-[max(2.5rem,env(safe-area-inset-bottom))]">
+      {/* Beside the list, at the start of the pane as in a chat. */}
+      {p.wide && (
+        <div className="px-1 pt-1">
+          <SideToggle />
+        </div>
+      )}
       <div className="mx-auto max-w-[40rem]">
-        <header className="px-5 pt-3 cards:px-4 cockpit:px-3.5">
+        <header className={`px-5 cards:px-4 cockpit:px-3.5 ${p.wide ? "" : "pt-3"}`}>
           {!p.wide && (
             <div className="-ml-1 flex min-h-8 items-center">
               <button className="flex min-h-11 items-center gap-0.5 text-[15px] text-ink2 cards:text-[16px] cards:text-accent native:text-[17px] cockpit:font-mono cockpit:text-sm" onClick={p.back}>
@@ -34,7 +41,7 @@ export function Settings(p: { back: () => void; wide: boolean; devices: DeviceVi
               </button>
             </div>
           )}
-          <h1 ref={heading} tabIndex={-1} className={`mb-1.5 truncate outline-none font-read text-[34px] leading-tight tracking-[-0.015em] cards:mb-2.5 cards:text-[28px] cards:font-[650] cards:tracking-[-0.03em] native:text-[34px] native:font-bold native:tracking-[0.01em] cockpit:mb-1 cockpit:font-mono cockpit:text-[22px] cockpit:font-bold cockpit:tracking-[-0.02em] ${p.wide ? "mt-8" : "mt-0.5 cockpit:mt-1"}`}>Settings</h1>
+          <h1 ref={heading} tabIndex={-1} className={`mb-1.5 truncate outline-none font-read text-[34px] leading-tight tracking-[-0.015em] cards:mb-2.5 cards:text-[28px] cards:font-[650] cards:tracking-[-0.03em] native:text-[34px] native:font-bold native:tracking-[0.01em] cockpit:mb-1 cockpit:font-mono cockpit:text-[22px] cockpit:font-bold cockpit:tracking-[-0.02em] ${p.wide ? "mt-0" : "mt-0.5 cockpit:mt-1"}`}>Settings</h1>
         </header>
         <Section title="This browser" sub="Kept here: each browser has its own.">
           <Notifications />

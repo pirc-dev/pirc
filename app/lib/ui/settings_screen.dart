@@ -15,6 +15,7 @@ import '../app/store.dart';
 import '../hosted/try_stores.dart';
 import '../join.dart';
 import '../push/push.dart';
+import 'side.dart';
 import 'devices.dart';
 import 'hosted_account_screens.dart';
 import 'hosted_devices.dart';
@@ -83,6 +84,13 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         builder: (context, _) => ListView(
           padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top, bottom: MediaQuery.paddingOf(context).bottom + 40),
           children: [
+            // Beside the list, the button that hides it, at the start of
+            // the pane as in a chat.
+            if (widget.wide)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(4, 4, 20, 0),
+                child: Align(alignment: Alignment.centerLeft, child: SideToggle()),
+              ),
             if (!widget.wide)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
@@ -92,7 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                 ),
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(20, widget.wide ? 12 : 0, 20, 6),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
               child: Semantics(header: true, child: Text('Settings', style: look.text(size: 34, weight: FontWeight.w700, spacing: 0.34, height: 1.25))),
             ),
             _Section(title: 'This phone', sub: 'Kept here: each phone has its own.', rows: [

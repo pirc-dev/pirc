@@ -23,6 +23,7 @@ import type { Attachment, PickedFile } from "./attach.ts";
 import { Thumbs } from "./Images.tsx";
 import { FileChips } from "./Files.tsx";
 import { Actions, type FromMessage, MessageSheet } from "./SessionSheets.tsx";
+import { SideToggle } from "./SideToggle.tsx";
 
 type Pending = SentPending<Attachment, PickedFile>;
 
@@ -213,7 +214,8 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
             </div>
           )}
           {!fold && (
-            <div className={`flex items-center ${p.wide ? "pr-2" : ""}`}>
+            <div className={`flex items-center ${p.wide ? "pr-2 pl-1" : ""}`}>
+              {p.wide && <SideToggle />}
               <div className="mx-auto min-w-0 max-w-[44rem] flex-1">
                 <div className="flex items-baseline gap-2 px-4">
                   {s && <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} className="w-4 text-[17px]" />}

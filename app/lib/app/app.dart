@@ -42,6 +42,7 @@ import '../push/notifications.dart';
 import '../push/push.dart';
 import '../ui/sessions_screen.dart';
 import '../ui/settings_screen.dart';
+import '../ui/side.dart';
 import 'chat_cache.dart';
 import 'drafts.dart';
 import 'hosted_devices.dart';
@@ -77,6 +78,18 @@ abstract class AppPrefs implements KeyValues {
   }
 
   Future<void> setFolded(Set<String> keys) => set('folded', jsonEncode([...keys]));
+
+  // The list's column on a wide screen: its width, and whether hidden.
+  Future<Side> side() async {
+    try {
+      final v = await get('side');
+      return v == null ? const Side() : Side.fromJson(jsonDecode(v));
+    } on FormatException {
+      return const Side();
+    }
+  }
+
+  Future<void> setSide(Side side) => set('side', jsonEncode(side.toJson()));
 
   // Whether what the camera is for has been said, before the system first
   // asks for it.
@@ -203,6 +216,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   String? _relay;
   var _loaded = false;
   var _folded = <String>{};
+  // The list's column on a wide screen; kept a moment after it last moves.
+  final _side = ValueNotifier(const Side());
+  Timer? _sideKept;
   KeyHolder? _holder;
   DeviceKey? _key;
   String? _lockError;
@@ -277,6 +293,14 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.prefs.side().then((side) {
+      if (!mounted) return;
+      _side.value = side;
+      _side.addListener(() {
+        _sideKept?.cancel();
+        _sideKept = Timer(const Duration(milliseconds: 400), () => widget.prefs.setSide(_side.value));
+      });
+    });
     final subscription = widget.subscription;
     Future.wait([
       // Said before anything connects, and so before any notification.
@@ -503,6 +527,8 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     _storeChanged?.cancel();
     _incoming.dispose();
     _access.dispose();
+    _sideKept?.cancel();
+    _side.dispose();
     super.dispose();
   }
 
@@ -1245,10 +1271,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     } else {
       final model = _model!;
       shown = model;
-      // As the web page's: at 1024 points or wider (a tablet, a foldable
-      // opened, a wide window), the list in a column of 380 beside what is
-      // open; narrower, one or the other.
-      final wide = MediaQuery.sizeOf(context).width >= 1024;
+      // As the web page's: on a tablet, a foldable opened or a wide window
+      // (isWide), the list in a column beside what is open, which can be
+      // hidden or made wider (side.dart); narrower, one or the other.
+      final size = MediaQuery.sizeOf(context);
+      final wide = isWide(size);
       if (wide != _wide) _crossed(wide);
       final list = SessionsScreen(
         model: model,
@@ -1265,32 +1292,52 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       home = !wide
           ? list
           : ListenableBuilder(
-              listenable: _chat,
-              builder: (context, _) => Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                // Its own navigator, so that a host's or group's page stays
-                // in the column; sheets and full screen pages still cover
-                // everything.
-                SizedBox(
-                  width: 380,
-                  // The system's back (Android's) goes to the column's
-                  // pages first.
-                  child: NavigatorPopHandler(
-                    onPopWithResult: (_) => _listNav.currentState?.maybePop(),
-                    child: Navigator(key: _listNav, onGenerateRoute: (_) => pageRoute<void>(builder: (_) => list)),
-                  ),
-                ),
-                Container(width: 0.5, color: look.rule),
-                Expanded(
-                  child: _inSettings
-                      ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true, hosted: _hostedDevices, hostedAccount: _hostedAccount)
-                      : _chat.value != null
-                          ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
-                          : CupertinoPageScaffold(
-                              backgroundColor: look.card,
-                              child: Center(child: Text('Choose a session to see its chat.', style: look.text(size: 16, color: look.ink2, spacing: 0))),
-                            ),
-                ),
-              ]),
+              listenable: Listenable.merge([_chat, _side]),
+              builder: (context, _) {
+                final side = _side.value;
+                final width = sideWidth(side.width, size.width);
+                return SideScope(
+                  side: _side,
+                  child: Stack(children: [
+                    Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      // Its own navigator, so that a host's or group's page
+                      // stays in the column; sheets and full screen pages
+                      // still cover everything. Hidden, it keeps where it
+                      // was.
+                      Offstage(
+                        offstage: side.hidden,
+                        child: SizedBox(
+                          width: width,
+                          // The system's back (Android's) goes to the
+                          // column's pages first.
+                          child: NavigatorPopHandler(
+                            enabled: !side.hidden,
+                            onPopWithResult: (_) => _listNav.currentState?.maybePop(),
+                            child: Navigator(key: _listNav, onGenerateRoute: (_) => pageRoute<void>(builder: (_) => list)),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _inSettings
+                            ? SettingsScreen(key: const ValueKey('settings'), settings: _settings!, model: model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, wide: true, hosted: _hostedDevices, hostedAccount: _hostedAccount)
+                            : _chat.value != null
+                                ? ChatScreen(key: ValueKey(_chat.value), model: model, id: _chat.value!, drafts: widget.drafts, open: _openChat, wide: true)
+                                : CupertinoPageScaffold(
+                                    backgroundColor: look.card,
+                                    child: SafeArea(
+                                      child: Stack(children: [
+                                        const Positioned(left: 4, top: 4, child: SideToggle()),
+                                        Center(child: Text('Choose a session to see its chat.', style: look.text(size: 16, color: look.ink2, spacing: 0))),
+                                      ]),
+                                    ),
+                                  ),
+                      ),
+                    ]),
+                    // Its edge, over the line between them.
+                    if (!side.hidden) Positioned(left: width - 6, top: 0, bottom: 0, width: 12, child: SideEdge(side: _side, room: size.width)),
+                  ]),
+                );
+              },
             );
     }
     return LookScope(

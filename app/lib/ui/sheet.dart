@@ -9,9 +9,19 @@ import 'package:flutter/cupertino.dart';
 
 import 'look.dart';
 
-// Opens a sheet; completes when it closes, with what it was closed with.
-Future<T?> showSheet<T>(BuildContext context, WidgetBuilder builder) =>
-    showCupertinoModalPopup<T>(context: context, barrierColor: Look.of(context).scrim, builder: builder);
+// Opens a sheet; completes when it closes, with what it was closed with. On
+// a wide screen (a tablet), no wider than the web page's (32rem), in the
+// middle.
+Future<T?> showSheet<T>(BuildContext context, WidgetBuilder builder) => showCupertinoModalPopup<T>(
+      context: context,
+      barrierColor: Look.of(context).scrim,
+      builder: (context) => Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: sheetMaxWidth), child: builder(context)),
+      ),
+    );
+
+const sheetMaxWidth = 512.0;
 
 // Whether a drag let go [dy] below where the sheet rests, moving at
 // [velocity] (downwards positive), closes a sheet [height] tall.

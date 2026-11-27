@@ -100,8 +100,8 @@ for the connection line, and `&look=quiet`, `triage`, `native` or
 remove and a made-up token to add one (a name with "refuse" in it is
 refused, renaming to it, removing one under it, or asking a token for
 it), and `&notify=off`, `on`, `blocked` or
-`unsupported` makes up this browser's notifications for it. At a laptop's width (1024
-px or more) the list and the chat are side by side, as in the app; a
+`unsupported` makes up this browser's notifications for it. At a tablet's width (700
+px or more, and 500 high) the list and the chat are side by side, as in the app; a
 session opened from the list shows the made-up chat. Its requests are answered by `src/gallery.tsx`:
 the session actions and the model picker work, and a message with
 "refuse" in it is refused. The gallery is never part of the built page.

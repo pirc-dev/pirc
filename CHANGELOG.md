@@ -8,6 +8,11 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Tablets get the list beside the chat when upright too (from 700
+  wide: an iPad mini, most Android tablets); the list's column can be
+  hidden with a button at the start of the chat's header and made wider
+  or narrower by dragging its edge, in the web app and the apps. Sheets
+  on a tablet are no longer as wide as the screen.
 - The Android app has Android's own controls instead of the iPhone's:
   predictive back (the back gesture shows the screen underneath), a back
   arrow, Material dialogs, ripples, spinners, switches, search fields,

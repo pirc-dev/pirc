@@ -1,5 +1,5 @@
 // The page's screens: pairing, signing in, the session list and a chat;
-// on a screen as wide as a laptop's, the list and the chat side by side.
+// on a screen as wide as a tablet's, the list and the chat side by side.
 // Routing is the address bar's path: /, /h/<host>, /h/<host>/<group>,
 // /s/<session ID>, /settings and /pair.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -9,6 +9,8 @@ import { live } from "./live.ts";
 import { Mark, Pair, SignIn } from "./SignIn.tsx";
 import { type Scope, scopePath, Sessions } from "./Sessions.tsx";
 import { Settings } from "./Settings.tsx";
+import { SideEdge, SideToggle } from "./SideToggle.tsx";
+import { useSide } from "./side.ts";
 import { check } from "./update.ts";
 
 function usePath(): [string, (p: string) => void] {
@@ -112,8 +114,10 @@ export function App() {
   );
 }
 
-// Wide enough for the list and a chat side by side.
-const WIDE = "(min-width: 1024px)";
+// Wide enough for the list and a chat side by side: a tablet either way
+// up, or a computer's window; not a phone on its side, whose height is
+// too little for the chat as it is.
+const WIDE = "(min-width: 700px) and (min-height: 500px)";
 export function useWide(): boolean {
   const [wide, setWide] = useState(() => matchMedia(WIDE).matches);
   useEffect(() => {
@@ -126,23 +130,47 @@ export function useWide(): boolean {
 }
 
 // On a phone, the list or the chat; wide, the list beside the chat (or
-// beside a word on what to do, before one is chosen). Both are in the same
-// place either way, so that crossing the width (a tablet turned, a window
-// resized) keeps the chat's draft and the list's search; on a phone the
-// list is only hidden while a chat is open.
+// beside a word on what to do, before one is chosen), unless it is hidden.
+// Both are in the same place either way, so that crossing the width (a
+// tablet turned, a window resized) or hiding the list keeps the chat's
+// draft and the list's search; on a phone the list is only hidden while a
+// chat is open.
 export function Layout(p: { wide: boolean; banner: React.ReactNode; list: React.ReactNode; chat: React.ReactNode | undefined }) {
+  const side = useSide();
+  const shown = p.wide && !side.hidden;
   return (
     <div className="flex h-dvh flex-col bg-paper pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-ink">
       {p.banner}
-      <div className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${p.wide ? "grid-cols-[380px_1fr]" : "grid-cols-1"}`}>
-        <div className={`min-h-0 flex-col ${p.wide ? "flex border-r border-rule" : p.chat ? "hidden" : "flex"}`}>{p.list}</div>
+      <div
+        className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
+        // The width it was given, as far as the window leaves room for it
+        // (side.ts's sideWidth).
+        style={shown ? { gridTemplateColumns: `max(280px, min(${side.width}px, calc(100% - 400px))) minmax(0, 1fr)` } : undefined}
+      >
+        <div className={`relative min-h-0 flex-col ${shown ? "flex border-r border-rule" : p.wide || p.chat ? "hidden" : "flex"}`}>
+          {p.list}
+          {shown && <SideEdge />}
+        </div>
         {(p.wide || p.chat) && (
           <div className={`flex min-h-0 min-w-0 flex-col ${p.wide ? "cards:bg-card" : ""}`}>
-            {p.chat ?? <p className="m-auto font-read text-lg text-ink3 italic cards:text-base cards:text-ink2 cards:not-italic cockpit:font-mono cockpit:text-sm cockpit:not-italic">Choose a session to see its chat.</p>}
+            {p.chat ?? <Choose />}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// Beside the list before a session is chosen; with it hidden, the way to
+// show it.
+function Choose() {
+  return (
+    <>
+      <div className="flex-none px-2 pt-2">
+        <SideToggle />
+      </div>
+      <p className="m-auto font-read text-lg text-ink3 italic cards:text-base cards:text-ink2 cards:not-italic cockpit:font-mono cockpit:text-sm cockpit:not-italic">Choose a session to see its chat.</p>
+    </>
   );
 }
 

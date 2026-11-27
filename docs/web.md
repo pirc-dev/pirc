@@ -336,9 +336,16 @@ not in `web/`, since they belong to neither client.
   edit") that opens to them; one running is open, showing its output so
   far, and one that failed stays in sight. Reason: an agent's turn is
   mostly tool calls, and the reply is what is read.
-- **On a laptop, the list and the chat side by side** (from 1024 px
-  wide), the open session marked in the list. Both stay in the page at
-  every width, so that turning a tablet or resizing a window keeps the
+- **On a tablet or a laptop, the list and the chat side by side** (from
+  700 px wide and 500 high: an iPad mini upright, but not a phone on its
+  side), the open session marked in the list. The list's column is 380
+  wide, as far as the chat keeps 400; dragging its edge (or its arrow
+  keys) makes it 280 to 560, and a button at the start of the chat's
+  header (Settings', or the empty pane's) hides and shows it, both kept
+  in the browser. Reason: an upright tablet had the phone's layout, and
+  a laptop's list could not make room. Rejected: 1024, which left
+  every iPad but the 13-inch upright with the phone's. Both stay in the page at
+  every width, hidden or not, so that turning a tablet or resizing a window keeps the
   chat's draft and pending messages and the list's search. Beside the
   list the chat has no back button, and its actions sit by its title.
 - **Headers fold on scroll** (from the Quiet and Native mock-ups). The list's header scrolls away; once it has passed, a bar

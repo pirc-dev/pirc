@@ -51,6 +51,7 @@ import 'package:pirc/ui/relay_address.dart';
 import 'package:pirc/ui/sessions_screen.dart';
 import 'package:pirc/ui/settings_screen.dart';
 import 'package:pirc/ui/sheet.dart';
+import 'package:pirc/ui/side.dart';
 import 'package:pirc/ui/adaptive.dart';
 
 const font = 'Roboto';
@@ -425,12 +426,17 @@ void main() {
       final model = await fixture(tester);
       final selected = ValueNotifier<String?>('0101010101010101-i1');
       final look = b == Brightness.dark ? Look.dark : Look.light;
+      final side = ValueNotifier(const Side());
+      addTearDown(side.dispose);
       await tester.pumpWidget(frame(
-        Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: 380, child: SessionsScreen(model: model, open: (_) {}, settings: () {}, selected: selected)),
-          Container(width: 0.5, color: look.rule),
-          Expanded(child: ChatScreen(model: model, id: '0101010101010101-i1', wide: true)),
-        ]),
+        SideScope(
+          side: side,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SizedBox(width: 380, child: SessionsScreen(model: model, open: (_) {}, settings: () {}, selected: selected)),
+            Container(width: 0.5, color: look.rule),
+            Expanded(child: ChatScreen(model: model, id: '0101010101010101-i1', wide: true)),
+          ]),
+        ),
         brightness: b,
       ));
       await tester.pump();
@@ -471,7 +477,7 @@ void main() {
     expect(find.byType(SessionsScreen), findsOneWidget, reason: 'beside it');
     expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsNothing, reason: 'no way back beside the list');
     // Narrowed (Split View, a window): Settings over the list, with a way back.
-    tester.view.physicalSize = const Size(678 * 2, 1024 * 2);
+    tester.view.physicalSize = const Size(600 * 2, 1024 * 2);
     await tester.pumpAndSettle();
     expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsOneWidget);
     // Wide again: beside it once more.
@@ -481,7 +487,7 @@ void main() {
     expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsNothing);
     expect(find.text('Choose a session to see its chat.'), findsNothing);
     // Closed on the narrow screen, nothing is open when it widens.
-    tester.view.physicalSize = const Size(678 * 2, 1024 * 2);
+    tester.view.physicalSize = const Size(600 * 2, 1024 * 2);
     await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)));
     await tester.pumpAndSettle();
@@ -508,7 +514,7 @@ void main() {
 
   testWidgets('crossing the width: a chat opened twice stays open; a sheet over the list stays; back in the column', (tester) async {
     tester.view.devicePixelRatio = 2;
-    width(tester, 744);
+    width(tester, 600);
     addTearDown(tester.view.reset);
     await joinedApp(tester);
     final list = tester.widget<SessionsScreen>(find.byType(SessionsScreen));
@@ -526,7 +532,7 @@ void main() {
     // chat comes over the list once it has gone.
     showSheet<void>(tester.element(find.byType(SessionsScreen)), (_) => const Sheet(title: 'A sheet', children: []));
     await tester.pumpAndSettle();
-    width(tester, 744);
+    width(tester, 600);
     await tester.pumpAndSettle();
     expect(find.text('A sheet'), findsOneWidget, reason: 'not buried, not closed');
     Navigator.of(tester.element(find.text('A sheet'))).pop();
@@ -542,7 +548,7 @@ void main() {
     expect(find.byType(ChatScreen), findsOneWidget);
     // Narrow with nothing open, then widened with the list's sheet open: it
     // stays.
-    width(tester, 744);
+    width(tester, 600);
     await tester.pumpAndSettle();
     Navigator.of(tester.element(find.byType(ChatScreen))).pop();
     await tester.pumpAndSettle();
@@ -563,6 +569,64 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('a host'), findsNothing);
     expect(find.byType(SessionsScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
+  });
+
+  testWidgets("a tablet's list: beside the chat from an iPad mini upright, hidden and shown, made wider, kept; a phone on its side is not wide", (tester) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(744 * 2, 1133 * 2);
+    addTearDown(tester.view.reset);
+    const relay = 'ws://127.0.0.1:9';
+    final store = MemoryKeyStore();
+    final prefs = MemoryPrefs(relay);
+    await tester.runAsync(() => KeyHolder.create(store, relay, protect: false));
+    await tester.pumpWidget(PircApp(store: store, prefs: prefs, fontFamily: font, protect: false));
+    for (var i = 0; i < 5 && find.byType(SessionsScreen).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(find.text('Choose a session to see its chat.'), findsOneWidget, reason: 'wide upright');
+    // As wide as leaves the chat its 400.
+    expect(tester.getSize(find.byType(SessionsScreen)).width, 344);
+    // Hidden: the chat's side has all of it, and the list keeps its place.
+    await tester.tap(find.bySemanticsLabel('Hide the list'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SessionsScreen), findsNothing);
+    expect(find.bySemanticsLabel('Show the list'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Show the list'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SessionsScreen), findsOneWidget);
+    // Its edge dragged: narrower, as far as its least.
+    final edge = find.byType(SideEdge);
+    await tester.drag(edge, const Offset(-30, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(SessionsScreen)).width, closeTo(314, 1));
+    await tester.drag(edge, const Offset(-300, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(SessionsScreen)).width, sideMin);
+    // Wider on a wider screen, up to its most.
+    tester.view.physicalSize = const Size(1366 * 2, 1024 * 2);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(SideEdge), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(SessionsScreen)).width, sideMax);
+    await tester.pump(const Duration(seconds: 1));
+    expect((await prefs.side()).width, sideMax, reason: 'kept');
+    // A sheet on a tablet: no wider than the web page's, in the middle.
+    showSheet<void>(tester.element(find.byType(SessionsScreen)), (_) => const Sheet(title: 'A sheet', children: []));
+    await tester.pumpAndSettle();
+    final sheet = tester.getRect(find.byType(Sheet));
+    expect(sheet.width, sheetMaxWidth);
+    expect(sheet.center.dx, 683);
+    Navigator.of(tester.element(find.text('A sheet'))).pop();
+    await tester.pumpAndSettle();
+    // A big phone on its side: the list or the chat, not both.
+    tester.view.physicalSize = const Size(932 * 3, 430 * 3);
+    tester.view.devicePixelRatio = 3;
+    await tester.pumpAndSettle();
+    expect(find.byType(SideEdge), findsNothing);
+    expect(find.text('Choose a session to see its chat.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 31));
   });

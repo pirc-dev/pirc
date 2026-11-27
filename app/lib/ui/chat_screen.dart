@@ -31,6 +31,7 @@ import 'markdown.dart';
 import 'question.dart';
 import 'selectable.dart';
 import 'sheet.dart';
+import 'side.dart';
 import 'adaptive.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -536,7 +537,10 @@ class _Header extends StatelessWidget {
     return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.5, child: Container(
       decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
       padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + (back ? 0 : 8), bottom: 10),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      // Beside the list, the button that hides it first, as the web page's.
+      child: Row(children: [
+        if (!back) ...[const SizedBox(width: 4), const SideToggle()],
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // Over the list, a line for the way back and the actions; beside
         // it, the actions at the end of the title's line, as the web page's.
         if (back)
@@ -545,7 +549,7 @@ class _Header extends StatelessWidget {
             child: Row(children: [const SizedBox(width: 4), _Back(), const Spacer(), ?more, const SizedBox(width: 8)]),
           ),
         Padding(
-          padding: EdgeInsets.only(left: 16, right: back ? 16 : 8),
+          padding: EdgeInsets.only(left: back ? 16 : 4, right: back ? 16 : 8),
           child: Row(children: [
             if (s != null) ...[StatusBadge(statusOf(s, news), compacting: s.compacting), const SizedBox(width: 8)],
             Expanded(child: Text(s == null ? 'Session ended' : title(s), style: look.text(size: 18, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -556,12 +560,12 @@ class _Header extends StatelessWidget {
         // and cost never.
         if (place.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(56, 2, 16, 0),
+            padding: EdgeInsets.fromLTRB(back ? 56 : 44, 2, 16, 0),
             child: Text(place, style: look.text(size: 12, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         if (s != null && (model.isNotEmpty || spend != null))
           Padding(
-            padding: const EdgeInsets.fromLTRB(56, 2, 16, 0),
+            padding: EdgeInsets.fromLTRB(back ? 56 : 44, 2, 16, 0),
             child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
               Expanded(child: Text(model, style: small, maxLines: 1, overflow: TextOverflow.ellipsis)),
               if (spend != null) ...[
@@ -574,6 +578,7 @@ class _Header extends StatelessWidget {
               ],
             ]),
           ),
+      ])),
       ]),
     ));
   }

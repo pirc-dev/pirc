@@ -1816,10 +1816,14 @@ built; steps 14 and 15 are not finished.
         phone turned sideways shows more.
       - **The iPad and other wide screens**: the app is built for iPad
         (both device families, every orientation, Split View and Slide
-        Over), and at 1024 points or wider, as the web page's breakpoint,
-        the list sits in a column of 380 beside the chat or Settings, the
-        chat's row marked and neither with a way back; narrower (an iPad
-        mini or Air upright, Split View, every phone) it is as on a phone.
+        Over), and from 700 points wide and 500 high, as the web page's
+        breakpoint, the list sits in a column beside the chat or Settings,
+        the chat's row marked and neither with a way back; as on the web,
+        its edge drags it between 280 and 560 (380 at first, the chat
+        keeping 400) and a button at the start of the chat's header hides
+        it, both kept on the device. Narrower (Split View, every phone,
+        a phone on its side) it is as on a phone. Sheets there are at most
+        512 wide, in the middle, as the web page's.
         The same rule holds by width on Android, for tablets and opened
         foldables. Crossing the width keeps what is open. The App Store
         submission therefore carries iPad screenshots, and Apple reviews it
