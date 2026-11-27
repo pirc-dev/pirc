@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Secondary and faint text is darker (lighter in dark mode) where it was
+  hard to read, now at least 4.5:1 against its background in every look
+  of the web app and in the apps; file chips in your own messages are
+  readable on the blue.
 - New agent: tapping a folder in the list now only chooses it; name the
   window if you like, then press Start agent. Before, a tap started the
   agent at once.

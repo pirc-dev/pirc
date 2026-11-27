@@ -306,6 +306,15 @@ not in `web/`, since they belong to neither client.
   sends again after each of pi's messages; a row from an older extension has
   neither. Reason: which sessions are filling up or dear is a reason to
   open one, and would otherwise show only inside it.
+- **Text contrast**: every look's secondary and tertiary text (`--ink2`,
+  `--ink3`) is at least 4.5:1 (WCAG AA) on its paper, cards, sheets and
+  the grey wash over each, light and dark, with a step kept between the
+  two, and red text on its pale red likewise; web/test/contrast.test.ts
+  holds the colours to it, and the app's test/contrast_test.dart its own.
+  File chips in a message's bubble take the bubble's text colour,
+  outlined, as grey on the accent's blue could not be read. Reason: the
+  Quiet and Native looks' tertiary grey was about 3:1, as iOS's own
+  tertiary label is; the step down stays, at a darker shade.
 - **The composer, while pi works** (from Triage): Stop on a line of its
   own, by how long the turn has run, and away from the send button; and
   Send, the same button as when pi is idle, which steers. Held on a touch

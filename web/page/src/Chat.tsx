@@ -649,7 +649,7 @@ function User(p: { item: UserItem }) {
   return (
     <Bubble offer={offer}>
       {it.images.length > 0 && <div className={it.text || it.attachments ? "pb-1.5" : ""}><Thumbs images={it.images} /></div>}
-      {it.attachments && <div className={it.text ? "pb-1.5" : ""}><FileChips files={it.attachments} /></div>}
+      {it.attachments && <div className={it.text ? "pb-1.5" : ""}><FileChips files={it.attachments} inBubble /></div>}
       {it.text}
     </Bubble>
   );
@@ -714,7 +714,7 @@ function Unsent(p: { pending: Pending; asking: boolean; compacting: boolean; ret
     <div className="flex max-w-[84%] flex-col items-end gap-1.5 self-end">
       <Bubble faded={!trouble} refused={trouble}>
         {x.images && <div className={x.text || x.files ? "pb-1.5" : ""}><Thumbs images={x.images} /></div>}
-        {x.files && <div className={x.text ? "pb-1.5" : ""}><FileChips files={x.files} /></div>}
+        {x.files && <div className={x.text ? "pb-1.5" : ""}><FileChips files={x.files} inBubble /></div>}
         {x.text}
       </Bubble>
       {trouble

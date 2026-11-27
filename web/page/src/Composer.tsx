@@ -269,7 +269,7 @@ export function Composer(p: {
 
 // A key's name on its button, printed in Cockpit only.
 function Key(p: { children: string }) {
-  return <kbd className="ml-2 hidden rounded-[3px] border border-current/40 px-1 font-mono text-[11px] font-normal opacity-80 cockpit:inline" aria-hidden="true">{p.children}</kbd>;
+  return <kbd className="ml-2 hidden rounded-[3px] border border-current/40 px-1 font-mono text-[11px] font-normal cockpit:inline" aria-hidden="true">{p.children}</kbd>;
 }
 
 // Send, idle or working, the same: working, it steers; held on a touch

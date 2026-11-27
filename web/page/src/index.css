@@ -37,11 +37,13 @@
   }
 }
 
+/* ink2 and ink3 are text: each at least 4.5:1 on its look's paper, card,
+   sheet and wash (WCAG AA), with a step between them. */
 :root {
   --paper: #fbfbf9;
   --ink: #1b1c20;
-  --ink2: #5a5d66;
-  --ink3: #8a8d95;
+  --ink2: #585b64;
+  --ink3: #6b6d74;
   --rule: #e2e2dd;
   --wash: #f1f1ed;
   --wash2: #e8e8e3;
@@ -73,7 +75,7 @@
     --paper: #16171a;
     --ink: #e9e7e2;
     --ink2: #a3a5ac;
-    --ink3: #74767e;
+    --ink3: #87888e;
     --rule: #2a2c31;
     --wash: #1f2125;
     --wash2: #2a2c31;
@@ -101,7 +103,7 @@
   --wash2: #cfd3db;
   --ink: #14161b;
   --ink2: #555b69;
-  --ink3: #6a7080;
+  --ink3: #676c7c;
   --accent: #2f55d4;
   --on-accent: #ffffff;
   --accent-soft: #e6ecfd;
@@ -155,13 +157,13 @@
   --wash2: rgb(118 118 128 / 0.2);
   --rule: rgb(60 60 67 / 0.17);
   --ink: #121216;
-  --ink2: #62626c;
-  --ink3: #8a8a94;
+  --ink2: #53535c;
+  --ink3: #64646c;
   --accent: #1f62e0;
   --on-accent: #ffffff;
   --accent-soft: rgb(31 98 224 / 0.12);
   --sheet: #f2f2f7;
-  --block: #c2261d;
+  --block: #b8221a;
   --done: #0d6b63;
   --work: #9c4806;
   --idle: #13702f;
@@ -184,8 +186,8 @@
     --wash2: rgb(118 118 128 / 0.34);
     --rule: rgb(84 84 88 / 0.55);
     --ink: #f5f5f7;
-    --ink2: #a4a4ad;
-    --ink3: #7c7c85;
+    --ink2: #c1c1c7;
+    --ink3: #a9a9b0;
     --accent: #5e9bff;
     --on-accent: #06122b;
     --accent-soft: rgb(94 155 255 / 0.18);
@@ -213,8 +215,8 @@
   --wash2: #bcc0cc;
   --rule: #ccd0da;
   --ink: #4c4f69;
-  --ink2: #5c5f77;
-  --ink3: #636679;
+  --ink2: #55586f;
+  --ink3: #5a5d73;
   --accent: #7c2fe0;
   --on-accent: #ffffff;
   --accent-soft: rgb(124 47 224 / 0.16);
@@ -241,8 +243,8 @@
     --wash2: #45475a;
     --rule: #2f3043;
     --ink: #cdd6f4;
-    --ink2: #a6adc8;
-    --ink3: #9399b2;
+    --ink2: #aab2cd;
+    --ink3: #959bb4;
     --accent: #cba6f7;
     --on-accent: #11111b;
     --accent-soft: rgb(203 166 247 / 0.2);
