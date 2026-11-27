@@ -65,17 +65,17 @@ abstract class AppPrefs implements KeyValues {
   Future<String?> relay() => get('relay');
   Future<void> setRelay(String? relay) => set('relay', relay);
 
-  // The hosts and groups open in the session list; all start closed.
-  Future<Set<String>> unfolded() async {
+  // The hosts and groups folded in the session list; all start open.
+  Future<Set<String>> folded() async {
     try {
-      final v = await get('unfolded');
+      final v = await get('folded');
       return v == null ? {} : {...(jsonDecode(v) as List).cast<String>()};
     } on FormatException {
       return {};
     }
   }
 
-  Future<void> setUnfolded(Set<String> keys) => set('unfolded', jsonEncode([...keys]));
+  Future<void> setFolded(Set<String> keys) => set('folded', jsonEncode([...keys]));
 
   // Whether what the camera is for has been said, before the system first
   // asks for it.
@@ -144,9 +144,9 @@ class ChannelPrefs extends AppPrefs {
 }
 
 class MemoryPrefs extends AppPrefs {
-  MemoryPrefs([String? relay, Set<String>? unfolded]) {
+  MemoryPrefs([String? relay, Set<String>? folded]) {
     if (relay != null) _values['relay'] = relay;
-    if (unfolded != null) _values['unfolded'] = jsonEncode([...unfolded]);
+    if (folded != null) _values['folded'] = jsonEncode([...folded]);
   }
 
   final _values = <String, String>{};
@@ -201,7 +201,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   final _noModel = ChangeNotifier();
   String? _relay;
   var _loaded = false;
-  var _unfolded = <String>{};
+  var _folded = <String>{};
   KeyHolder? _holder;
   DeviceKey? _key;
   String? _lockError;
@@ -280,7 +280,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     Future.wait([
       // Said before anything connects, and so before any notification.
       widget.prefs.setNoStore(subscription == null).then((_) => widget.prefs.relay()),
-      widget.prefs.unfolded(),
+      widget.prefs.folded(),
       PhoneSettings.load(store: widget.store, prefs: widget.prefs, push: widget.push, resync: () => _notes?.answered(), protect: widget.protect),
       if (subscription != null) _askStore(subscription),
       widget.prefs.buyWaiting(),
@@ -292,7 +292,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       if (!mounted) return;
       final r = v[0] as String?;
       setState(() {
-        _unfolded = v[1] as Set<String>;
+        _folded = v[1] as Set<String>;
         _settings = v[2] as PhoneSettings;
         _relay = r;
         if (subscription != null) _access.value = (v[3] as (StoreStatus, bool)).$1;
@@ -1264,10 +1264,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       if (wide != _wide) _crossed(wide);
       final list = SessionsScreen(
         model: model,
-        unfolded: _unfolded,
+        folded: _folded,
         onFold: (keys) {
-          _unfolded = keys;
-          widget.prefs.setUnfolded(keys);
+          _folded = keys;
+          widget.prefs.setFolded(keys);
         },
         open: _openChat,
         openHere: (id) => _openChat(id, here: true),

@@ -74,7 +74,7 @@ class _Group {
 const scopeRoute = 'pirc.scope';
 
 class SessionsScreen extends StatefulWidget {
-  const SessionsScreen({super.key, required this.model, required this.open, this.unfolded = const {}, this.onFold, this.settings, this.host, this.group, this.openHere, this.selected});
+  const SessionsScreen({super.key, required this.model, required this.open, this.folded = const {}, this.onFold, this.settings, this.host, this.group, this.openHere, this.selected});
 
   final PircModel model;
   final void Function(String id) open;
@@ -89,9 +89,9 @@ class SessionsScreen extends StatefulWidget {
   // The session whose chat is beside the list, on a wide screen: its row
   // marked, on every page of the list.
   final ValueListenable<String?>? selected;
-  // The hosts ("h:<host>") and groups ("g:<host>/<group>") open, and where
-  // to keep them when one opens or closes.
-  final Set<String> unfolded;
+  // The hosts ("h:<host>") and groups ("g:<host>/<group>") folded, and
+  // where to keep them when one opens or closes.
+  final Set<String> folded;
   final void Function(Set<String>)? onFold;
   // Opens Settings, from the button beside the title.
   final VoidCallback? settings;
@@ -101,7 +101,7 @@ class SessionsScreen extends StatefulWidget {
 }
 
 class _SessionsScreenState extends State<SessionsScreen> {
-  late Set<String> _open = {...widget.unfolded};
+  late Set<String> _folded = {...widget.folded};
   final _query = TextEditingController();
   // A count tapped shows only its sessions (asking, done or working), under
   // their hosts and groups, all unfolded; tapped again, or "in all", every
@@ -116,7 +116,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
         _shut = {};
       });
 
-  bool _isOpen(String key) => _filter != null ? !_shut.contains(key) : _open.contains(key);
+  bool _isOpen(String key) => _filter != null ? !_shut.contains(key) : !_folded.contains(key);
 
   @override
   void dispose() {
@@ -126,8 +126,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   void _toggle(String key) {
     if (_filter != null) return setState(() => _shut = {..._shut}..toggle(key));
-    setState(() => _open = {..._open}..toggle(key));
-    widget.onFold?.call(_open);
+    setState(() => _folded = {..._folded}..toggle(key));
+    widget.onFold?.call(_folded);
   }
 
   // A host's or group's page, over this one; what is open on it kept for
@@ -139,9 +139,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
           open: widget.open,
           openHere: widget.openHere,
           selected: widget.selected,
-          unfolded: _open,
+          folded: _folded,
           onFold: (keys) {
-            _open = keys;
+            _folded = keys;
             widget.onFold?.call(keys);
           },
           host: host,

@@ -83,7 +83,7 @@ try {
   const seen: Record<string, number> = {};
   for (const s of sessions) if (s.last) seen[s.id] = fresh.has(s.name) ? s.last.at - 1 : s.last.at;
   localStorage.setItem("pirc.seen", JSON.stringify(seen));
-  localStorage.setItem("pirc.sessions.open", JSON.stringify(["h:studio", "h:laptop", "h:build-box", "g:studio/work", "g:studio/infra", "g:build-box/ci"]));
+  localStorage.setItem("pirc.sessions.folded", JSON.stringify(["g:laptop/main", "g:studio/notes", "g:build-box/bench"]));
 } catch {
   // Shown without.
 }

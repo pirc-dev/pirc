@@ -21,21 +21,21 @@ import { ago, details, title, where, windowOf } from "./names.ts";
 import { useNow } from "./time.ts";
 import { counted, Status, tone } from "./Status.tsx";
 
-// Which hosts and groups are open, kept in this browser only. Everything
-// starts closed.
-const OPEN_KEY = "pirc.sessions.open";
+// Which hosts and groups are folded, kept in this browser only. Everything
+// starts open.
+const FOLDED_KEY = "pirc.sessions.folded";
 
-function loadOpen(): Set<string> {
+function loadFolded(): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as string[]);
+    return new Set(JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "[]") as string[]);
   } catch {
     return new Set();
   }
 }
 
-function saveOpen(open: Set<string>): void {
+function saveFolded(folded: Set<string>): void {
   try {
-    localStorage.setItem(OPEN_KEY, JSON.stringify([...open]));
+    localStorage.setItem(FOLDED_KEY, JSON.stringify([...folded]));
   } catch {
     // Not kept; it still works for this visit.
   }
@@ -114,7 +114,7 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
   const { host, group } = p.scope;
   const [query, setQuery] = useState("");
   useHold(query !== "");
-  const [open, setOpen] = useState(loadOpen);
+  const [closed, setClosed] = useState(loadFolded);
   // A session read in the chat beside it is marked read here at once.
   const [, seen] = useReducer((n: number) => n + 1, 0);
   useEffect(() => onSeen(seen), []);
@@ -165,13 +165,13 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
     setOnly(c === filter ? undefined : c);
     setShut(new Set());
   };
-  const isOpen = (key: string) => (filter ? !shut.has(key) : open.has(key));
+  const isOpen = (key: string) => (filter ? !shut.has(key) : !closed.has(key));
   const toggle = (key: string) => {
-    const next = new Set(filter ? shut : open);
+    const next = new Set(filter ? shut : closed);
     if (!next.delete(key)) next.add(key);
     if (filter) return setShut(next);
-    setOpen(next);
-    saveOpen(next);
+    setClosed(next);
+    saveFolded(next);
   };
   const hosts = new Map<string, SessionView[]>();
   for (const s of listedHere) hosts.set(hostOf(s), [...(hosts.get(hostOf(s)) ?? []), s]);

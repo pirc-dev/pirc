@@ -275,7 +275,7 @@ void main() {
     testWidgets('the session list, ${b.name}', (tester) async {
       await phone(tester);
       final model = await fixture(tester);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}), brightness: b));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {}), brightness: b));
       await tester.pump();
       expect(find.text('release'), findsOneWidget);
       expect(find.text('pirc'), findsOneWidget, reason: 'its window, above its name');
@@ -289,7 +289,7 @@ void main() {
     testWidgets('a session list row says its cost and context use, ${b.name}', (tester) async {
       await phone(tester);
       final model = await fixture(tester);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}), brightness: b));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {}), brightness: b));
       await tester.pump();
       expect(find.text('\$1.84'), findsOneWidget);
       expect(find.text('<\$0.01'), findsOneWidget, reason: 'above zero and under half a cent');
@@ -323,7 +323,7 @@ void main() {
       await phone(tester);
       final model = await fixture(tester);
       final here = <String>[], top = <String>[];
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: top.add, openHere: here.add, unfolded: const {'h:laptop', 'g:laptop/work'}, settings: () {}), brightness: b));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: top.add, openHere: here.add, folded: const {'h:server'}, settings: () {}), brightness: b));
       await tester.pump();
       await tester.tap(find.bySemanticsLabel('Open laptop'));
       await tester.pumpAndSettle();
@@ -354,7 +354,7 @@ void main() {
   testWidgets("a group's page: a new agent from its pill, and its last session gone", (tester) async {
     await phone(tester);
     final model = await fixture(tester);
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop'})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:server', 'g:laptop/work'})));
     await tester.pump();
     await tester.tap(find.bySemanticsLabel('Open work'));
     await tester.pumpAndSettle();
@@ -372,6 +372,35 @@ void main() {
     expect(find.textContaining('Start pi with the PiRC extension'), findsNothing);
   });
 
+  testWidgets('an ended session keeps what was loaded, and says it ended', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2')));
+    await tester.pump();
+    expect(find.text('fix the flaky tests'), findsWidgets);
+    model.client.onFrame(Frame(sessionEnded: SessionEnded(session: SessionRef(hostKey: hostKey, sessionId: 's-i2', instanceId: 'i2'))));
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('Session ended'), findsOneWidget);
+    expect(find.text('fix the flaky tests'), findsWidgets);
+    expect(find.text('This session has ended'), findsOneWidget);
+  });
+
+  testWidgets('a session that ends before its conversation came stops loading', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    // A new one, whose history is never answered.
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i9', 'laptop', SessionAnnouncement(name: 'tally', cwd: '/home/me', hostname: 'laptop.local')))));
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i9')));
+    await tester.pump();
+    expect(find.text('Loading the conversation'), findsOneWidget);
+    model.client.onFrame(Frame(sessionEnded: SessionEnded(session: SessionRef(hostKey: hostKey, sessionId: 's-i9', instanceId: 'i9'))));
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('Loading the conversation'), findsNothing);
+    expect(find.text('This session ended before its conversation came'), findsOneWidget);
+  });
+
   // An iPad's screen, 13-inch, in landscape or portrait.
   Future<void> tablet(WidgetTester tester, {bool landscape = true}) async {
     tester.view.physicalSize = landscape ? const Size(1366 * 2, 1024 * 2) : const Size(1024 * 2, 1366 * 2);
@@ -387,7 +416,7 @@ void main() {
       final look = b == Brightness.dark ? Look.dark : Look.light;
       await tester.pumpWidget(frame(
         Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: 380, child: SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}, selected: selected)),
+          SizedBox(width: 380, child: SessionsScreen(model: model, open: (_) {}, settings: () {}, selected: selected)),
           Container(width: 0.5, color: look.rule),
           Expanded(child: ChatScreen(model: model, id: '0101010101010101-i1', wide: true)),
         ]),
@@ -530,7 +559,7 @@ void main() {
   testWidgets('the session list searched, its matches marked', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
     await tester.pump();
     await tester.enterText(find.byType(CupertinoSearchTextField), 'rel');
     await tester.pump();
@@ -544,7 +573,7 @@ void main() {
     // A host whose sessions are all in one group: its + on its own line,
     // whose padding above is more than below.
     model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i5', 'box', SessionAnnouncement(name: 'deploy', cwd: '/srv', hostname: 'box', launcher: 'tmux', place: Place(kind: 'tmux', group: 'ops', window: 'deploy'))))));
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:box', 'h:server', 'g:laptop/work', 'g:box/ops'})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {})));
     await tester.pump();
     final chevrons = [for (final e in find.byIcon(CupertinoIcons.chevron_forward).evaluate()) tester.getCenter(find.byWidget(e.widget))];
     expect(chevrons.length, greaterThanOrEqualTo(4), reason: 'the hosts and groups in view');
@@ -566,7 +595,7 @@ void main() {
     await phone(tester);
     final model = await fixture(tester);
     final opened = <String>[];
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: opened.add, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: opened.add)));
     await tester.pump();
     expect(find.bySemanticsLabel('New agent in work'), findsOneWidget, reason: 'release can open one');
     sent.clear();
@@ -640,7 +669,7 @@ void main() {
   testWidgets('a new agent refused, said why, and one typed in that never connects', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'g:laptop/work'})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:server'})));
     await tester.pump();
     await tester.tap(find.bySemanticsLabel('New agent in work'));
     await tester.pumpAndSettle();
@@ -740,7 +769,7 @@ void main() {
     await phone(tester);
     final model = await fixture(tester);
     // Everything folded.
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server'}, settings: () {})));
     await tester.pump();
     expect(find.text('fix the flaky tests'), findsNothing);
     await tester.tap(find.bySemanticsLabel('1 asking: show only these'));
@@ -762,7 +791,7 @@ void main() {
     await phone(tester);
     final model = await fixture(tester);
     for (final scale in [1.0, 1.35, 2.0, 3.1]) {
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}), text: scale));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {}), text: scale));
       await tester.pump();
       expect(tester.takeException(), isNull, reason: 'nothing overflows at $scale');
     }
@@ -1994,7 +2023,7 @@ void main() {
     final semantics = tester.ensureSemantics();
     final model = await fixture(tester);
     model.client.onFrame(Frame(pendingHosts: PendingHosts(hosts: [PendingHost(publicKey: List.filled(32, 7), label: 'build-box', firstSeen: ts(now))])));
-    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {})));
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {})));
     await tester.pump();
     expect(deaf(tester), isEmpty, reason: 'the session list');
     await tester.tap(find.bySemanticsLabel('Open laptop'));
@@ -2523,7 +2552,7 @@ void main() {
         await phone(tester);
         final model = await fixture(tester);
         asking(model);
-        await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop'}, settings: () {}), brightness: b));
+        await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:server', 'g:laptop/work'}, settings: () {}), brightness: b));
         await tester.pump();
         expect(find.text('build-box asks to join'), findsOneWidget);
         expect(find.text('A machine asks to join'), findsOneWidget, reason: 'one that gave no name');
@@ -2541,7 +2570,7 @@ void main() {
       await phone(tester);
       final model = await fixture(tester);
       asking(model);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {})));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
       await tester.pump();
       await tester.tap(find.text('build-box asks to join'));
       await tester.pumpAndSettle();
@@ -2565,7 +2594,7 @@ void main() {
       await phone(tester);
       final model = await fixture(tester);
       asking(model);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {})));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
       await tester.pump();
       await tester.tap(find.text('A machine asks to join'));
       await tester.pumpAndSettle();
@@ -2596,7 +2625,7 @@ void main() {
       await phone(tester);
       final model = await fixture(tester);
       asking(model);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {})));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
       await tester.pump();
       NavigatorState nav() => tester.state<NavigatorState>(find.byType(Navigator).first);
       // Dismissed, and decided elsewhere mid-animation.
@@ -2627,7 +2656,7 @@ void main() {
       await phone(tester);
       final model = await fixture(tester);
       asking(model);
-      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {})));
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
       await tester.pump();
       await tester.tap(find.text('build-box asks to join'));
       await tester.pumpAndSettle();

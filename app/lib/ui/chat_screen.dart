@@ -77,6 +77,11 @@ class _ChatScreenState extends State<ChatScreen> {
   var _more = false;
   var _lastSeen = '';
   var _sent = 0;
+  // The conversation as last seen while its session was there, kept once
+  // it has ended; and whether it was there at all, so that a chat opened
+  // before the list came is still loading, not ended.
+  ChatView? _kept;
+  var _wasThere = false;
   // What an action answered, or why it failed, under the header.
   ({String text, bool bad})? _notice;
   // The header's cost and context, asked of pi when the chat opens, after
@@ -268,7 +273,11 @@ class _ChatScreenState extends State<ChatScreen> {
       listenable: model,
       builder: (context, _) {
         final s = model.session(widget.id);
-        final chat = model.chat(widget.id);
+        if (s != null) _wasThere = true;
+        final ended = s == null && _wasThere;
+        final live = model.chat(widget.id);
+        if (live != null) _kept = live;
+        final chat = live ?? (ended ? _kept : null);
         final items = chat?.items ?? const <ChatItem>[];
         final working = s != null && (s.working || s.compacting);
         _askSpend(s, items);
@@ -285,7 +294,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final chatRuns = runs(items);
         final rows = <(String, Widget)>[
           if (chat?.truncated ?? false) ('note', const _Note('Earlier messages are not shown')),
-          if (chat == null || (chat.loading && items.isEmpty)) ('loading', const _Loading()),
+          if (!ended && (chat == null || (chat.loading && items.isEmpty))) ('loading', const _Loading()),
           for (final run in chatRuns)
             if (run.length > 1 || run.first is ToolsPart || (run.first as ItemPart).item is ToolItem)
               (run.first.key, Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [for (final p in run) _part(p)]))
@@ -299,6 +308,7 @@ class _ChatScreenState extends State<ChatScreen> {
               if (p.files != null) _files.value = fitTogether([...p.files!, ..._files.value]);
               _text.text = _text.text.trim().isEmpty ? p.text : '${p.text}\n\n${_text.text}';
             })),
+          if (ended) ('ended', _Note(items.isEmpty ? 'This session ended before its conversation came' : 'This session has ended')),
         ];
         _ids = [for (final r in rows) r.$1];
         // Each row's key and its index, kept for the rows still here: once

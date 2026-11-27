@@ -440,6 +440,9 @@ not in `web/`, since they belong to neither client.
   session or herdr workspace; a group's lists its sessions alone. Each has
   its own counts and searches only what it shows; back goes up a level, and
   a chat goes back to the list it was opened from.
+- **Hosts and groups start open.** One folded stays folded, kept in the
+  browser (on the phone, in the app), so that a list first seen, as after
+  adding a computer, shows its sessions rather than a closed heading.
 - **The counts at the top narrow the list**: tapping "asking", "done" or
   "working" shows only those sessions, under their hosts and groups, all
   unfolded (folding them then lasts until the filter changes), and the
