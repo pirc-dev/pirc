@@ -209,6 +209,7 @@ message SessionMessage {
     Stop stop = 28;
     Launch launch = 29;
     Answer answer = 30;
+    AttachmentChunk attachment_chunk = 31;
 
     // Session to client(s).
     SessionEvent event = 10;
@@ -546,6 +547,30 @@ message Prompt {
   string text = 2;
   repeated Image images = 3;
   Delivery delivery = 4;
+  // Files sent with the prompt, whose bytes came first in AttachmentChunks.
+  // Sent only to a session whose requests include "attachment_chunk".
+  repeated Attachment attachments = 5;
+}
+
+// A file sent with a Prompt, or one shown in history.
+message Attachment {
+  // Client-chosen, unique per client, naming the AttachmentChunks that
+  // carry the bytes; empty in history.
+  string id = 1;
+  // The file's name, without a directory.
+  string name = 2;
+  string mime_type = 3;
+  // In bytes.
+  uint64 size = 4;
+}
+
+// A piece of an Attachment's bytes, sent before its Prompt so that no frame
+// outgrows the channel's cap. Pieces of one id come in order: offset is the
+// count of bytes sent before it. Unanswered; the Prompt carries the outcome.
+message AttachmentChunk {
+  string id = 1;
+  uint64 offset = 2;
+  bytes data = 3;
 }
 
 message Image {
@@ -663,6 +688,8 @@ message UserMessage {
   repeated Image images = 2;
   // The Prompt's request_id when the message came from a PiRC client.
   string request_id = 3;
+  // Files sent with it, without their bytes.
+  repeated Attachment attachments = 4;
 }
 
 message AssistantMessage {

@@ -844,6 +844,24 @@ same limits. *Run*:
   session manager is a `SessionManager`, so the extension calls them through
   its class (`ctx.sessionManager.constructor`), and answers `PI_FAILED` if a
   pi lacks them (*run*, pi 1.0.0).
+- **A client's files.** pi's prompts take only text and images, so a
+  file sent with a prompt (`Prompt.attachments`) reaches pi as a path,
+  and pi reads it with its own tools. The bytes come first, in
+  `AttachmentChunk`s that no frame outgrows, in order; the extension
+  writes them straight to a file in a directory of the session's own,
+  under `<tmpdir>/pirc-attachments-<uid>/`, which must be the user's and
+  closed to others (0700, files 0600), outside any repository. The file
+  keeps its name, without a directory. The prompt's text then ends with a
+  line per file, `[pirc attachment] <path> (<type>, <n> bytes)`, which
+  History reads back as `UserMessage.attachments` (name, type and size,
+  never the bytes) and leaves out of the text. One client's files on
+  their way to a session come to 10 MiB at most: the piece that crosses
+  that fails its file, and a prompt naming a file that failed, is missing
+  or came short is refused INVALID with why. A file with no piece or
+  prompt for two minutes is dropped. A piece at offset 0 starts its file
+  afresh, as a retry does. A session's files go when it ends, and any a
+  day old when the extension starts (`attachments.ts`). Clients send
+  files only to a session whose requests include `attachment_chunk`.
 - **A client's images in pi's own chat.** pi's terminal draws only the
   text of a user message (`getUserMessageText` keeps its text parts), and
   images only in tool results, so a photo sent from a phone would show

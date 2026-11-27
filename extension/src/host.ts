@@ -18,6 +18,7 @@ import { configPath, HOSTED_MARKER, loadConfig, saveRelay, saveRemoved, type Hos
 import { ComputerJoin, qrLines } from "./join.ts";
 import { Hosted, HOSTED_PAYLOAD_BYTES, type HostedStatus } from "./hosted.ts";
 import { errorText, Live, REQUESTS, type NoticeMemo, type Sink } from "./live.ts";
+import { Uploads, type Saved } from "./attachments.ts";
 import { LAUNCH_ENV, LauncherChoice, type Launcher } from "./launch.ts";
 import { piRangeNote } from "./pi.ts";
 import { PlaceTracker } from "./place.ts";
@@ -105,6 +106,10 @@ export class Host implements Sink {
   // The host this one took over from, until it is let go (HANDOVER_MS).
   private predecessor: { host: Predecessor; timer: NodeJS.Timeout; announced: boolean } | undefined;
 
+  // Files on their way from clients, and those saved for sessions.
+  private readonly uploads = new Uploads();
+  private swept = false;
+
   constructor(
     readonly instanceId: string,
     private readonly versions: { pi: string; extension: string },
@@ -187,6 +192,14 @@ export class Host implements Sink {
   }
 
   bind(pi: ExtensionAPI, ctx: ExtensionContext, ev: SessionStartEvent): void {
+    if (!this.swept) {
+      this.swept = true;
+      try {
+        this.uploads.sweep();
+      } catch (e) {
+        this.fail("attachments", e);
+      }
+    }
     const id = ctx.sessionManager.getSessionId();
     if (this.suspended?.sessionId === id) {
       this.live = this.suspended;
@@ -233,6 +246,11 @@ export class Host implements Sink {
     this.seqs.set(live.sessionId, live.lastSeq);
     this.notices.set(live.sessionId, live.notice);
     live.dispose();
+    try {
+      this.uploads.endSession(live.sessionId);
+    } catch (e) {
+      this.fail("attachments", e);
+    }
     if (this.hosted) this.hosted.end(live);
     else this.conn?.send(create(FrameSchema, { body: { case: "sessionEnd", value: { session: live.ref } } }));
   }
@@ -622,6 +640,15 @@ export class Host implements Sink {
       deliver(errorReply(messageRequestId(m), ErrorCode.SESSION_GONE, "session is no longer live in this process"));
       return;
     }
+    // A piece of a file, for a prompt to come: never answered.
+    if (m.body.case === "attachmentChunk") {
+      try {
+        this.uploads.chunk(sessionId, hex(clientKey), m.body.value);
+      } catch (e) {
+        this.fail("attachment", e);
+      }
+      return;
+    }
     const idem = isChange(m.body.case) ? `${live.sessionId}/${hex(clientKey)}/${messageRequestId(m)}` : undefined;
     const seen = idem && this.replies.get(idem);
     if (seen === "pending") return;
@@ -640,8 +667,20 @@ export class Host implements Sink {
     };
     // A client's request is activity: the names may have changed.
     void this.places.refresh();
+    let files: Saved[] = [];
+    if (m.body.case === "prompt" && m.body.value.attachments.length > 0) {
+      let taken: ReturnType<Uploads["take"]>;
+      try {
+        taken = this.uploads.take(sessionId, hex(clientKey), m.body.value.attachments);
+      } catch (e) {
+        this.fail("attachments", e);
+        taken = { error: `its files could not be saved: ${errorText(e)}` };
+      }
+      if ("error" in taken) return respond(errorReply(m.body.value.requestId, ErrorCode.INVALID, taken.error));
+      files = taken.files;
+    }
     try {
-      live.onRequest(m, respond);
+      live.onRequest(m, respond, files);
     } catch (e) {
       this.fail("request", e);
       respond(errorReply(messageRequestId(m), ErrorCode.PI_FAILED, errorText(e)));

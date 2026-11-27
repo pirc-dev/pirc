@@ -3,7 +3,6 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { timestampFromDate, timestampFromMs, timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
 import type { MessageEndEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
-
 import {
   BranchSchema,
   ContentBlockSchema,
@@ -21,6 +20,7 @@ import {
   type ModelInfo,
   type Usage,
 } from "@pirc/protocol";
+import { splitAttachments } from "./attachments.ts";
 
 export type AgentMessage = MessageEndEvent["message"];
 
@@ -142,11 +142,14 @@ export function messageItems(
 ): ConversationItem[] {
   const base = { entryId: c.entryId, turnId: c.turnId, at: c.at };
   switch (m.role) {
-    case "user":
+    case "user": {
+      // The lines naming its files to pi become the files themselves.
+      const { text, attachments } = splitAttachments(textOf(m.content));
       return [create(ConversationItemSchema, {
         ...base,
-        body: { case: "userMessage", value: { text: clip(textOf(m.content)), images: imagesOf(m.content), requestId: extra.requestId ?? "" } },
+        body: { case: "userMessage", value: { text: clip(text), images: imagesOf(m.content), requestId: extra.requestId ?? "", attachments } },
       })];
+    }
     case "assistant": {
       const content: ContentBlock[] = [];
       const calls: ConversationItem[] = [];

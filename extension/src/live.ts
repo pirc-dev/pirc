@@ -68,6 +68,7 @@ import {
 import { nextNumber, questionNotice, turnNotice } from "./notice.ts";
 import { PHOTO_ENTRY, photosOf, preparePhotos, type PhotoData } from "./photos.ts";
 import { launchEnv, launchFolder, launchName, piCommand, type Launcher } from "./launch.ts";
+import { withAttachments, type Saved } from "./attachments.ts";
 
 export interface Sink {
   // To every client attached to the session.
@@ -239,6 +240,8 @@ export const REQUESTS: Record<Request, "change" | "question"> = {
   stop: "change",
   launch: "change",
   answer: "change",
+  // Never answered: the host takes it (attachments.ts).
+  attachmentChunk: "question",
   historyRequest: "question",
   listModels: "question",
   statsRequest: "question",
@@ -1005,16 +1008,17 @@ export class Live {
   }
 
   // Handles one request, answering it through respond, now or later.
-  onRequest(m: SessionMessage, respond: Respond): void {
+  onRequest(m: SessionMessage, respond: Respond, files: Saved[] = []): void {
     const body = m.body;
     switch (body.case) {
       case "prompt": {
-        const { requestId, text, images, delivery } = body.value;
+        const { requestId, images, delivery } = body.value;
+        const text = withAttachments(body.value.text, files);
         if (!text && images.length === 0) return respond(errorReply(requestId, ErrorCode.INVALID, "empty prompt"));
         const name = commandName(text);
         const refused = name === undefined ? undefined : refusedCommand(name);
         if (refused) return respond(errorReply(requestId, ErrorCode.INVALID, refused));
-        const command = images.length === 0 && this.isCommand(text);
+        const command = images.length === 0 && files.length === 0 && this.isCommand(text);
         // pi throws this from a promise no extension sees; check first.
         if (!command && !this.ctx.model) return respond(errorReply(requestId, ErrorCode.PI_FAILED, "no model is selected in pi"));
         const content = images.length === 0

@@ -2,7 +2,9 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mock, test } from "node:test";
 
 import { Delivery, ErrorCode, FrameSchema, NoticeKind, SessionMessageSchema, type Answer, type Frame, type SessionMessage } from "@pirc/protocol";
@@ -13,6 +15,10 @@ import type { Launcher } from "../src/launch.ts";
 import { Questions } from "../src/questions.ts";
 import { BUILTIN_COMMANDS, CONFIRM_MS, Live, type Sink } from "../src/live.ts";
 import { PHOTO_ENTRY } from "../src/photos.ts";
+import { Uploads } from "../src/attachments.ts";
+
+// Where hosts here save the files clients send.
+const ATTACHMENTS_ROOT = mkdtempSync(join(tmpdir(), "pirc-live-test-"));
 
 const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const user = (text: string): AgentMessage => ({ role: "user", content: text, timestamp: 0 });
@@ -531,7 +537,8 @@ function hostWith(pi: FakePi) {
   const host = new Host("i1", { pi: "t", extension: "t" });
   const sent: Frame[] = [];
   const key = new Uint8Array(32).fill(9);
-  const h = host as unknown as { conn: unknown; key: unknown; state: unknown; onFrame(f: Frame): void };
+  const h = host as unknown as { conn: unknown; key: unknown; state: unknown; uploads: Uploads; onFrame(f: Frame): void };
+  h.uploads = new Uploads(ATTACHMENTS_ROOT);
   h.conn = { send: (f: Frame) => void sent.push(f), stop() {} };
   h.key = { publicKey: key };
   h.state = { kind: "ready", maxFrameBytes: 1 << 20 };
@@ -1317,4 +1324,33 @@ test("a tool's result says how long it ran, timed here when pi does not record i
   } finally {
     mock.timers.reset();
   }
+});
+
+test("a prompt's files reach pi as lines naming where they were saved, and history shows the files", () => {
+  const pi = new FakePi("s1");
+  const { request, replies, host, papi } = hostWith(pi);
+  const requests = host.liveFor(papi)!.announcement().requests;
+  assert.ok(requests.includes("attachment_chunk"));
+  const piece = (offset: number, data: number[]) =>
+    create(SessionMessageSchema, { body: { case: "attachmentChunk", value: { id: "f1", offset: BigInt(offset), data: new Uint8Array(data) } } });
+  request("s1", piece(0, [37, 80]));
+  request("s1", piece(2, [68, 70]));
+  assert.equal(replies().length, 0, "pieces are not answered");
+  request("s1", prompt("r1", "summarise", { attachments: [{ id: "f1", name: "../a.pdf", mimeType: "application/pdf", size: 4n }] }));
+  const text = pi.sent[0]?.content as string;
+  const m = /^summarise\n\n\[pirc attachment\] (.+) \(application\/pdf, 4 bytes\)$/.exec(text);
+  assert.ok(m, text);
+  assert.ok(m[1]!.endsWith("/a.pdf") && m[1]!.startsWith(ATTACHMENTS_ROOT), m[1]);
+  assert.equal(readFileSync(m[1]!, "latin1"), "%PDF");
+  const [item] = historyItems([{ type: "message", id: "e1", parentId: null, timestamp: new Date(0).toISOString(), message: user(text) } as SessionEntry]);
+  assert.ok(item?.body.case === "userMessage");
+  assert.equal(item.body.value.text, "summarise");
+  assert.deepEqual(item.body.value.attachments.map((a) => [a.id, a.name, a.mimeType, a.size]), [["", "a.pdf", "application/pdf", 4n]]);
+  // Sent again with no pieces: refused, and pi gets nothing more.
+  request("s1", prompt("r2", "again", { attachments: [{ id: "f1", name: "a.pdf", mimeType: "application/pdf", size: 4n }] }));
+  const r = replies().at(-1)!;
+  assert.ok(r.body.case === "error" && r.body.value.code === ErrorCode.INVALID && /no file came/.test(r.body.value.message), JSON.stringify(r.body));
+  assert.equal(pi.sent.length, 1);
+  host.unbind(papi, "new");
+  assert.equal(existsSync(m[1]!), false, "the session's files go with it");
 });
