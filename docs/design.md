@@ -1676,6 +1676,24 @@ built; steps 14 and 15 are not finished.
       missed. The web app's default look is Native too, and it comes first
       in Settings' Look; a browser that chose another keeps it (`web.md`,
       section 5). What the app has, each as the web app's unless said:
+      - **Each platform's own controls**, where the platforms differ;
+        the rest (colours, type, cards, sheets, the list and the chat) is
+        the Native look on both. On iOS and iPadOS the phone's own: pages
+        that slide in from the right and back with an edge swipe, "‹
+        Sessions", iOS's alerts, buttons that fade when pressed, its
+        spinner, switch, search field, text selection and bounce. On
+        Android Material 3's, as Flutter draws them in the look's
+        colours: predictive back (the back gesture shows the page
+        underneath as it is made, and can be let go of to stay), an arrow
+        to go back with the page's title beside it, ✕ on a page that
+        covers another, Material's dialogs (title at the start, text
+        buttons at the end, a destructive one in red), ripples, its
+        circular spinner, switch in the accent, a pill-shaped search
+        field, Android's selection handles and menu, and lists that
+        stretch at their ends. Rejected: iOS's controls on Android, as
+        the app had at first, which looked foreign there and fought
+        Android's back gesture with the edge swipe; a Material rewrite of
+        every screen, when only the controls differ. In `lib/ui/adaptive.dart`.
       - **The connection to the relay** is a line across the top of
         every screen while it is not up, as the web app's banner: the
         list, a chat, Settings and both columns of the wide layout, so a

@@ -17,7 +17,10 @@ screen, `TZ=UTC flutter test --update-goldens` draws them again, and the images
 are looked at before they are kept. They are drawn in UTC, as `sh/app.sh`
 runs them, since a screen with a time shows it in the machine's own zone, and
 a pixel counts as changed only past a little, since macOS draws the edges of
-text a little differently from one release to the next.
+text a little differently from one release to the next. They are drawn as on
+an iPhone, and the main screens also as on Android, whose controls differ
+(`lib/ui/adaptive.dart`), into `test/goldens/android`; the tests that only
+check behaviour run as Android, Flutter's default in tests.
 
 `ios/PircNotices` is the iOS notification extension's core, a Swift
 package with no Flutter in it: it reads the session list with the

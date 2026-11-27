@@ -8,6 +8,7 @@ import '../core/names.dart';
 import '../core/view.dart';
 import 'look.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 // The lines, none when no machine asks.
 class JoinRequests extends StatelessWidget {
@@ -143,7 +144,7 @@ class _DecideSheetState extends State<DecideSheet> {
           if (h.software.isNotEmpty) Text('It runs ${h.software}.', style: look.text(size: 13, color: look.ink2, spacing: 0)),
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
             Text('Name it', style: look.text(size: 13, color: look.ink2, spacing: 0)),
-            CupertinoTextField(
+            CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
               controller: _label,
               placeholder: h.label.isNotEmpty ? h.label : 'A name for this machine',
               maxLength: 128,

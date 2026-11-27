@@ -11,7 +11,7 @@ import 'dart:ui' as ui;
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/cupertino.dart' hide Image;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show DefaultMaterialLocalizations, LicensePage;
+import 'package:flutter/material.dart' show LicensePage;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +51,7 @@ import 'package:pirc/ui/relay_address.dart';
 import 'package:pirc/ui/sessions_screen.dart';
 import 'package:pirc/ui/settings_screen.dart';
 import 'package:pirc/ui/sheet.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 const font = 'Roboto';
 // Code and tool output: SF Mono, the web page's ui-monospace on Apple's,
@@ -93,7 +94,8 @@ class EdgeTolerant extends LocalFileComparator {
 }
 
 // Roboto from Flutter's own cache, and the fonts the app bundles
-// (CupertinoIcons), so that text and icons draw as they will.
+// (CupertinoIcons, Material's icons), so that text and icons draw as they
+// will.
 Future<void> loadFonts() async {
   final cache = File(Platform.resolvedExecutable).parent.parent.parent.parent.path; // .../bin/cache
   final roboto = FontLoader(font);
@@ -104,6 +106,9 @@ Future<void> loadFonts() async {
   await roboto.load();
   final sfMono = File('/System/Library/Fonts/SFNSMono.ttf');
   if (sfMono.existsSync()) await (FontLoader(mono)..addFont(Future.value(ByteData.sublistView(sfMono.readAsBytesSync())))).load();
+  // Material's icons, Android's back arrow among them.
+  final material = File('$cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
+  if (material.existsSync()) await (FontLoader('MaterialIcons')..addFont(Future.value(ByteData.sublistView(material.readAsBytesSync())))).load();
   final icons = FontLoader('packages/cupertino_icons/CupertinoIcons');
   icons.addFont(rootBundle.load('packages/cupertino_icons/assets/CupertinoIcons.ttf'));
   await icons.load();
@@ -251,8 +256,8 @@ Widget frame(Widget child, {Brightness brightness = Brightness.light, double key
       child: CupertinoApp(
         debugShowCheckedModeBanner: false,
         theme: CupertinoThemeData(brightness: brightness, primaryColor: look.accent, textTheme: CupertinoTextThemeData(textStyle: look.text())),
-        localizationsDelegates: const [DefaultMaterialLocalizations.delegate, DefaultCupertinoLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
-        builder: (context, child) => LookScope(look: look, child: child!),
+        localizationsDelegates: appLocalizations,
+        builder: (context, child) => LookScope(look: look, child: platformControls(look, brightness, child!)),
         home: child,
       ),
     ),
@@ -264,6 +269,12 @@ Future<void> phone(WidgetTester tester) async {
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
 }
+
+// Drawn as on an iPhone; some as on Android too, where the controls are
+// Material's (lib/ui/adaptive.dart), into goldens/android.
+final ios = TargetPlatformVariant.only(TargetPlatform.iOS);
+final both = TargetPlatformVariant({TargetPlatform.iOS, TargetPlatform.android});
+String golden(String name) => 'goldens/${onAndroid ? 'android/' : ''}$name';
 
 void main() {
   setUpAll(() async {
@@ -283,8 +294,8 @@ void main() {
       expect(find.text('LAPTOP'), findsOneWidget);
       expect(find.text('SERVER'), findsOneWidget);
       expect(find.text('work'), findsOneWidget, reason: 'the tmux session, as a group above the sessions in none');
-      await expectLater(find.byType(SessionsScreen), matchesGoldenFile('goldens/sessions_${b.name}.png'));
-    }, skip: !drawsGoldens);
+      await expectLater(find.byType(SessionsScreen), matchesGoldenFile(golden('sessions_${b.name}.png')));
+    }, skip: !drawsGoldens, variant: both);
 
     testWidgets('a session list row says its cost and context use, ${b.name}', (tester) async {
       await phone(tester);
@@ -314,8 +325,8 @@ void main() {
       expect(find.text('2 tools read, edit'), findsOneWidget, reason: 'two that finished well fold');
       expect(find.text('Stop'), findsOneWidget);
       expect(find.text('Steer'), findsNWidgets(2), reason: 'the switch, and the send button saying it: Steer, the default');
-      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/chat_${b.name}.png'));
-    }, skip: !drawsGoldens);
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('chat_${b.name}.png')));
+    }, skip: !drawsGoldens, variant: both);
   }
 
   for (final b in Brightness.values) {
@@ -332,23 +343,23 @@ void main() {
       expect(find.bySemanticsLabel('Settings'), findsNothing, reason: 'only on the whole list');
       expect(find.text('Search 3 sessions on laptop'), findsOneWidget);
       expect(find.text('SERVER'), findsNothing);
-      await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/host_${b.name}.png'));
+      await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('host_${b.name}.png')));
       await tester.tap(find.bySemanticsLabel('Open work'));
       await tester.pumpAndSettle();
       expect(find.text('Search 1 session in work'), findsOneWidget);
       expect(find.bySemanticsLabel('New agent'), findsOneWidget, reason: 'its pi has a launcher');
       expect(find.text('fix the flaky tests'), findsNothing, reason: 'in no group');
-      await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/group_${b.name}.png'));
+      await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('group_${b.name}.png')));
       await tester.tap(find.text('release'));
       expect(here, ['0101010101010101-i1'], reason: 'over this page');
       expect(top, isEmpty);
-      await tester.tap(find.text('laptop'));
+      await tester.tap(find.byType(BackLink));
       await tester.pumpAndSettle();
       expect(find.text('Search 3 sessions on laptop'), findsOneWidget, reason: 'back to the host');
-      await tester.tap(find.text('Sessions'));
+      await tester.tap(find.byType(BackLink));
       await tester.pumpAndSettle();
       expect(find.text('SERVER'), findsOneWidget, reason: 'back to every session');
-    }, skip: !drawsGoldens);
+    }, skip: !drawsGoldens, variant: both);
   }
 
   testWidgets("a group's page: a new agent from its pill, and its last session gone", (tester) async {
@@ -439,8 +450,8 @@ void main() {
       visit(tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!);
       handle.dispose();
       expect(marked.where((l) => l.contains('release')), hasLength(1), reason: "the chat's row, marked as selected");
-      await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/wide_${b.name}.png'));
-    }, skip: !drawsGoldens);
+      await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('wide_${b.name}.png')));
+    }, skip: !drawsGoldens, variant: ios);
   }
 
   testWidgets('a wide screen in the app: Settings beside the list, and over it when the screen narrows', (tester) async {
@@ -458,21 +469,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.byType(SessionsScreen), findsOneWidget, reason: 'beside it');
-    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.text('Sessions')), findsNothing, reason: 'no way back beside the list');
+    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsNothing, reason: 'no way back beside the list');
     // Narrowed (Split View, a window): Settings over the list, with a way back.
     tester.view.physicalSize = const Size(678 * 2, 1024 * 2);
     await tester.pumpAndSettle();
-    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.text('Sessions')), findsOneWidget);
+    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsOneWidget);
     // Wide again: beside it once more.
     tester.view.physicalSize = const Size(1366 * 2, 1024 * 2);
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
-    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.text('Sessions')), findsNothing);
+    expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsNothing);
     expect(find.text('Choose a session to see its chat.'), findsNothing);
     // Closed on the narrow screen, nothing is open when it widens.
     tester.view.physicalSize = const Size(678 * 2, 1024 * 2);
     await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(SettingsScreen), matching: find.text('Sessions')));
+    await tester.tap(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)));
     await tester.pumpAndSettle();
     tester.view.physicalSize = const Size(1366 * 2, 1024 * 2);
     await tester.pumpAndSettle();
@@ -561,11 +572,11 @@ void main() {
     final model = await fixture(tester);
     await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, folded: const {'h:laptop', 'h:server', 'h:box'})));
     await tester.pump();
-    await tester.enterText(find.byType(CupertinoSearchTextField), 'rel');
+    await tester.enterText(find.byType(SearchField), 'rel');
     await tester.pump();
     expect(find.textContaining('release'), findsWidgets);
-    await expectLater(find.byType(SessionsScreen), matchesGoldenFile('goldens/sessions_search_light.png'));
-  }, skip: !drawsGoldens);
+    await expectLater(find.byType(SessionsScreen), matchesGoldenFile(golden('sessions_search_light.png')));
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("a host's and a group's + after its name, level with its chevron, which is always at the end", (tester) async {
     await phone(tester);
@@ -614,7 +625,7 @@ void main() {
     expect(find.text("This agent's folder"), findsOneWidget);
     expect(find.text('/home/me/src/blog'), findsOneWidget);
     expect(find.text('/home/me/src/site'), findsOneWidget, reason: 'once, though live and saved');
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/launch_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('launch_light.png')));
     sent.clear();
     await tester.tap(find.text('/home/me/src/blog'));
     await tester.pump();
@@ -634,7 +645,7 @@ void main() {
     final asked = SessionMessage.fromBuffer(h.routed.payload).historyRequest;
     model.client.onFrame(Frame(routed: Routed(session: h.routed.session, payload: SessionMessage(history: History(requestId: asked.requestId, seq: Int64(1))).writeToBuffer())));
     await tester.pump();
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("a new agent from the chat's actions, connecting before the launch is answered, its chat opened", (tester) async {
     await phone(tester);
@@ -664,7 +675,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, ['0101010101010101-i5'], reason: 'once');
     await tester.pump(const Duration(milliseconds: connectMs));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a new agent refused, said why, and one typed in that never connects', (tester) async {
     await phone(tester);
@@ -696,7 +707,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: connectMs));
     expect(find.textContaining('has not connected yet'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a reply in Markdown', (tester) async {
     await phone(tester);
@@ -708,8 +719,8 @@ void main() {
     expect(find.textContaining('export const version'), findsOneWidget);
     expect(find.text('Page'), findsOneWidget, reason: "the table's head");
     expect(find.text('Copy'), findsNWidgets(2), reason: 'the code and the reply');
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/markdown_light.png'));
-  }, skip: !drawsGoldens);
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('markdown_light.png')));
+  }, skip: !drawsGoldens, variant: ios);
 
   // pi writing in release (i1), a piece of block 0 at a time.
   var seq = 2;
@@ -750,11 +761,11 @@ void main() {
     await delta(tester, model, 'The checks pass. Tagging **0.2**');
     expect(find.byType(Cursor), findsOneWidget);
     expect(find.descendant(of: find.byType(RichText), matching: find.byType(Cursor)), findsOneWidget, reason: 'in the last line');
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/streaming_text_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('streaming_text_light.png')));
     await delta(tester, model, ' with:\n\n```sh\ngit tag v0.2.0\n```');
     expect(find.descendant(of: find.byType(RichText), matching: find.byType(Cursor)), findsNothing, reason: 'under the code block');
     expect(find.byType(Cursor), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/streaming_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('streaming_light.png')));
     // It blinks as the web's does: full, half, none, half.
     final bar = find.descendant(of: find.byType(Cursor), matching: find.byType(Opacity));
     final seen = <double>[];
@@ -763,7 +774,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
     }
     expect(seen, [1, 0.5, 0, 0.5, 1]);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("the message box's small controls: each a whole 44 points to tap", (tester) async {
     await phone(tester);
@@ -827,7 +838,7 @@ void main() {
       if (scale == 1) expect((stop.center.dy - status.center.dy).abs(), lessThan(4), reason: 'one line at $scale');
       if (scale >= 2) expect(stop.top, greaterThan(status.bottom), reason: 'a line of their own at $scale');
       // The header's way back is not cut: its words stop growing.
-      expect(tester.getRect(find.text('Sessions')).top, greaterThanOrEqualTo(47), reason: 'under the status bar at $scale');
+      expect(tester.getRect(find.byType(BackLink)).top, greaterThanOrEqualTo(47), reason: 'under the status bar at $scale');
     }
   });
 
@@ -843,12 +854,12 @@ void main() {
     expect(find.bySemanticsLabel('Go to the end'), findsOneWidget);
     await delta(tester, model, '\n\nDone.');
     expect(find.bySemanticsLabel('New messages: go to the end'), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/away_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('away_light.png')));
     await tester.tap(find.text('New messages'));
     await tester.pump();
     expect(find.bySemanticsLabel(RegExp('go to the end', caseSensitive: false)), findsNothing);
     expect(find.textContaining('Done.'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   // The chat's scroll position, and how far the end of its last row is from
   // the bottom of the chat (16, its padding, when at the end).
@@ -923,7 +934,7 @@ void main() {
     final p = chatScroll(tester);
     expect(p.pixels, moreOrLessEquals(p.maxScrollExtent), reason: 'at the end');
     expect(p.maxScrollExtent - p.minScrollExtent, lessThan(1), reason: 'nothing to scroll');
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a short chat does not scroll, and its end stays at the bottom as the keyboard opens and closes', (tester) async {
     await phone(tester);
@@ -943,7 +954,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(fromEnd(tester, find.text('Copy').last), moreOrLessEquals(32, epsilon: 1), reason: 'dragged, it comes back');
     }
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a reply taller than the screen stays at the end as it grows, and the keyboard opens', (tester) async {
     await phone(tester);
@@ -960,7 +971,7 @@ void main() {
     expect(fromEnd(tester, find.textContaining('More 5.')), moreOrLessEquals(16, epsilon: 1), reason: 'the keyboard open');
     await delta(tester, model, '\n\nMore 6.');
     expect(fromEnd(tester, find.textContaining('More 6.')), moreOrLessEquals(16, epsilon: 1), reason: 'and growing');
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('scrolled up into a reply as it grows, what is read stays where it is', (tester) async {
     await phone(tester);
@@ -989,7 +1000,7 @@ void main() {
       await delta(tester, model, ' More $i.', id: 'a10', turn: 't2');
       expect(fromEnd(tester, find.textContaining('Tagging it now.')), moreOrLessEquals(16, epsilon: 1), reason: 'piece $i');
     }
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('scrolled up, a fold above the centre opens and closes downward, nothing above it moving', (tester) async {
     await phone(tester);
@@ -1017,7 +1028,7 @@ void main() {
       final now = tester.getRect(find.textContaining("I'll bump the version")).top;
       expect(open ? now > below : now == below, isTrue, reason: 'what is under it moved, open $open');
     }
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   // docs (i3), idle, with its model and thinking level.
   Future<PircModel> docs(WidgetTester tester) async {
@@ -1077,14 +1088,14 @@ void main() {
     expect(find.text('Sonnet 5.5'), findsOneWidget);
     expect(find.text('\$1.84 · 61%'), findsOneWidget);
     expect(find.text('Stop pi'), findsOneWidget);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/actions_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('actions_light.png')));
     sent.clear();
     await tester.tap(find.text('high'));
     await tester.pumpAndSettle();
     expect(asked().setThinkingLevel.level, ThinkingLevel.THINKING_LEVEL_HIGH);
     expect(find.text('Thinking level'), findsNothing, reason: 'the sheet closed');
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: asked().setThinkingLevel.requestId)));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a model chosen by searching', (tester) async {
     final model = await docs(tester);
@@ -1092,17 +1103,17 @@ void main() {
     await tester.tap(find.text('Model'));
     await tester.pumpAndSettle();
     expect(find.text('CURRENT'), findsOneWidget);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/models_light.png'));
-    await tester.enterText(find.byType(CupertinoSearchTextField), 'opus');
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('models_light.png')));
+    await tester.enterText(find.byType(SearchField), 'opus');
     await tester.pump();
     expect(find.text('GPT-6'), findsNothing);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/models_search_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('models_search_light.png')));
     sent.clear();
     await tester.tap(find.textContaining('Opus'));
     await tester.pumpAndSettle();
     expect(asked().setModel.model.id, 'claude-opus-5-5');
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: asked().setModel.requestId)));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: both);
 
   testWidgets('renamed, a new session asked for and refused, and the cost said under the header', (tester) async {
     final model = await docs(tester);
@@ -1122,7 +1133,7 @@ void main() {
     await tester.tap(find.text('Clear conversation'));
     await tester.pumpAndSettle();
     expect(find.textContaining("the action of pi's /new command"), findsOneWidget);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/new_session_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('new_session_light.png')));
     sent.clear();
     await tester.tap(find.text('Clear').last);
     await tester.pumpAndSettle();
@@ -1134,11 +1145,11 @@ void main() {
     await tester.tap(find.text('Cost and context'));
     await tester.pumpAndSettle();
     expect(find.textContaining('so far · 48,210 in, 9,302 out, 310,455 cached'), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/notice_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('notice_light.png')));
     await tester.tap(find.bySemanticsLabel('Dismiss'));
     await tester.pump();
     expect(find.textContaining('so far'), findsNothing);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('from one of your messages, gone back with a summary and forked, the message back in the box each time', (tester) async {
     final model = await docs(tester);
@@ -1148,7 +1159,7 @@ void main() {
     expect(find.text('From this message'), findsOneWidget);
     expect(find.text('Go back to here'), findsOneWidget);
     expect(find.text('Fork from here'), findsOneWidget);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/from_message_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('from_message_light.png')));
     // Gone back, refused: the box as it was.
     sent.clear();
     await tester.tap(find.text('Go back to here'));
@@ -1188,7 +1199,7 @@ void main() {
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: asked().fork.requestId)));
     expect(find.textContaining('Forked into a new session'), findsOneWidget);
     expect(box(), 'update the docs for 0.2\n\nupdate the docs for 0.2');
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   // A few frames, which a phone draws anyway: by then what was laid out
   // late (a table, a tool's output) is known to its selection.
@@ -1216,9 +1227,8 @@ void main() {
     await tester.longPressAt(tester.getTopLeft(find.textContaining('now name')) + const Offset(16, 12));
     await tester.pumpAndSettle();
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsOneWidget, reason: "the system's menu");
-    expect(find.text('Share'), findsOneWidget);
-    await tester.tap(find.text('Select all'));
+    expect(find.text('Select All'), findsOneWidget, reason: "the system's menu");
+    await tester.tap(find.text('Select All'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Copy').last);
     await tester.pumpAndSettle();
@@ -1233,7 +1243,7 @@ void main() {
     await tester.pump();
     expect(await copied(), markdownReply);
     await tester.pump(const Duration(seconds: 2));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a selection ended by a tap beside the message, not by a scroll', (tester) async {
     await docs(tester);
@@ -1248,27 +1258,27 @@ void main() {
     expect(await copied(), 'The', reason: 'still selected after the scroll');
     await tester.longPressAt(tester.getTopLeft(words) + const Offset(16, 12));
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsOneWidget);
+    expect(find.text('Select All'), findsOneWidget);
     await tester.tapAt(Offset(30, tester.getCenter(find.text('update the docs for 0.2')).dy));
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsNothing, reason: 'ended');
+    expect(find.text('Select All'), findsNothing, reason: 'ended');
     expect(find.text('From this message'), findsNothing);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("a selection in a reply ended by a tap on your message, which only ends it; the next offers going back", (tester) async {
     await docs(tester);
     final words = find.textContaining('now name');
     await tester.longPressAt(tester.getTopLeft(words) + const Offset(16, 12));
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsOneWidget);
+    expect(find.text('Select All'), findsOneWidget);
     await tester.tap(find.text('update the docs for 0.2'));
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsNothing, reason: 'ended');
+    expect(find.text('Select All'), findsNothing, reason: 'ended');
     expect(find.text('From this message'), findsNothing, reason: 'the tap only ended it');
     await tester.tap(find.text('update the docs for 0.2'));
     await tester.pumpAndSettle();
     expect(find.text('From this message'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("a table's empty cells copied as cells, its columns in place", (tester) async {
     await phone(tester);
@@ -1277,26 +1287,26 @@ void main() {
     await known(tester);
     await tester.longPressAt(tester.getTopLeft(find.text('3')) + const Offset(3, 8));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Select all'));
+    await tester.tap(find.text('Select All'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Copy').last);
     await tester.pumpAndSettle();
     expect(await copied(), 'a\tb\tc\n1\t \t3\n4\t5\t ');
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a code block selected with a long press; its Copy copies the code', (tester) async {
     await docs(tester);
     final copied = clipboard(tester);
     await tester.longPressAt(tester.getTopLeft(find.textContaining('the one place')) + const Offset(30, 10));
     await tester.pumpAndSettle();
-    expect(find.text('Select all'), findsOneWidget);
+    expect(find.text('Select All'), findsOneWidget);
     await tester.tapAt(const Offset(5, 300));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel(RegExp('^Copy code')));
     await tester.pump();
     expect(await copied(), startsWith('// the one place it is written\nexport const version'));
     await tester.pump(const Duration(seconds: 2));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('your message selected with a long press: no sheet; the tap that ends it only ends it, the next offers going back', (tester) async {
     await docs(tester);
@@ -1312,11 +1322,11 @@ void main() {
     await tester.tap(find.text('update the docs for 0.2'));
     await tester.pumpAndSettle();
     expect(find.text('From this message'), findsNothing, reason: 'the selection ended');
-    expect(find.text('Select all'), findsNothing);
+    expect(find.text('Select All'), findsNothing);
     await tester.tap(find.text('update the docs for 0.2'));
     await tester.pumpAndSettle();
     expect(find.text('From this message'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("a tool's output, opened, selected with a long press", (tester) async {
     await phone(tester);
@@ -1326,12 +1336,12 @@ void main() {
     final copied = clipboard(tester);
     await tester.longPressAt(tester.getTopLeft(find.textContaining('go vet')) + const Offset(10, 8));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Select all'));
+    await tester.tap(find.text('Select All'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Copy').last);
     await tester.pumpAndSettle();
     expect(await copied(), allOf(contains('ok  pirc.dev/relay'), contains('command  sh/check.sh'), isNot(contains('bash'))));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("the conversation's branches, and one switched to", (tester) async {
     final model = await docs(tester);
@@ -1347,7 +1357,7 @@ void main() {
     ])));
     expect(find.text('This one · 40m · 2 messages'), findsOneWidget);
     expect(find.text('“write the docs as a tutorial”'), findsOneWidget);
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/branches_light.png'));
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('branches_light.png')));
     await tester.tap(find.text('“write the docs as a tutorial”'));
     await tester.pumpAndSettle();
     expect(find.text('Switch to this branch?'), findsOneWidget);
@@ -1359,7 +1369,7 @@ void main() {
     expect(asked().navigateTree.summarize, isFalse);
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: asked().navigateTree.requestId)));
     expect(find.textContaining('Switched to the branch “write the docs as a tutorial”'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets("what is being written is kept as the chat's draft, and cleared once sent", (tester) async {
     await phone(tester);
@@ -1385,7 +1395,7 @@ void main() {
     expect(await drafts.load('0101010101010101-i3'), '');
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 1));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   // The picture the tests send and show: a PNG, 240 by 160.
   final picture = File('test/support/picture.png').readAsBytesSync();
@@ -1406,14 +1416,14 @@ void main() {
     expect(find.text('Image'), findsOneWidget, reason: 'one left out of the frame: a placeholder');
     await tester.runAsync(() => precacheImage(MemoryImage(picture), tester.element(find.byType(ChatScreen))));
     await tester.pump();
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/images_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('images_light.png')));
     await tester.tap(find.bySemanticsLabel('Open image'));
     await tester.pumpAndSettle();
     expect(find.byType(Viewer), findsOneWidget);
     await tester.tap(find.bySemanticsLabel('Close'));
     await tester.pumpAndSettle();
     expect(find.byType(Viewer), findsNothing);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('pictures from the phone added to a message, one removed, and sent with it', (tester) async {
     final was = ImagePickerPlatform.instance;
@@ -1431,7 +1441,7 @@ void main() {
     expect(find.textContaining('a kind pi does not take'), findsOneWidget, reason: 'the third, said why');
     await tester.runAsync(() => precacheImage(MemoryImage(picture), tester.element(find.byType(ChatScreen))));
     await tester.pump();
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/attached_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('attached_light.png')));
     // Its target a whole 44 points: tapped 18 points beside its drawn
     // circle, out past the thumbnail's corner, it still removes.
     final remove = find.bySemanticsLabel('Remove image').first;
@@ -1446,7 +1456,7 @@ void main() {
     expect((prompt.text, prompt.images.length, prompt.images.single.mimeType), ('', 1, 'image/png'), reason: 'an image alone is a message');
     expect(find.bySemanticsLabel('Remove image'), findsNothing, reason: 'sent, gone from the box');
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: prompt.requestId)));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   group('an image pasted into the box', () {
     // The phone's clipboard, holding [held]; null: text only.
@@ -1559,7 +1569,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Add an image'));
       await tester.pumpAndSettle();
       expect(find.text('Take a photo'), findsOneWidget);
-      if (picker.took == null) await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/add_image_light.png'));
+      if (picker.took == null) await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('add_image_light.png')));
       await tester.tap(find.text('Take a photo'));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pumpAndSettle();
@@ -1580,7 +1590,7 @@ void main() {
     final prompt = asked().prompt;
     expect((prompt.images.length, prompt.images.single.mimeType), (1, 'image/png'));
     await answer(tester, model, SessionMessage(accepted: Accepted(requestId: prompt.requestId)));
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   group("pi's questions, in the composer's place", () {
     const automode = 'Rule: bash(git push *)\n\nAction:\nbash {\n  "command": "git push nowhere main"\n}\n\nAllow this action to continue to auto-mode classification?';
@@ -1629,18 +1639,18 @@ void main() {
         expect(find.text('Waiting for you'), findsOneWidget, reason: 'the check it is about');
         expect(find.text('Steer, or queue a follow-up'), findsNothing, reason: 'no message box while pi asks');
         expect(find.text('Stop'), findsNothing);
-        await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_${b.name}.png'));
+        await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_${b.name}.png')));
         if (b == Brightness.dark) return;
         await tester.enterText(find.byType(CupertinoTextField), 'Also search /var/log/nginx');
         await tester.pump();
         expect(find.text('pi gets the note with your answer.'), findsOneWidget);
-        await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_note_light.png'));
+        await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_note_light.png')));
         sent.clear();
         await tester.tap(find.text('Yes'));
         await tester.pump();
         expect((answered().questionId, answered().confirmed, answered().note), ('q9', true, 'Also search /var/log/nginx'));
         await tester.pump(const Duration(seconds: 46));
-      }, skip: !drawsGoldens);
+      }, skip: !drawsGoldens, variant: both);
     }
 
     testWidgets('No without a note; Dismiss, a whole 44 points, closes it; the message box back once it goes', (tester) async {
@@ -1673,27 +1683,27 @@ void main() {
     testWidgets('a select: its options as buttons, the note with them', (tester) async {
       await asked(tester, Question(id: 'q8', kind: QuestionKind.QUESTION_KIND_SELECT, title: 'tests/fixtures/cart.json is out of date. What should I do?',
           options: ['Regenerate it', 'Fix the tests to match it', 'Leave both for now'], answerable: true, askedAt: ts(now)));
-      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_select_light.png'));
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_select_light.png')));
       await tester.enterText(find.byType(CupertinoTextField), 'keep the old one as .bak');
       sent.clear();
       await tester.tap(find.text('Fix the tests to match it'));
       await tester.pump();
       expect((answered().option, answered().note), (1, 'keep the old one as .bak'));
       await tester.pump(const Duration(seconds: 46));
-    }, skip: !drawsGoldens);
+    }, skip: !drawsGoldens, variant: ios);
 
     testWidgets("an input: its text the answer, no note", (tester) async {
       await asked(tester, Question(id: 'q7', kind: QuestionKind.QUESTION_KIND_INPUT, title: 'Branch name?', placeholder: 'release/…', answerable: true, askedAt: ts(now)));
       expect(find.byType(CupertinoTextField), findsOneWidget, reason: 'the answer, and no note');
       await tester.enterText(find.byType(CupertinoTextField), 'release/2.4');
       await tester.pump();
-      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_input_light.png'));
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_input_light.png')));
       sent.clear();
       await tester.tap(find.text('Send'));
       await tester.pump();
       expect((answered().text, answered().note), ('release/2.4', ''));
       await tester.pump(const Duration(seconds: 46));
-    }, skip: !drawsGoldens);
+    }, skip: !drawsGoldens, variant: both);
 
     testWidgets("only pi's terminal can answer: where pi runs, and Stop", (tester) async {
       await asked(tester, Question(id: 'q6', kind: QuestionKind.QUESTION_KIND_EDITOR, title: 'Commit message', answerable: false, askedAt: ts(now)));
@@ -1701,13 +1711,13 @@ void main() {
       expect(find.text("This needs pi's terminal to answer."), findsOneWidget);
       expect(find.text('Dismiss and stop'), findsNothing);
       expect(find.text('Waiting for you'), findsNothing, reason: 'not for the app to answer');
-      await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_terminal_light.png'));
+      await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_terminal_light.png')));
       sent.clear();
       await tester.tap(find.text('Stop pi'));
       await tester.pump();
       expect(SessionMessage.fromBuffer(sent.last.routed.payload).hasAbort(), isTrue);
       await tester.pump(const Duration(seconds: 46));
-    }, skip: !drawsGoldens);
+    }, skip: !drawsGoldens, variant: ios);
   });
 
   testWidgets("pi's notifications, in the chat where they were shown: info quiet, a warning and an error in their colours", (tester) async {
@@ -1731,8 +1741,8 @@ void main() {
     }
     expect(find.bySemanticsLabel(RegExp('^Warning')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('^Error')), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/notifications_light.png'));
-  }, skip: !drawsGoldens);
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('notifications_light.png')));
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('a message sent while pi works steers, unless Queue is chosen', (tester) async {
     await phone(tester);
@@ -1759,11 +1769,11 @@ void main() {
     await tester.pump();
     expect(model.pending('0101010101010101-i1').single.delivery, 'followUp');
     expect(find.text('Sending'), findsOneWidget);
-    await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/chat_sending_light.png'));
+    await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('chat_sending_light.png')));
     // Unanswered, it fails at its deadline, to be retried.
     await tester.pump(const Duration(seconds: 46));
     expect(find.text('Retry'), findsOneWidget);
-  }, skip: !drawsGoldens);
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('joining and the lock', (tester) async {
     await phone(tester);
@@ -1772,18 +1782,18 @@ void main() {
     await tester.tap(find.text('Join with the link'));
     await tester.pump();
     expect(find.textContaining('not a PiRC join link'), findsOneWidget);
-    await expectLater(find.byType(JoinScreen), matchesGoldenFile('goldens/join_light.png'));
+    await expectLater(find.byType(JoinScreen), matchesGoldenFile(golden('join_light.png')));
     await tester.pumpWidget(frame(LockScreen(unlock: () {})));
-    await expectLater(find.byType(LockScreen), matchesGoldenFile('goldens/lock_light.png'));
-  }, skip: !drawsGoldens);
+    await expectLater(find.byType(LockScreen), matchesGoldenFile(golden('lock_light.png')));
+  }, skip: !drawsGoldens, variant: both);
 
   testWidgets('what the camera is for, before the phone asks for it', (tester) async {
     await phone(tester);
     await tester.pumpWidget(frame(ScanScreen(explained: false, onExplained: () {})));
     expect(find.text('Scan the join code'), findsOneWidget);
     expect(find.textContaining('keeps no picture'), findsOneWidget);
-    await expectLater(find.byType(ScanScreen), matchesGoldenFile('goldens/scan_light.png'));
-  }, skip: !drawsGoldens);
+    await expectLater(find.byType(ScanScreen), matchesGoldenFile(golden('scan_light.png')));
+  }, skip: !drawsGoldens, variant: ios);
 
   testWidgets('the app opens on joining when it has no relay', (tester) async {
     await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), fontFamily: font));
@@ -1938,7 +1948,7 @@ void main() {
       await open(tester, second);
       await tester.pump();
       expect(field(), second);
-      expect(find.byType(CupertinoActivityIndicator), findsNothing);
+      expect(find.byType(Spinner), findsNothing);
       expect(await store.load('ws://127.0.0.1:9', KeyKind.main), isNull);
     });
 
@@ -2014,6 +2024,33 @@ void main() {
     }
   });
 
+  testWidgets("an alert: iOS's, its buttons under it; on Android Material's, its text buttons at its end, the destructive one red", (tester) async {
+    await phone(tester);
+    bool? chosen;
+    await tester.pumpWidget(frame(Builder(
+      builder: (context) => CupertinoPageScaffold(
+        child: Center(
+          child: Press(
+            onPressed: () async => chosen = await showAlert<bool>(
+              context,
+              title: const Text('Delete this account?'),
+              content: const Text('The relay deletes the account and everything it holds of it. Your sessions stay on your computers. This cannot be undone.'),
+              actions: const [AlertAction('Cancel', false), AlertAction('Delete', true, destructive: true)],
+            ),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    )));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('alert_light.png')));
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(chosen, isTrue);
+    expect(find.text('Delete this account?'), findsNothing);
+  }, skip: !drawsGoldens, variant: both);
+
   // Every enabled button on the screen can be pressed by a screen reader,
   // and says what it is: one drawn by hand whose semantics are its own
   // label keeps the tap.
@@ -2023,7 +2060,8 @@ void main() {
       final d = n.getSemanticsData();
       if (d.flagsCollection.isButton && d.flagsCollection.isEnabled != ui.Tristate.isFalse && !d.hasAction(SemanticsAction.tap)) out.add(d.label);
       // And says what it is.
-      if (d.flagsCollection.isButton && d.label.trim().isEmpty) out.add('unlabelled at ${n.rect}');
+      // An icon button's name is its tooltip, which TalkBack reads.
+      if (d.flagsCollection.isButton && d.label.trim().isEmpty && d.tooltip.trim().isEmpty) out.add('unlabelled at ${n.rect}');
       n.visitChildren((c) {
         visit(c);
         return true;
@@ -2096,7 +2134,7 @@ void main() {
     await tester.pumpWidget(frame(JoinScreen(join: (_) async {}, back: () {})));
     await tester.pump();
     expect(deaf(tester), isEmpty, reason: 'the join screen, from the paywall');
-    expect(find.bySemanticsLabel('Back'), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
     semantics.dispose();
   });
 
@@ -2129,8 +2167,8 @@ void main() {
         expect(find.text('Restore purchases'), findsOneWidget);
         expect(find.text('Terms of Use'), findsOneWidget);
         expect(find.text('Privacy Policy'), findsOneWidget);
-        await expectLater(find.byType(PaywallScreen), matchesGoldenFile('goldens/paywall_${b.name}.png'));
-      }, skip: !drawsGoldens);
+        await expectLater(find.byType(PaywallScreen), matchesGoldenFile(golden('paywall_${b.name}.png')));
+      }, skip: !drawsGoldens, variant: ios);
     }
 
     testWidgets('each state of the paywall', (tester) async {
@@ -2196,7 +2234,7 @@ void main() {
       expect(find.text('Terms of Use'), findsNothing);
       expect(find.text('Privacy Policy'), findsOneWidget);
       expect(find.text('Manage subscription'), findsNothing, reason: 'not had');
-      await expectLater(find.byType(PaywallScreen), matchesGoldenFile('goldens/paywall_play_light.png'), skip: !drawsGoldens);
+      await expectLater(find.byType(PaywallScreen), matchesGoldenFile(golden('paywall_play_light.png')), skip: !drawsGoldens);
       await show(Access.never, product: null);
       expect(find.text("Can't reach Google Play for the price."), findsOneWidget);
       await tester.tap(find.text('Restore purchases'));
@@ -2233,11 +2271,11 @@ void main() {
       await tester.tap(find.text('Start free trial'));
       await tester.pump();
       // Waiting: still in its colour, its label and a spinner.
-      final button = find.ancestor(of: find.text('Start free trial'), matching: find.byType(CupertinoButton));
+      final button = find.ancestor(of: find.text('Start free trial'), matching: find.byType(Press));
       expect(button, findsOneWidget);
-      expect(tester.widget<CupertinoButton>(button).onPressed, isNull);
-      expect(tester.widget<CupertinoButton>(button).disabledColor, Look.light.accent);
-      expect(find.descendant(of: button, matching: find.byType(CupertinoActivityIndicator)), findsOneWidget);
+      expect(tester.widget<Press>(button).onPressed, isNull);
+      expect(tester.widget<Press>(button).disabledColor, Look.light.accent);
+      expect(find.descendant(of: button, matching: find.byType(Spinner)), findsOneWidget);
       // The trial started, said outside the purchase.
       store.now = StoreStatus(Access.allowed, trial: true, ends: trialEnds, renews: true);
       store.change();
@@ -2253,8 +2291,8 @@ void main() {
       await settle(tester, find.text('Start free trial'));
       await tester.tap(find.text('Start free trial'));
       await tester.pump();
-      final button = find.ancestor(of: find.text('Start free trial'), matching: find.byType(CupertinoButton));
-      bool waiting() => tester.widget<CupertinoButton>(button).onPressed == null;
+      final button = find.ancestor(of: find.text('Start free trial'), matching: find.byType(Press));
+      bool waiting() => tester.widget<Press>(button).onPressed == null;
       expect(waiting(), isTrue);
       // Apple's password prompt, however long it is up, then between it
       // and the next.
@@ -2270,7 +2308,7 @@ void main() {
       expect(waiting(), isTrue, reason: '30 seconds from the last sheet');
       await tester.pump(const Duration(seconds: 2));
       expect(waiting(), isFalse, reason: 'given up');
-      expect(find.descendant(of: button, matching: find.byType(CupertinoActivityIndicator)), findsNothing);
+      expect(find.descendant(of: button, matching: find.byType(Spinner)), findsNothing);
       // Asked again: a second purchase, also unanswered for now; the
       // first's late answer leaves it waiting.
       final first = store.answer!;
@@ -2419,7 +2457,7 @@ void main() {
       await tester.tap(find.text('Join with a link'));
       await tester.pump();
       expect(find.text('Add this phone'), findsOneWidget);
-      await tester.tap(find.text('Back'));
+      await tester.tap(find.byType(BackLink));
       await tester.pump();
       expect(find.text('Start free trial'), findsOneWidget);
       // Android's back as well.
@@ -2525,11 +2563,11 @@ void main() {
     await tester.pump();
     expect(deaf(tester), isEmpty, reason: 'a wide table');
     expect(find.byType(ExcludeSemantics), findsWidgets, reason: 'the held column, read once');
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/table_wide_light.png'), skip: !drawsGoldens);
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('table_wide_light.png')), skip: !drawsGoldens);
     // Scrolled, the rest pass under the first column.
     await tester.drag(find.text('Ping every 15 s').first, const Offset(-200, 0));
     await tester.pumpAndSettle();
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/table_scrolled_light.png'), skip: !drawsGoldens);
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('table_scrolled_light.png')), skip: !drawsGoldens);
     // A drag begun on the held column scrolls the rest too.
     final before = tester.getTopLeft(find.text('Ping every 15 s').first).dx;
     await tester.drag(find.text('B').last, const Offset(100, 0));
@@ -2539,7 +2577,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Turn the phone sideways to see more'), findsOneWidget);
     expect(deaf(tester), isEmpty, reason: 'a table full screen');
-    await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/table_full_light.png'), skip: !drawsGoldens);
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('table_full_light.png')), skip: !drawsGoldens);
     await tester.tap(find.bySemanticsLabel('Close'));
     await tester.pumpAndSettle();
     expect(find.text('Turn the phone sideways to see more'), findsNothing);
@@ -2572,14 +2610,14 @@ void main() {
         await tester.pump();
         expect(find.text('build-box asks to join'), findsOneWidget);
         expect(find.text('A machine asks to join'), findsOneWidget, reason: 'one that gave no name');
-        await expectLater(find.byType(SessionsScreen), matchesGoldenFile('goldens/join_requests_${b.name}.png'));
+        await expectLater(find.byType(SessionsScreen), matchesGoldenFile(golden('join_requests_${b.name}.png')));
         await tester.tap(find.text('build-box asks to join'));
         await tester.pumpAndSettle();
         expect(find.text('Add this machine?'), findsOneWidget);
         expect(find.text('Asked 2m ago from 203.0.113.24:51022'), findsOneWidget);
         expect(find.text('It runs pirc-extension/0.1.9.'), findsOneWidget);
-        await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/approve_${b.name}.png'));
-      }, skip: !drawsGoldens);
+        await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('approve_${b.name}.png')));
+      }, skip: !drawsGoldens, variant: ios);
     }
 
     testWidgets('approved under a name of its own: the sheet and its line go once the relay says so', (tester) async {
@@ -2733,8 +2771,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(asked, ['wss://relay.example:8443']);
       expect(find.textContaining("doesn't know this phone"), findsOneWidget);
-      await expectLater(find.byType(RelayAddressScreen), matchesGoldenFile('goldens/relay_address_light.png'));
-    }, skip: !drawsGoldens);
+      await expectLater(find.byType(RelayAddressScreen), matchesGoldenFile(golden('relay_address_light.png')));
+    }, skip: !drawsGoldens, variant: both);
 
     for (final b in Brightness.values) {
       testWidgets('listed, ${b.name}', (tester) async {
@@ -2745,8 +2783,8 @@ void main() {
         expect(find.text('This phone'), findsOneWidget, reason: 'first among the clients');
         expect(find.text('Online · Notifications on · key AwMDAwMD…'), findsOneWidget);
         expect(find.text('Offline · key AgICAgIC…'), findsOneWidget);
-        await expectLater(find.byType(SettingsScreen), matchesGoldenFile('goldens/settings_devices_${b.name}.png'));
-      }, skip: !drawsGoldens);
+        await expectLater(find.byType(SettingsScreen), matchesGoldenFile(golden('settings_devices_${b.name}.png')));
+      }, skip: !drawsGoldens, variant: ios);
     }
 
     testWidgets('a host renamed, the sheet closing once the relay has it', (tester) async {
@@ -2863,7 +2901,7 @@ void main() {
       expect(find.text(link), findsOneWidget, reason: 'the link beside it');
       final parsed = parseJoinLink(link)!;
       expect((parsed.relay, parsed.token), ('wss://relay.example:8443', 'tok+/en='), reason: 'as the app reads it');
-      await expectLater(find.byType(CupertinoApp), matchesGoldenFile('goldens/invite_light.png'), skip: !drawsGoldens);
+      await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('invite_light.png')), skip: !drawsGoldens);
       await tester.tap(find.text('Copy'));
       await tester.pump();
       expect(copied.single, (link, expires), reason: 'gone from the clipboard when it expires');
@@ -2961,7 +2999,7 @@ void main() {
       return s;
     }
 
-    Finder switchOf(String label) => find.descendant(of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first, matching: find.byType(CupertinoSwitch));
+    Finder switchOf(String label) => find.descendant(of: find.ancestor(of: find.text(label), matching: find.byType(Row)).first, matching: find.byType(Toggle));
 
     setUp(() {
       prefs = MemoryPrefs(relay);
@@ -2977,9 +3015,9 @@ void main() {
         expect(find.text('Lock with Face ID'), findsOneWidget);
         expect(find.text('Ask again after'), findsOneWidget);
         expect(find.text('30 min'), findsOneWidget);
-        expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).value, isTrue);
-        await expectLater(find.byType(SettingsScreen), matchesGoldenFile('goldens/settings_${b.name}.png'));
-      }, skip: !drawsGoldens);
+        expect(tester.widget<Toggle>(switchOf('Notifications')).value, isTrue);
+        await expectLater(find.byType(SettingsScreen), matchesGoldenFile(golden('settings_${b.name}.png')));
+      }, skip: !drawsGoldens, variant: both);
     }
 
     testWidgets('the lock turned off asks once and keeps the key unprotected; on again protects it', (tester) async {
@@ -3009,7 +3047,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.protected(relay), isTrue);
       expect(await prefs.locks(), isTrue);
-      expect(tester.widget<CupertinoSwitch>(switchOf('Lock with Face ID')).value, isTrue);
+      expect(tester.widget<Toggle>(switchOf('Lock with Face ID')).value, isTrue);
     });
 
     testWidgets('turning the lock on with no passcode: it stays off, the key kept, saying why', (tester) async {
@@ -3068,21 +3106,21 @@ void main() {
     testWidgets('notifications never asked for: turning them on asks the phone', (tester) async {
       permission = 'undetermined';
       await open(tester, MemoryKeyStore());
-      expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).value, isFalse);
+      expect(tester.widget<Toggle>(switchOf('Notifications')).value, isFalse);
       expect(find.text('When a turn ends or pi asks.'), findsOneWidget, reason: 'not refused, only not yet asked');
       expect(find.text("Open the phone's Settings"), findsNothing);
       await tester.tap(switchOf('Notifications'));
       await tester.pumpAndSettle();
       expect(calls, contains('ask'));
-      expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).value, isTrue);
+      expect(tester.widget<Toggle>(switchOf('Notifications')).value, isTrue);
       expect(resynced, 1);
     });
 
     testWidgets("notifications refused by the phone: said so, with the way to its Settings", (tester) async {
       permission = 'denied';
       await open(tester, MemoryKeyStore());
-      expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).value, isFalse);
-      expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).onChanged, isNull, reason: 'turned on only there');
+      expect(tester.widget<Toggle>(switchOf('Notifications')).value, isFalse);
+      expect(tester.widget<Toggle>(switchOf('Notifications')).onChanged, isNull, reason: 'turned on only there');
       expect(find.text("Off for PiRC in the phone's Settings."), findsOneWidget);
       await tester.tap(find.text("Open the phone's Settings"));
       await tester.pump();
@@ -3091,7 +3129,7 @@ void main() {
       permission = 'granted';
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
-      expect(tester.widget<CupertinoSwitch>(switchOf('Notifications')).value, isTrue);
+      expect(tester.widget<Toggle>(switchOf('Notifications')).value, isTrue);
       expect(find.text("Open the phone's Settings"), findsNothing);
     });
 

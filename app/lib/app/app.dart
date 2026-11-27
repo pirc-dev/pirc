@@ -7,7 +7,7 @@ import 'dart:convert';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show DefaultMaterialLocalizations;
+import 'package:flutter/material.dart' show InputDecoration, TextField;
 import 'package:flutter/services.dart';
 
 import '../core/protocol.dart';
@@ -50,6 +50,7 @@ import 'model.dart';
 import 'outside.dart';
 import 'settings.dart';
 import 'store.dart';
+import '../ui/adaptive.dart';
 
 // What the app keeps besides its keys, by key: on iOS in the App Group's
 // defaults, which the notification extension reads ("relay", "notices.v1");
@@ -483,13 +484,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       return;
     }
     if (!context.mounted) return;
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('This phone is already added'),
-        content: const Text('It has joined a relay, so the link was not used.'),
-        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
-      ),
+    await showAlert<void>(
+      context,
+      title: const Text('This phone is already added'),
+      content: const Text('It has joined a relay, so the link was not used.'),
+      actions: [AlertAction('OK', null, primary: true)],
     );
   }
 
@@ -649,13 +648,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _say(String title, String body) {
     final context = _nav.currentState?.overlay?.context;
     if (context == null) return;
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
-      ),
+    showAlert<void>(
+      context,
+      title: Text(title),
+      content: Text(body),
+      actions: [AlertAction('OK', null, primary: true)],
     );
   }
 
@@ -780,13 +777,11 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   Future<void> _hostedRemoved(String relay) async {
     final context = _nav.currentState?.overlay?.context;
     if (context != null) {
-      await showCupertinoDialog<void>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('Removed from the account'),
-          content: const Text("The account's phone took this phone off the account. Its keys are deleted now; to come back, join again from the account's phone."),
-          actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
-        ),
+      await showAlert<void>(
+        context,
+        title: const Text('Removed from the account'),
+        content: const Text("The account's phone took this phone off the account. Its keys are deleted now; to come back, join again from the account's phone."),
+        actions: [AlertAction('OK', null, primary: true)],
       );
     }
     if (mounted && _relay == relay) await _removed(relay);
@@ -798,17 +793,12 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     final context = _nav.currentState?.overlay?.context;
     final relay = _relay;
     if (context == null || relay == null) return;
-    final sure = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Start again on this phone?'),
-        content: const Text("This phone's keys and its account are deleted here. If it was the account's phone, nothing can be added to that account or taken off it again: "
+    final sure = await showAlert<bool>(
+      context,
+      title: const Text('Start again on this phone?'),
+      content: const Text("This phone's keys and its account are deleted here. If it was the account's phone, nothing can be added to that account or taken off it again: "
             'run /pirc leave on each of its computers, then make a new account.'),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Start again')),
-        ],
-      ),
+      actions: [AlertAction('Cancel', false), AlertAction('Start again', true, destructive: true)],
     );
     if (sure == true && mounted && _relay == relay) await _removed(relay);
   }
@@ -854,20 +844,18 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     if (context == null) return null;
     final field = TextEditingController();
     try {
-      return await showCupertinoDialog<String>(
-        context: context,
-        builder: (context) => CupertinoAlertDialog(
-          title: const Text('Invite code'),
-          content: Column(children: [
-            const Text('PiRC\'s relay takes new accounts by invite for now. Type the code you were given.'),
-            const SizedBox(height: 12),
+      return await showAlert<String>(
+        context,
+        title: const Text('Invite code'),
+        content: Column(children: [
+          const Text('PiRC\'s relay takes new accounts by invite for now. Type the code you were given.'),
+          const SizedBox(height: 12),
+          if (onAndroid)
+            TextField(controller: field, autofocus: true, autocorrect: false, decoration: const InputDecoration(hintText: 'XXXX-XXXX-XXXX-XXXX'), textCapitalization: TextCapitalization.characters)
+          else
             CupertinoTextField(controller: field, autofocus: true, autocorrect: false, placeholder: 'XXXX-XXXX-XXXX-XXXX', textCapitalization: TextCapitalization.characters),
-          ]),
-          actions: [
-            CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-            CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(field.text), child: const Text('Continue')),
-          ],
-        ),
+        ]),
+        actions: [AlertAction('Cancel', null), AlertAction.read('Continue', () => field.text, primary: true)],
       );
     } finally {
       field.dispose();
@@ -882,7 +870,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     final j = await JoiningPhone.start(e2e: await E2e.load(), store: widget.store, values: widget.prefs, origin: widget.hosted!, attest: widget.attest, protect: _settings!.lock);
     if (!mounted) return j.cancel();
     // Joined, the screen shows it a moment, then the account opens.
-    final route = CupertinoPageRoute<void>(
+    final route = pageRoute<void>(
       builder: (_) => ShowCodeScreen(
         text: j.text,
         done: j.joined,
@@ -927,7 +915,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     await widget.prefs.setNotificationsExplained();
     final nav = _nav.currentState;
     if (nav == null || !mounted) return;
-    await nav.push(CupertinoPageRoute<void>(
+    await nav.push(pageRoute<void>(
       fullscreenDialog: true,
       builder: (context) => NotifyScreen(
         allow: () async {
@@ -962,7 +950,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushChat(PircModel model, String id) {
     _chat.value = id;
     _inSettings = false;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => ChatScreen(model: model, id: id, drafts: widget.drafts, open: _openChat)));
+    _pushDetail(pageRoute<void>(builder: (_) => ChatScreen(model: model, id: id, drafts: widget.drafts, open: _openChat)));
   }
 
   // The chat or Settings over the list. Closed on a narrow screen, nothing
@@ -994,7 +982,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   void _pushSettings() {
     _inSettings = true;
     _chat.value = null;
-    _pushDetail(CupertinoPageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, hosted: _hostedDevices, hostedAccount: _hostedAccount)));
+    _pushDetail(pageRoute<void>(builder: (_) => SettingsScreen(settings: _settings!, model: _model, subscription: widget.subscription == null ? null : _access, manage: _manage, follow: _isHosted ? null : _follow, leave: _isHosted ? null : _leave, hosted: _hostedDevices, hostedAccount: _hostedAccount)));
   }
 
   // Crossing 1024 points: what was over the list goes beside it, or what
@@ -1163,7 +1151,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // The camera's scan, over the join screen; the link it read, or null.
   Future<String?> _scan() async {
     final explained = await widget.prefs.cameraExplained();
-    return _nav.currentState!.push<String>(CupertinoPageRoute(
+    return _nav.currentState!.push<String>(pageRoute(
       fullscreenDialog: true,
       builder: (_) => ScanScreen(explained: explained, onExplained: widget.prefs.setCameraExplained),
     ));
@@ -1172,7 +1160,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   // The camera's scan of a device's code, for adding it to a hosted account.
   Future<String?> _scanText() async {
     final explained = await widget.prefs.cameraExplained();
-    return _nav.currentState!.push<String>(CupertinoPageRoute(
+    return _nav.currentState!.push<String>(pageRoute(
       fullscreenDialog: true,
       builder: (_) => ScanScreen(
         explained: explained,
@@ -1288,7 +1276,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
                   // pages first.
                   child: NavigatorPopHandler(
                     onPopWithResult: (_) => _listNav.currentState?.maybePop(),
-                    child: Navigator(key: _listNav, onGenerateRoute: (_) => CupertinoPageRoute<void>(builder: (_) => list)),
+                    child: Navigator(key: _listNav, onGenerateRoute: (_) => pageRoute<void>(builder: (_) => list)),
                   ),
                 ),
                 Container(width: 0.5, color: look.rule),
@@ -1312,12 +1300,15 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         navigatorObservers: [_routes],
         title: 'PiRC',
         theme: CupertinoThemeData(brightness: brightness, primaryColor: look.accent, scaffoldBackgroundColor: look.page),
-        // Material's too, for Flutter's page of the licences (Settings).
-        localizationsDelegates: const [DefaultMaterialLocalizations.delegate, DefaultCupertinoLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
-        builder: (context, child) => LookScope(
-          look: look,
-          child: ConnectionBanner(listenable: shown ?? _noModel, relay: () => shown?.relay ?? const RelayView(state: 'ready'), child: child!),
-        ),
+        localizationsDelegates: appLocalizations,
+        scrollBehavior: scrollBehavior,
+        builder: (context, child) {
+          final screens = LookScope(
+            look: look,
+            child: ConnectionBanner(listenable: shown ?? _noModel, relay: () => shown?.relay ?? const RelayView(state: 'ready'), child: child!),
+          );
+          return platformControls(look, brightness, screens);
+        },
         home: home,
       ),
     );

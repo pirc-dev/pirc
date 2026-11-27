@@ -18,6 +18,7 @@ import 'hosts.dart';
 import 'launch.dart';
 import 'look.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 // The date past a day, in the phone's language: a weekday, else day and
 // month. Kept short and plain until the app has its translations.
@@ -132,7 +133,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   // A host's or group's page, over this one; what is open on it kept for
   // all.
-  void _go(String host, [String? group]) => Navigator.of(context).push(CupertinoPageRoute<void>(
+  void _go(String host, [String? group]) => Navigator.of(context).push(pageRoute<void>(
         settings: const RouteSettings(name: scopeRoute),
         builder: (_) => SessionsScreen(
           model: widget.model,
@@ -195,15 +196,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        minimumSize: const Size(44, 44),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(CupertinoIcons.chevron_back, size: 22, color: look.accent),
-                          Text(group != null ? host : 'Sessions', style: look.text(color: look.accent)),
-                        ]),
-                      ),
+                      child: BackLink(label: group != null ? host : 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
                     ),
                   ),
                 ),
@@ -626,17 +619,7 @@ class _SearchBar extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         color: look.page,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-        child: CupertinoSearchTextField(
-          controller: query,
-          placeholder: 'Search $count$kind session${count == 1 ? '' : 's'}$where',
-          style: look.text(size: 17),
-          placeholderStyle: look.text(size: 17, color: look.ink3),
-          backgroundColor: look.wash,
-          borderRadius: BorderRadius.circular(11),
-          itemColor: look.ink3,
-          prefixInsets: const EdgeInsetsDirectional.fromSTEB(10, 0, 4, 0),
-          autocorrect: false,
-        ),
+        child: SearchField(controller: query, placeholder: 'Search $count$kind session${count == 1 ? '' : 's'}$where'),
       );
 }
 

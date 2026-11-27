@@ -15,6 +15,7 @@ import 'package:image_picker/image_picker.dart';
 import '../app/outside.dart';
 import '../core/images.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 // pi's limits, as web/core/api.ts has them: four images a message, each
 // at most 2000 pixels a side and 2 MiB, in one of these types.
@@ -307,7 +308,7 @@ class Viewer extends StatelessWidget {
                   label: 'Close',
                   excludeSemantics: true,
                   onTap: () => Navigator.of(context).pop(),
-                  child: CupertinoButton(
+                  child: Press(
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(44, 44),
                     onPressed: () => Navigator.of(context).pop(),

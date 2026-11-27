@@ -24,6 +24,7 @@ import '../ui/hosted_account_screens.dart';
 import '../ui/hosted_devices.dart';
 import 'store.dart';
 import '../ui/hosted_join_screens.dart';
+import '../ui/adaptive.dart';
 
 /// A removal this phone published and never heard answered, kept until a
 /// later login gives it to the relay again (base64).
@@ -201,7 +202,7 @@ class AppHostedDevices implements HostedDevices {
   @override
   void addDevice(BuildContext context) {
     final computers = _account.newest.body.devices.where((d) => d.role == roleComputer).length;
-    Navigator.of(context).push(CupertinoPageRoute<void>(
+    Navigator.of(context).push(pageRoute<void>(
       builder: (_) => AddDeviceScreen(
         adder: () => _Rereading(AddDevice(e2e: e2e, account: _phone(), frames: run.sessions.frames, send: (f) => run.sessions.sendRaw(f)), this),
         computers: computers,

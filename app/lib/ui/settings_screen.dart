@@ -21,6 +21,7 @@ import 'hosted_devices.dart';
 import 'look.dart';
 import 'leave.dart';
 import 'relay_address.dart';
+import 'adaptive.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.settings, this.model, this.subscription, this.manage, this.follow, this.leave, this.version = appVersion, this.wide = false, this.hosted, this.hostedAccount});
@@ -87,15 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                 padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: CupertinoButton(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    minimumSize: const Size(44, 44),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(CupertinoIcons.chevron_back, size: 22, color: look.accent),
-                      Text('Sessions', style: look.text(color: look.accent)),
-                    ]),
-                  ),
+                  child: BackLink(label: 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
                 ),
               ),
             Padding(
@@ -138,7 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                 _Row(label: relay),
                 _Link(
                   label: 'Change address',
-                  onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => RelayAddressScreen(relay: relay, follow: widget.follow!))),
+                  onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => RelayAddressScreen(relay: relay, follow: widget.follow!))),
                 ),
                 if (widget.leave != null)
                   _Link(
@@ -160,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
             ],
             if (hostedBuild)
               _Section(title: 'Hosted relay', sub: 'A test build: tries what the stores say of this phone.', rows: [
-                _Link(label: "Try the stores' checks", onTap: () => Navigator.of(context).push(CupertinoPageRoute<void>(builder: (_) => const TryStoresScreen()))),
+                _Link(label: "Try the stores' checks", onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => const TryStoresScreen()))),
               ]),
             _Section(title: 'About', sub: 'PiRC and what it is built from.', rows: [_Link(label: 'Licences', onTap: _licences)]),
           ],
@@ -214,7 +207,7 @@ extension on _SettingsScreenState {
     }
     if (!mounted) return;
     final brightness = MediaQuery.platformBrightnessOf(context);
-    await Navigator.of(context).push(CupertinoPageRoute<void>(
+    await Navigator.of(context).push(pageRoute<void>(
       builder: (_) => Theme(data: ThemeData(brightness: brightness), child: LicensePage(applicationName: 'PiRC', applicationVersion: version)),
     ));
   }
@@ -298,7 +291,7 @@ class _Row extends StatelessWidget {
   }
 }
 
-// An on/off switch, as the phone's own, in the web page's Native green.
+// An on/off switch, as the phone's own; on iOS in the web page's Native green.
 class _Switch extends StatelessWidget {
   const _Switch({required this.on, required this.set, this.disabled = false});
   final bool on;
@@ -307,10 +300,10 @@ class _Switch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final look = Look.of(context);
     return Opacity(
-      opacity: disabled ? 0.4 : 1,
-      child: CupertinoSwitch(value: on, activeTrackColor: const Color(0xff34c759), inactiveTrackColor: look.wash2, onChanged: disabled ? null : set),
+      // Material's dims itself.
+      opacity: disabled && !onAndroid ? 0.4 : 1,
+      child: Toggle(value: on, iosColor: const Color(0xff34c759), onChanged: disabled ? null : set),
     );
   }
 }

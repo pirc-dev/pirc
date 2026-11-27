@@ -12,6 +12,7 @@ import '../core/protocol.dart';
 import '../core/view.dart';
 import 'look.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 // How long a new pi has to connect before the sheet stops waiting for it.
 const connectMs = 45000;
@@ -141,7 +142,7 @@ class _LaunchSheetState extends State<LaunchSheet> {
           child: Semantics(liveRegion: true, child: Text(text, style: look.text(size: 14.5, color: bad ? look.block : look.ink2, spacing: 0))),
         );
     // The name is the request's; another folder may be typed meanwhile.
-    Widget field(TextEditingController c, String placeholder, {bool mono = false, ValueChanged<String>? submitted}) => CupertinoTextField(
+    Widget field(TextEditingController c, String placeholder, {bool mono = false, ValueChanged<String>? submitted}) => CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
           controller: c,
           enabled: c != _name || !starting,
           placeholder: placeholder,

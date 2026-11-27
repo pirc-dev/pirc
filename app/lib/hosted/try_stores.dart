@@ -22,6 +22,7 @@ import '../e2e/list.dart';
 import '../gen/pirc/v1alpha2/account.pb.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import '../ui/look.dart';
+import '../ui/adaptive.dart';
 
 const hostedBuild = bool.fromEnvironment('PIRC_HOSTED');
 
@@ -173,20 +174,20 @@ class _TryStoresScreenState extends State<TryStoresScreen> {
   Widget build(BuildContext context) {
     final look = Look.of(context);
     return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(middle: Text("The stores' checks")),
+      navigationBar: CupertinoNavigationBar(leading: barLeading(context), middle: const Text("The stores' checks")),
       child: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Text("Signs up on a hosted relay with new keys, sending a list of this phone alone, its attestation and its subscription. The keys are dropped afterwards.", style: look.text()),
             const SizedBox(height: 12),
-            CupertinoTextField(controller: _origin, autocorrect: false, keyboardType: TextInputType.url),
+            CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, controller: _origin, autocorrect: false, keyboardType: TextInputType.url),
             const SizedBox(height: 12),
-            CupertinoButton.filled(onPressed: _running ? null : _run, child: Text(_running ? 'Trying…' : 'Try a sign-up')),
+            Press.filled(onPressed: _running ? null : _run, child: Text(_running ? 'Trying…' : 'Try a sign-up')),
             const SizedBox(height: 16),
             for (final l in _lines) Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(l, style: look.text(size: 15))),
             if (_lines.isNotEmpty && !_running)
-              CupertinoButton(onPressed: () => Clipboard.setData(ClipboardData(text: _lines.join('\n'))), child: const Text('Copy')),
+              Press(onPressed: () => Clipboard.setData(ClipboardData(text: _lines.join('\n'))), child: const Text('Copy')),
           ],
         ),
       ),

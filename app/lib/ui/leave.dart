@@ -9,6 +9,7 @@ import 'package:flutter/cupertino.dart';
 import '../app/model.dart';
 import '../join.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 // Whether the relay lists this phone as its only app, so that leaving
 // leaves none to add another.
@@ -69,13 +70,9 @@ Future<bool> leaveRelay(
 // (or with everything else, once left).
 Future<LeaveFailed?> _while(BuildContext context, Future<LeaveFailed?> Function() leave) async {
   final nav = Navigator.of(context);
-  final route = CupertinoDialogRoute<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => const CupertinoAlertDialog(
-      title: Text('Leaving the relay…'),
-      content: Padding(padding: EdgeInsets.only(top: 12), child: CupertinoActivityIndicator()),
-    ),
+  final route = dialogRoute<void>(
+    context,
+    (context) => alertDialog<void>(context, title: const Text('Leaving the relay…'), content: Padding(padding: const EdgeInsets.only(top: 12), child: onAndroid ? const Align(alignment: Alignment.centerLeft, child: Spinner(radius: 16)) : const Spinner())),
   );
   nav.push(route);
   try {
@@ -86,24 +83,17 @@ Future<LeaveFailed?> _while(BuildContext context, Future<LeaveFailed?> Function(
 }
 
 Future<bool> _ask(BuildContext context, {required String title, required String text, required String action}) async =>
-    await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(padding: const EdgeInsets.only(top: 6), child: Text(text, style: Look.of(context).text(size: 13.5, spacing: 0))),
-        actions: [
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: Text(action)),
-        ],
-      ),
+    await showAlert<bool>(
+      context,
+      title: Text(title),
+      content: Padding(padding: const EdgeInsets.only(top: 6), child: Text(text, style: Look.of(context).text(size: 13.5, spacing: 0))),
+      actions: [AlertAction('Cancel', false, primary: true), AlertAction(action, true, destructive: true)],
     ) ??
     false;
 
-Future<void> _tell(BuildContext context, String title, String text) => showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
-      ),
+Future<void> _tell(BuildContext context, String title, String text) => showAlert<void>(
+      context,
+      title: Text(title),
+      content: Text(text),
+      actions: [AlertAction('OK', null, primary: true)],
     );

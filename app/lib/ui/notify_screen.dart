@@ -4,6 +4,7 @@
 import 'package:flutter/cupertino.dart';
 
 import 'look.dart';
+import 'adaptive.dart';
 
 class NotifyScreen extends StatelessWidget {
   const NotifyScreen({super.key, required this.allow, required this.later});
@@ -32,9 +33,9 @@ class NotifyScreen extends StatelessWidget {
               style: look.text(size: 16, color: look.ink2, height: 1.45),
             ),
             const SizedBox(height: 28),
-            CupertinoButton.filled(onPressed: allow, child: Text('Continue', style: look.text(color: look.onAccent, weight: FontWeight.w600))),
+            Press.filled(onPressed: allow, child: Text('Continue', style: look.text(color: look.onAccent, weight: FontWeight.w600))),
             const SizedBox(height: 8),
-            CupertinoButton(onPressed: later, child: Text('Not now', style: look.text(color: look.accent))),
+            Press(onPressed: later, child: Text('Not now', style: look.text(color: look.accent))),
           ]),
         ),
       ),

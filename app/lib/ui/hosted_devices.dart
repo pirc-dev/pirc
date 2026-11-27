@@ -10,6 +10,7 @@ import '../app/model.dart';
 import '../core/view.dart';
 import 'look.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 /// What the screens do with the account, as the app gives it.
 abstract interface class HostedDevices {
@@ -183,16 +184,11 @@ class _RenameSheetState extends State<_RenameSheet> {
   Future<void> _remove() async {
     if (_busy) return;
     final d = widget.device;
-    final sure = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('Remove ${hostedName(d)}?'),
-        content: Text(removalText(d)),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
-        ],
-      ),
+    final sure = await showAlert<bool>(
+      context,
+      title: Text('Remove ${hostedName(d)}?'),
+      content: Text(removalText(d)),
+      actions: [AlertAction('Cancel', false), AlertAction('Remove', true, destructive: true)],
     );
     if (sure != true || !mounted) return;
     setState(() {
@@ -243,7 +239,7 @@ class _RenameSheetState extends State<_RenameSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 14, children: [
           SheetText(const [TextSpan(text: 'The name every phone and browser of this account shows it by. Only they can read it: it is sealed to each of them.')]),
-          CupertinoTextField(
+          CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
             controller: _name,
             maxLength: 100,
             autocorrect: false,

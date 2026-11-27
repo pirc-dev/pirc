@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'highlight.dart';
 import 'look.dart';
 import 'selectable.dart';
+import 'adaptive.dart';
 
 // Something that reads as a file: with a folder, or a name and an
 // extension ("sync.sh"), not a version or a number ("1.2").
@@ -554,7 +555,7 @@ class _FullScreen extends StatelessWidget {
   final md.Element table;
 
   static void open(BuildContext context, Look look, md.Element table) =>
-      Navigator.of(context).push(CupertinoPageRoute<void>(fullscreenDialog: true, builder: (_) => _FullScreen(look, table)));
+      Navigator.of(context).push(pageRoute<void>(fullscreenDialog: true, builder: (_) => _FullScreen(look, table)));
 
   @override
   Widget build(BuildContext context) {

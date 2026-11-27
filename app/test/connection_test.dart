@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pirc/core/view.dart';
 import 'package:pirc/ui/connection.dart';
 import 'package:pirc/ui/look.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 class _Relay extends ChangeNotifier {
   RelayView value = const RelayView(state: 'ready');
@@ -26,7 +27,8 @@ Future<(_Relay, GlobalKey<NavigatorState>)> app(WidgetTester tester) async {
       look: Look.light,
       child: CupertinoApp(
         navigatorKey: nav,
-        builder: (context, child) => ConnectionBanner(listenable: relay, relay: () => relay.value, child: child!),
+        localizationsDelegates: appLocalizations,
+        builder: (context, child) => platformControls(Look.light, Brightness.light, ConnectionBanner(listenable: relay, relay: () => relay.value, child: child!)),
         home: Builder(builder: (context) => Text('home ${MediaQuery.paddingOf(context).top}')),
       ),
     ),

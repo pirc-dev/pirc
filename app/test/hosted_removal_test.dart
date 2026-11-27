@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show TextButton;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pirc/app/app.dart';
@@ -27,6 +28,7 @@ import 'package:pirc/keys/key_store.dart';
 import 'package:pirc/ui/hosted_devices.dart';
 import 'package:pirc/ui/look.dart';
 import 'package:pirc/ui/sessions_screen.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 import 'support/relay.dart';
 import 'support/ts_computer.dart';
@@ -63,6 +65,8 @@ void main() {
     await tester.pumpWidget(LookScope(
       look: Look.light,
       child: CupertinoApp(
+        localizationsDelegates: appLocalizations,
+        builder: (context, child) => platformControls(Look.light, Brightness.light, child!),
         home: CupertinoPageScaffold(child: ListView(children: [
           HostedDeviceList(model: m, role: 'host', devices: d),
           HostedDeviceList(model: m, role: 'client', devices: d),
@@ -74,12 +78,12 @@ void main() {
     await tester.tap(find.text('Remove this computer'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Its sessions end here'), findsOneWidget);
-    await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Cancel'));
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
     expect(d.removed, isEmpty);
     await tester.tap(find.text('Remove this computer'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Remove'));
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
     expect(d.removed, [keyText(host)]);
     expect(removalText(const DeviceView(key: 'k', role: 'client', label: '', addedAt: 0, online: false, self: false, push: false)), contains('loses every computer'));
@@ -227,8 +231,8 @@ void main() {
       await until(tester, () => find.text('Remove this computer').evaluate().isNotEmpty);
       await settle(tester);
       await tester.tap(find.text('Remove this computer'));
-      await until(tester, () => find.widgetWithText(CupertinoDialogAction, 'Remove').evaluate().isNotEmpty);
-      await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Remove'));
+      await until(tester, () => find.widgetWithText(TextButton, 'Remove').evaluate().isNotEmpty);
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
       await until(tester, () => find.text('build box').evaluate().isEmpty);
       expect(find.text('build box'), findsNothing, reason: _all(tester));
       await tester.runAsync(() => computer.until((l) => l == 'status removed'));
@@ -240,8 +244,8 @@ void main() {
       await until(tester, () => find.text('Remove this phone or browser').evaluate().isNotEmpty);
       await settle(tester);
       await tester.tap(find.text('Remove this phone or browser'));
-      await until(tester, () => find.widgetWithText(CupertinoDialogAction, 'Remove').evaluate().isNotEmpty);
-      await tester.tap(find.widgetWithText(CupertinoDialogAction, 'Remove'));
+      await until(tester, () => find.widgetWithText(TextButton, 'Remove').evaluate().isNotEmpty);
+      await tester.tap(find.widgetWithText(TextButton, 'Remove'));
       await until(tester, () => secondRemoved && find.text('A phone or browser').evaluate().isEmpty);
       expect(secondRemoved, isTrue);
       expect(find.text('A phone or browser'), findsNothing, reason: _all(tester));

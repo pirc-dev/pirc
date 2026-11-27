@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../join.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 class JoinScreen extends StatefulWidget {
   const JoinScreen({super.key, required this.join, this.scan, this.incoming, this.back});
@@ -93,15 +94,7 @@ class _JoinScreenState extends State<JoinScreen> {
             if (back != null)
               Align(
                 alignment: Alignment.centerLeft,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  minimumSize: const Size(44, 44),
-                  onPressed: _busy ? null : back,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(CupertinoIcons.chevron_back, size: 22, color: look.accent),
-                    Text('Back', style: look.text(color: look.accent)),
-                  ]),
-                ),
+                child: BackLink(label: 'Back', onPressed: _busy ? null : back),
               ),
             Center(
               child: Container(
@@ -122,7 +115,7 @@ class _JoinScreenState extends State<JoinScreen> {
             ),
             const SizedBox(height: 28),
             if (widget.scan != null) ...[
-              CupertinoButton.filled(
+              Press.filled(
                 onPressed: _busy
                     ? null
                     : () async {
@@ -133,7 +126,7 @@ class _JoinScreenState extends State<JoinScreen> {
               ),
               const SizedBox(height: 20),
             ],
-            CupertinoTextField(
+            CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
               controller: _link,
               placeholder: 'pirc://join?…',
               placeholderStyle: look.text(color: look.secondary),
@@ -144,9 +137,9 @@ class _JoinScreenState extends State<JoinScreen> {
               enabled: !_busy,
             ),
             const SizedBox(height: 10),
-            CupertinoButton(
+            Press(
               onPressed: _busy ? null : () => _go(_link.text),
-              child: _busy ? const CupertinoActivityIndicator() : Text('Join with the link', style: look.text(color: look.accent)),
+              child: _busy ? const Spinner() : Text('Join with the link', style: look.text(color: look.accent)),
             ),
             if (_error != null) Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed)),
           ],

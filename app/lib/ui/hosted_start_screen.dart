@@ -4,6 +4,7 @@
 import 'package:flutter/cupertino.dart';
 
 import 'look.dart';
+import 'adaptive.dart';
 
 class HostedStartScreen extends StatefulWidget {
   const HostedStartScreen({super.key, required this.signUp, required this.joinPhone, required this.ownRelay, this.signUpWithCode});
@@ -64,24 +65,24 @@ class _HostedStartScreenState extends State<HostedStartScreen> {
               style: look.text(size: 16, color: look.secondary),
             ),
             const SizedBox(height: 32),
-            CupertinoButton.filled(
+            Press.filled(
               onPressed: _busy ? null : () => _run(widget.signUp),
-              child: _busy ? const CupertinoActivityIndicator() : Text('Sign up', style: look.text(color: look.onAccent, weight: FontWeight.w600)),
+              child: _busy ? const Spinner() : Text('Sign up', style: look.text(color: look.onAccent, weight: FontWeight.w600)),
             ),
             const SizedBox(height: 8),
             Text('No email and no password: this phone is the account.', textAlign: TextAlign.center, style: look.text(size: 13, color: look.secondary)),
             if (widget.signUpWithCode != null)
-              CupertinoButton(
+              Press(
                 onPressed: _busy ? null : () => _run(widget.signUpWithCode!),
                 child: Text('I have a code', style: look.text(size: 15, color: look.accent)),
               ),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 16), child: Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed))),
             const SizedBox(height: 28),
-            CupertinoButton(
+            Press(
               onPressed: _busy ? null : () => _run(widget.joinPhone),
               child: Text('My account is on another phone', style: look.text(color: look.accent)),
             ),
-            CupertinoButton(
+            Press(
               onPressed: _busy ? null : widget.ownRelay,
               child: Text('I run my own relay', style: look.text(color: look.accent)),
             ),

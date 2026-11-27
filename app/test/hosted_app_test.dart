@@ -27,6 +27,7 @@ import 'package:pirc/ui/hosted_join_screens.dart' show ShowCodeScreen;
 import 'package:pirc/ui/hosted_start_screen.dart';
 import 'package:pirc/ui/join_screen.dart';
 import 'package:pirc/ui/sessions_screen.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 import 'support/relay.dart';
 import 'support/ts_computer.dart';
@@ -165,13 +166,13 @@ void main() {
     // phone's store would cancel a purchase).
     await tester.tap(find.text('Sign up'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
-    await tester.enterText(find.byType(CupertinoTextField), 'AAAA-BBBB-CCCC-DDDD');
+    await tester.enterText(find.byType(EditableText), 'AAAA-BBBB-CCCC-DDDD');
     await tester.tap(find.text('Continue'));
     await until(tester, () => shown(tester).contains('not valid'));
     expect(shown(tester), contains('not valid'));
     await tester.tap(find.text('Sign up'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
-    await tester.enterText(find.byType(CupertinoTextField), code.toLowerCase());
+    await tester.enterText(find.byType(EditableText), code.toLowerCase());
     await tester.tap(find.text('Continue'));
     await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
     expect(model(tester).relay.state, 'ready', reason: shown(tester));
@@ -186,7 +187,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('I have a code'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
-    await tester.enterText(find.byType(CupertinoTextField), code);
+    await tester.enterText(find.byType(EditableText), code);
     await tester.tap(find.text('Continue'));
     await until(tester, () => find.byType(SessionsScreen).evaluate().isNotEmpty && model(tester).relay.state == 'ready');
     expect(model(tester).relay.state, 'ready', reason: shown(tester));
@@ -201,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(JoinScreen), findsOneWidget);
     expect(find.byType(HostedStartScreen), findsNothing);
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byType(BackLink));
     await tester.pumpAndSettle();
     expect(find.byType(HostedStartScreen), findsOneWidget);
   });

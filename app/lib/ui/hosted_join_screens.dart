@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import '../hosted/join.dart';
 import 'invite.dart' show QrView;
 import 'look.dart';
+import 'adaptive.dart';
 
 /// The account's phone's side of a join, as the screen uses it (AddDevice).
 abstract interface class DeviceAdder {
@@ -163,7 +164,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           _title(look, 'Add a device', 'On the computer, run /pirc join; in a browser or on another phone, open its join screen. '
               'Then scan the code it shows, or paste its text below.'),
           if (widget.scan != null) ...[
-            CupertinoButton.filled(
+            Press.filled(
               onPressed: busy
                   ? null
                   : () async {
@@ -174,7 +175,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             ),
             const SizedBox(height: 20),
           ],
-          CupertinoTextField(
+          CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
             controller: _text,
             placeholder: 'PIRC1…',
             placeholderStyle: look.text(color: look.secondary),
@@ -186,9 +187,9 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             enabled: !busy,
           ),
           const SizedBox(height: 10),
-          CupertinoButton(
+          Press(
             onPressed: busy ? null : () => _go(_text.text),
-            child: busy ? const CupertinoActivityIndicator() : Text('Use the text', style: look.text(color: look.accent)),
+            child: busy ? const Spinner() : Text('Use the text', style: look.text(color: look.accent)),
           ),
           if (_error != null) Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed)),
         ],
@@ -201,28 +202,28 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
             style: look.text(size: 15, color: look.secondary),
           ),
           const SizedBox(height: 28),
-          CupertinoButton.filled(
+          Press.filled(
             onPressed: busy ? null : _confirm,
-            child: busy ? CupertinoActivityIndicator(color: look.onAccent) : Text('It is mine: add it', style: look.text(color: look.onAccent, weight: FontWeight.w600)),
+            child: busy ? Spinner(color: look.onAccent) : Text('It is mine: add it', style: look.text(color: look.onAccent, weight: FontWeight.w600)),
           ),
           const SizedBox(height: 10),
-          CupertinoButton(onPressed: busy ? null : _decline, child: Text('Cancel', style: look.text(color: look.accent))),
+          Press(onPressed: busy ? null : _decline, child: Text('Cancel', style: look.text(color: look.accent))),
         ],
       _Step.added => [
           _title(look, 'Added', _offered!.isComputer ? 'The computer is on your account. Its sessions show here once pi runs there.' : 'The device is on your account.'),
-          CupertinoButton(onPressed: () => Navigator.of(context).maybePop(), child: Text('Done', style: look.text(color: look.accent))),
+          Press(onPressed: () => Navigator.of(context).maybePop(), child: Text('Done', style: look.text(color: look.accent))),
         ],
       _Step.failed => [
           // Unanswered, the device may be on the list: not said to be off it.
           (_error ?? '').startsWith(uncertainPublish)
               ? _title(look, 'Perhaps added', '${_error!}. Look for it in Settings once PiRC has connected again; if it is there but did not join, remove it.')
               : _title(look, 'Not added', _error ?? ''),
-          CupertinoButton(onPressed: () => Navigator.of(context).maybePop(), child: Text('Close', style: look.text(color: look.accent))),
+          Press(onPressed: () => Navigator.of(context).maybePop(), child: Text('Close', style: look.text(color: look.accent))),
         ],
     };
     return CupertinoPageScaffold(
       backgroundColor: look.page,
-      navigationBar: CupertinoNavigationBar(backgroundColor: look.page, border: null),
+      navigationBar: CupertinoNavigationBar(leading: barLeading(context), backgroundColor: look.page, border: null),
       child: SafeArea(child: ListView(padding: const EdgeInsets.fromLTRB(24, 12, 24, 24), children: children)),
     );
   }
@@ -288,14 +289,14 @@ class _ShowCodeScreenState extends State<ShowCodeScreen> {
                 Center(child: QrView(widget.text)),
                 const SizedBox(height: 16),
                 Text(widget.text, textAlign: TextAlign.center, style: look.text(size: 13, color: look.secondary)),
-                CupertinoButton(
+                Press(
                   onPressed: () => Clipboard.setData(ClipboardData(text: widget.text)),
                   child: Text('Copy the text', style: look.text(color: look.accent)),
                 ),
               ];
     return CupertinoPageScaffold(
       backgroundColor: look.page,
-      navigationBar: CupertinoNavigationBar(backgroundColor: look.page, border: null),
+      navigationBar: CupertinoNavigationBar(leading: barLeading(context), backgroundColor: look.page, border: null),
       child: SafeArea(child: ListView(padding: const EdgeInsets.fromLTRB(24, 12, 24, 24), children: children)),
     );
   }

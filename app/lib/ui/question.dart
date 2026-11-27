@@ -14,6 +14,7 @@ import '../core/question_text.dart';
 import '../core/view.dart';
 import 'look.dart';
 import 'selectable.dart';
+import 'adaptive.dart';
 
 class QuestionDock extends StatefulWidget {
   const QuestionDock({super.key, required this.q, required this.more, required this.model, required this.session, this.room});
@@ -83,7 +84,7 @@ class _QuestionDockState extends State<QuestionDock> {
     final blocks = questionBlocks([...lines.skip(1), ?q.message].join('\n'));
     final answerable = q.answerable && const {'confirm', 'select', 'input'}.contains(q.kind);
 
-    Widget button(String label, VoidCallback f, {bool primary = false, Widget? lead}) => CupertinoButton(
+    Widget button(String label, VoidCallback f, {bool primary = false, Widget? lead}) => Press(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           minimumSize: const Size(0, 46),
           color: primary ? look.accent : look.wash2,
@@ -99,7 +100,7 @@ class _QuestionDockState extends State<QuestionDock> {
           ),
         );
 
-    Widget field(TextEditingController c, String placeholder, {ValueChanged<String>? submit, bool prose = false}) => CupertinoTextField(
+    Widget field(TextEditingController c, String placeholder, {ValueChanged<String>? submit, bool prose = false}) => CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
           controller: c,
           placeholder: placeholder,
           minLines: 1,
@@ -167,7 +168,7 @@ class _QuestionDockState extends State<QuestionDock> {
               eyebrow,
               const Spacer(),
               if (answerable)
-                CupertinoButton(
+                Press(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   minimumSize: const Size(44, 44),
                   onPressed: _sending ? null : () => _answer(dismissed: true),
@@ -190,7 +191,7 @@ class _QuestionDockState extends State<QuestionDock> {
           ]),
           Align(
             alignment: Alignment.centerLeft,
-            child: CupertinoButton(
+            child: Press(
               padding: EdgeInsets.zero,
               minimumSize: const Size(44, 44),
               onPressed: _sending ? null : _stop,

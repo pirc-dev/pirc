@@ -12,6 +12,7 @@ import 'package:qr/qr.dart';
 import '../app/model.dart';
 import 'look.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 // The link an app joins by, as the web page's joinLink and join.dart read it.
 String joinLink(String relay, String token) => 'pirc://join?relay=${Uri.encodeComponent(relay)}&token=${Uri.encodeComponent(token)}';
@@ -138,7 +139,7 @@ class _InviteSheetState extends State<InviteSheet> {
           ]),
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
             Text('Name', style: look.text(size: 13, color: look.ink2, spacing: 0)),
-            CupertinoTextField(
+            CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
               controller: _label,
               maxLength: 128,
               placeholder: 'Its own, if left empty',

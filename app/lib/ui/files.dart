@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../app/outside.dart';
 import '../core/attachments.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 const pickChannel = MethodChannel('dev.pirc.app/pick');
 
@@ -94,7 +95,7 @@ class FileChips extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(sizeText(f.size), style: look.text(size: 12, color: ink2, spacing: 0)),
                 if (onRemove != null)
-                  CupertinoButton(
+                  Press(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     minimumSize: const Size(32, 28),
                     onPressed: () => onRemove!(i),

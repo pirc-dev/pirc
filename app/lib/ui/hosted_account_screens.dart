@@ -10,6 +10,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 /// What the screens do with the account's life, as the app gives it.
 abstract interface class HostedAccountControls {
@@ -88,18 +89,13 @@ List<String> storesOf(List<AccountSubscription> subs, DateTime now) =>
 /// Asks before deleting, saying what it does and what it does not: the
 /// subscriptions to cancel are named by the stores they are through.
 Future<bool> confirmDelete(BuildContext context, List<String> stores) async =>
-    await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Delete this account?'),
-        content: Text('The relay deletes the account and everything it holds of it, and every computer, phone and browser on it stops reaching the others. '
+    await showAlert<bool>(
+      context,
+      title: const Text('Delete this account?'),
+      content: Text('The relay deletes the account and everything it holds of it, and every computer, phone and browser on it stops reaching the others. '
             'Your sessions stay on your computers. This cannot be undone. The relay\'s backups keep the deleted account for up to ten weeks.'
             '${stores.isEmpty ? '' : ' It does not cancel the subscription: cancel it in ${stores.join(' and in ')}.'}'),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
-        ],
-      ),
+      actions: [AlertAction('Cancel', false), AlertAction('Delete', true, destructive: true)],
     ) ??
     false;
 
@@ -149,8 +145,8 @@ class _StepState extends State<_Step> {
     final text = Text(widget.label, style: look.text(color: widget.filled ? look.onAccent : widget.danger ? look.failed : look.accent, weight: widget.filled ? FontWeight.w600 : FontWeight.w400));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       widget.filled
-          ? CupertinoButton.filled(onPressed: _busy ? null : _go, child: _busy ? CupertinoActivityIndicator(color: look.onAccent) : text)
-          : CupertinoButton(onPressed: _busy ? null : _go, child: _busy ? const CupertinoActivityIndicator() : text),
+          ? Press.filled(onPressed: _busy ? null : _go, child: _busy ? Spinner(color: look.onAccent) : text)
+          : Press(onPressed: _busy ? null : _go, child: _busy ? const Spinner() : text),
       if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, textAlign: TextAlign.center, style: look.text(size: 14, color: look.failed))),
     ]);
   }

@@ -18,6 +18,7 @@ import 'launch.dart';
 import 'look.dart';
 import 'sessions_screen.dart' show day;
 import 'sheet.dart';
+import 'adaptive.dart';
 
 // Runs one of the session's actions; what it answers, or why it failed,
 // is said under the header by the chat.
@@ -184,7 +185,7 @@ class _ActionsState extends State<SessionActions> {
             Icon(CupertinoIcons.chevron_forward, size: 14, color: look.ink3),
           ]),
           onTap: () async {
-            final picked = await Navigator.of(context).push(CupertinoPageRoute<ModelView>(fullscreenDialog: true, builder: (_) => ModelPicker(models: _models, current: model)));
+            final picked = await Navigator.of(context).push(pageRoute<ModelView>(fullscreenDialog: true, builder: (_) => ModelPicker(models: _models, current: model)));
             if (!mounted || picked == null) return;
             if (picked.provider == model?.provider && picked.id == model?.id) return _close();
             _act((r) => SessionMessage(setModel: SetModel(requestId: r, model: Model(provider: picked.provider, id: picked.id))));
@@ -288,7 +289,7 @@ class _ActionsState extends State<SessionActions> {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 14, children: [
-          CupertinoTextField(
+          CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
             controller: _name,
             autofocus: true,
             placeholder: title(s),
@@ -618,6 +619,18 @@ class _ModelPickerState extends State<ModelPicker> {
       child: SafeArea(
         bottom: false,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Android's full-screen dialog: ✕ and the title at its start.
+          if (onAndroid)
+            Container(
+              height: 56,
+              padding: const EdgeInsets.only(left: 4),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: look.rule))),
+              child: Row(spacing: 8, children: [
+                BackLink(label: 'Cancel', close: true, onPressed: () => Navigator.of(context).pop()),
+                Text('Model', style: look.text(size: 20, weight: FontWeight.w500, spacing: 0)),
+              ]),
+            )
+          else
           Container(
             height: 44,
             decoration: BoxDecoration(border: Border(bottom: BorderSide(color: look.rule))),
@@ -637,17 +650,10 @@ class _ModelPickerState extends State<ModelPicker> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: CupertinoSearchTextField(
+            child: SearchField(
               controller: _query,
               autofocus: true,
-              autocorrect: false,
               placeholder: widget.models == null ? 'Loading models…' : 'Search ${ms.length} models',
-              style: look.text(size: 17),
-              placeholderStyle: look.text(size: 17, color: look.ink3),
-              backgroundColor: look.wash,
-              borderRadius: BorderRadius.circular(11),
-              itemColor: look.ink3,
-              prefixInsets: const EdgeInsetsDirectional.fromSTEB(10, 0, 4, 0),
               onSubmitted: (_) {
                 if (results.isNotEmpty) _pick(results.first.item);
               },

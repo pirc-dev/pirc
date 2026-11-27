@@ -6,6 +6,7 @@
 import 'package:flutter/cupertino.dart';
 
 import 'look.dart';
+import 'adaptive.dart';
 
 class RelayAddressScreen extends StatefulWidget {
   const RelayAddressScreen({super.key, required this.relay, required this.follow});
@@ -57,15 +58,7 @@ class _RelayAddressScreenState extends State<RelayAddressScreen> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  minimumSize: const Size(44, 44),
-                  onPressed: _busy ? null : () => Navigator.of(context).maybePop(),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(CupertinoIcons.chevron_back, size: 22, color: look.accent),
-                    Text('Settings', style: look.text(color: look.accent)),
-                  ]),
-                ),
+                child: BackLink(label: 'Settings', onPressed: _busy ? null : () => Navigator.of(context).maybePop()),
               ),
               Semantics(header: true, child: Text('Relay address', style: look.text(size: 28, weight: FontWeight.w700))),
               const SizedBox(height: 10),
@@ -76,7 +69,7 @@ class _RelayAddressScreenState extends State<RelayAddressScreen> {
                 style: look.text(size: 15, color: look.secondary),
               ),
               const SizedBox(height: 20),
-              CupertinoTextField(
+              CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
                 controller: _address,
                 placeholder: 'wss://…',
                 placeholderStyle: look.text(color: look.secondary),
@@ -91,9 +84,9 @@ class _RelayAddressScreenState extends State<RelayAddressScreen> {
                 enabled: !_busy,
               ),
               const SizedBox(height: 10),
-              CupertinoButton(
+              Press(
                 onPressed: _busy ? null : _go,
-                child: _busy ? const CupertinoActivityIndicator() : Text('Connect', style: look.text(color: look.accent)),
+                child: _busy ? const Spinner() : Text('Connect', style: look.text(color: look.accent)),
               ),
               if (_error != null) Semantics(liveRegion: true, child: Text(_error!, textAlign: TextAlign.center, style: look.text(size: 15, color: look.failed))),
             ],

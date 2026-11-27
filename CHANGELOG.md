@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- The Android app has Android's own controls instead of the iPhone's:
+  predictive back (the back gesture shows the screen underneath), a back
+  arrow, Material dialogs, ripples, spinners, switches, search fields,
+  text selection and scrolling. Nothing changes on the iPhone or iPad.
 - The web app no longer stays on its logo for good when the server is out
   of reach as it opens (no network, a deploy): it says so, and tries again
   every few seconds and as soon as it is shown again.

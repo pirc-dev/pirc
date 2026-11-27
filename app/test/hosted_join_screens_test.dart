@@ -7,7 +7,6 @@ import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show DefaultMaterialLocalizations;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pirc/e2e/list.dart';
@@ -15,6 +14,7 @@ import 'package:pirc/gen/pirc/v1alpha2/account.pb.dart';
 import 'package:pirc/hosted/join.dart';
 import 'package:pirc/ui/hosted_join_screens.dart';
 import 'package:pirc/ui/look.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 class FakeAdder implements DeviceAdder {
   FakeAdder(this.offered);
@@ -43,7 +43,8 @@ class FakeAdder implements DeviceAdder {
 Widget frame(Widget child) => LookScope(
       look: Look.light,
       child: CupertinoApp(
-        localizationsDelegates: const [DefaultMaterialLocalizations.delegate, DefaultCupertinoLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
+        localizationsDelegates: appLocalizations,
+        builder: (context, child) => platformControls(Look.light, Brightness.light, child!),
         home: child,
       ),
     );

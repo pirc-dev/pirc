@@ -13,6 +13,7 @@ import 'invite.dart';
 import 'look.dart';
 import 'sessions_screen.dart' show day;
 import 'sheet.dart';
+import 'adaptive.dart';
 
 class DeviceList extends StatelessWidget {
   const DeviceList({super.key, required this.model, required this.role, this.relay});
@@ -257,7 +258,7 @@ class _DeviceSheetState extends State<DeviceSheet> {
           SheetText([TextSpan(text: host ? 'The name its sessions show under, here and in every other app.' : 'The name the relay knows it by, the same in every app.')]),
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 4, children: [
             Text('Name', style: look.text(size: 13, color: look.ink2, spacing: 0)),
-            CupertinoTextField(
+            CupertinoTextField(selectionControls: fieldHandles, contextMenuBuilder: fieldMenu, magnifierConfiguration: fieldMagnifier, 
               controller: _label,
               maxLength: 128,
               autocorrect: false,

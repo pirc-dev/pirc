@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app/store.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 const termsUrl = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 const privacyUrl = 'https://pirc.dev/privacy/';
@@ -229,11 +230,11 @@ class _PaywallScreenState extends State<PaywallScreen> with WidgetsBindingObserv
                 // Waiting, still in its colour and saying what it does, with
                 // a spinner beside: not the dim fill of a disabled button,
                 // nearly black in dark mode.
-                CupertinoButton.filled(
+                Press.filled(
                   onPressed: primary == null ? null : () => _do(primary),
                   disabledColor: look.accent,
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (_busy) ...[CupertinoActivityIndicator(color: look.onAccent, radius: 9), const SizedBox(width: 10)],
+                    if (_busy) ...[Spinner(color: look.onAccent, radius: 9), const SizedBox(width: 10)],
                     Text(price == null && !widget.waiting && !payment ? 'Try again' : button, style: look.text(color: look.onAccent, weight: FontWeight.w600)),
                   ]),
                 ),
@@ -241,14 +242,14 @@ class _PaywallScreenState extends State<PaywallScreen> with WidgetsBindingObserv
                 Text(small, textAlign: TextAlign.center, style: look.text(size: 13, color: look.secondary)),
                 if (widget.waiting) ...[
                   const SizedBox(height: 4),
-                  CupertinoButton(
+                  Press(
                     onPressed: _busy ? null : () => _do(() async => widget.buy()),
                     child: Text('Ask again', style: look.text(color: look.accent)),
                   ),
                 ],
                 if (widget.manageWhenEnded && widget.access == Access.ended && !widget.waiting) ...[
                   const SizedBox(height: 4),
-                  CupertinoButton(
+                  Press(
                     onPressed: _busy ? null : () => _do(widget.manage),
                     child: Text('Manage subscription', style: look.text(color: look.accent)),
                   ),
@@ -258,14 +259,14 @@ class _PaywallScreenState extends State<PaywallScreen> with WidgetsBindingObserv
                   Text(_error ?? _note!, textAlign: TextAlign.center, style: look.text(size: 15, color: _error != null ? look.failed : look.secondary)),
                 ],
                 const SizedBox(height: 10),
-                CupertinoButton(
+                Press(
                   onPressed: _busy
                       ? null
                       : () => _do(widget.restore, done: 'No subscription to restore on this ${widget.accountName}.'),
                   child: Text('Restore purchases', style: look.text(color: look.accent)),
                 ),
                 if (widget.join != null)
-                  CupertinoButton(
+                  Press(
                     onPressed: _busy ? null : widget.join,
                     child: Text('Join with a link', style: look.text(color: look.accent)),
                   ),
@@ -299,7 +300,7 @@ class _Link extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    return CupertinoButton(
+    return Press(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       onPressed: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       child: Text(label, style: look.text(size: 13, color: look.accent)),

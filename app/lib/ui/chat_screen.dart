@@ -31,6 +31,7 @@ import 'markdown.dart';
 import 'question.dart';
 import 'selectable.dart';
 import 'sheet.dart';
+import 'adaptive.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.model, required this.id, this.drafts, this.open, this.wide = false});
@@ -522,7 +523,7 @@ class _Header extends StatelessWidget {
             label: 'Session actions',
             excludeSemantics: true,
             onTap: actions,
-            child: CupertinoButton(
+            child: Press(
               padding: EdgeInsets.zero,
               minimumSize: const Size(44, 44),
               onPressed: actions,
@@ -602,7 +603,7 @@ class _Notice extends StatelessWidget {
             label: 'Dismiss',
             excludeSemantics: true,
             onTap: dismiss,
-            child: CupertinoButton(padding: EdgeInsets.zero, minimumSize: const Size(44, 44), onPressed: dismiss, child: Icon(CupertinoIcons.xmark, size: 16, color: ink)),
+            child: Press(padding: EdgeInsets.zero, minimumSize: const Size(44, 44), onPressed: dismiss, child: Icon(CupertinoIcons.xmark, size: 16, color: ink)),
           ),
         ]),
       ),
@@ -610,21 +611,12 @@ class _Notice extends StatelessWidget {
   }
 }
 
-// Back to the list, "‹ Sessions"; the edge swipe works too, but is not
-// enough alone.
+// Back to the list, "‹ Sessions" (an arrow on Android); iOS's edge swipe
+// and Android's back work too, but are not enough alone.
 class _Back extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final look = Look.of(context);
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      minimumSize: const Size(44, 44),
-      onPressed: () => Navigator.of(context).maybePop(),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(CupertinoIcons.chevron_back, size: 22, color: look.accent),
-        Text('Sessions', style: look.text(color: look.accent)),
-      ]),
-    );
+    return BackLink(label: 'Sessions', onPressed: () => Navigator.of(context).maybePop());
   }
 }
 
@@ -795,7 +787,7 @@ class _Unsent extends StatelessWidget {
       'failed' => ('', 'Not sent: ${p.error ?? 'no answer'}'),
       _ => ('', 'Not sent: pi stopped first, and put it back in its own input box'),
     };
-    Widget link(String label, VoidCallback f, {bool quiet = false}) => CupertinoButton(
+    Widget link(String label, VoidCallback f, {bool quiet = false}) => Press(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           minimumSize: const Size(0, 44),
           onPressed: f,
@@ -818,7 +810,7 @@ class _Unsent extends StatelessWidget {
         ]),
       ] else
         Row(mainAxisSize: MainAxisSize.min, children: [
-          if (p.state == 'sending') ...[const CupertinoActivityIndicator(radius: 5), const SizedBox(width: 6)],
+          if (p.state == 'sending') ...[const Spinner(radius: 5), const SizedBox(width: 6)],
           Text.rich(TextSpan(children: [
             TextSpan(text: state, style: look.text(size: 12.5, weight: FontWeight.w500, color: look.ink3, spacing: 0)),
             if (why.isNotEmpty) TextSpan(text: ' · $why', style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
@@ -1372,7 +1364,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     if (_clipImages) {
       final text = items.indexWhere((i) => i.type == ContextMenuButtonType.paste);
       final image = ContextMenuButtonItem(
-        label: text < 0 ? 'Paste' : 'Paste Image',
+        label: text < 0 ? 'Paste' : onAndroid ? 'Paste image' : 'Paste Image',
         onPressed: () {
           ContextMenuController.removeAny();
           _put(pasteImages);
@@ -1384,7 +1376,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
         items.insert(text + 1, image);
       }
     }
-    return CupertinoAdaptiveTextSelectionToolbar.buttonItems(anchors: state.contextMenuAnchors, buttonItems: items);
+    return menuOf(state.contextMenuAnchors, items);
   }
 
   void _changed() => setState(() {});
@@ -1498,7 +1490,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                         const SizedBox(width: 6),
                         Reach(
                           onTap: () => widget.model.stop(s.id),
-                          child: CupertinoButton(
+                          child: Press(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           minimumSize: const Size(0, 36),
                           color: look.blockWash,
@@ -1535,7 +1527,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                     excludeSemantics: true,
                     enabled: canAdd,
                     onTap: canAdd ? _add : null,
-                    child: CupertinoButton(
+                    child: Press(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(44, 44),
                       onPressed: canAdd ? _add : null,
@@ -1544,7 +1536,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: LayoutBuilder(builder: (context, field) => CupertinoTextField(
+                    child: LayoutBuilder(builder: (context, field) => CupertinoTextField(selectionControls: fieldHandles, magnifierConfiguration: fieldMagnifier, 
                       controller: widget.text,
                       focusNode: _focus,
                       contextMenuBuilder: _menu,

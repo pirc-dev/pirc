@@ -35,6 +35,7 @@ import 'package:pirc/ui/hosted_start_screen.dart';
 import 'package:pirc/ui/join_screen.dart';
 import 'package:pirc/ui/look.dart';
 import 'package:pirc/ui/sessions_screen.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 import 'support/relay.dart';
 import 'support/ts_computer.dart';
@@ -93,7 +94,10 @@ class _Store implements Store {
   Future<void> manage() async {}
 }
 
-Widget _page(Widget child) => LookScope(look: Look.light, child: CupertinoApp(home: CupertinoPageScaffold(child: child)));
+Widget _page(Widget child) => LookScope(
+      look: Look.light,
+      child: CupertinoApp(localizationsDelegates: appLocalizations, builder: (context, child) => platformControls(Look.light, Brightness.light, child!), home: CupertinoPageScaffold(child: child)),
+    );
 
 String _all(WidgetTester tester) => tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? t.textSpan?.toPlainText() ?? '').join(' | ');
 
@@ -288,7 +292,7 @@ void main() {
     await tester.tap(find.text('Renew through the App Store'));
     await tester.pumpAndSettle();
     expect(find.textContaining('network'), findsOneWidget);
-    expect(find.byType(CupertinoActivityIndicator), findsNothing);
+    expect(find.byType(Spinner), findsNothing);
     expect(find.text('Renew through the App Store'), findsOneWidget);
   });
 
@@ -321,7 +325,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(HostedStartScreen), findsNothing);
       expect(find.byType(JoinScreen), findsOneWidget);
-      expect(find.text('Back'), findsNothing);
+      expect(find.byType(BackLink), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest, storefront: () => Completer<String?>().future));

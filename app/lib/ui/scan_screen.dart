@@ -6,6 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../join.dart';
 import 'look.dart';
+import 'adaptive.dart';
 
 const _white = Color(0xFFFFFFFF);
 const _black = Color(0xFF000000);
@@ -51,7 +52,7 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    final cancel = CupertinoButton(
+    final cancel = Press(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       onPressed: () => Navigator.of(context).pop(),
       child: Text('Cancel', style: look.text(color: _explained ? _white : look.accent)),
@@ -77,7 +78,7 @@ class _ScanScreenState extends State<ScanScreen> {
                     style: look.text(size: 16, color: look.ink2, height: 1.45),
                   ),
                   const SizedBox(height: 28),
-                  CupertinoButton.filled(
+                  Press.filled(
                     onPressed: () {
                       widget.onExplained();
                       setState(() => _explained = true);

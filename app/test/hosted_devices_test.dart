@@ -32,6 +32,7 @@ import 'package:pirc/ui/hosted_devices.dart';
 import 'package:pirc/ui/hosted_join_screens.dart';
 import 'package:pirc/ui/look.dart';
 import 'package:pirc/ui/sessions_screen.dart';
+import 'package:pirc/ui/adaptive.dart';
 
 import 'support/relay.dart';
 import 'support/ts_computer.dart';
@@ -200,6 +201,8 @@ void main() {
       await tester.pumpWidget(LookScope(
         look: Look.light,
         child: CupertinoApp(
+          localizationsDelegates: appLocalizations,
+          builder: (context, child) => platformControls(Look.light, Brightness.light, child!),
           home: CupertinoPageScaffold(child: ListView(children: [
             HostedDeviceList(model: m, role: 'host', devices: devices),
             HostedDeviceList(model: m, role: 'client', devices: devices),
