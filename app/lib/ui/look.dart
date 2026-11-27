@@ -295,13 +295,15 @@ class _Symbol extends CustomPainter {
 
 // A count on a tinted pill, as the web page's: "2 working".
 class Pill extends StatelessWidget {
-  const Pill({super.key, required this.count, required this.word, required this.color, required this.wash, this.big = false});
+  const Pill({super.key, required this.count, required this.word, required this.color, required this.wash, this.big = false, this.ring = false});
   final int count;
   final String word;
   final Color color;
   final Color wash;
   // The list's own counts, under its title; else a host's or group's.
   final bool big;
+  // The one the list shows only the sessions of: ringed in its colour.
+  final bool ring;
 
   @override
   Widget build(BuildContext context) {
@@ -309,7 +311,7 @@ class Pill extends StatelessWidget {
     return Container(
       height: big ? 26 : null,
       padding: big ? const EdgeInsets.symmetric(horizontal: 10) : const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: wash, borderRadius: BorderRadius.circular(13)),
+      decoration: BoxDecoration(color: wash, borderRadius: BorderRadius.circular(13), border: ring ? Border.all(color: color, width: 1.5) : null),
       child: Align(widthFactor: 1, child: Text.rich(
         TextSpan(children: [
           TextSpan(text: '$count', style: big ? look.mono(size: 13, color: color, weight: FontWeight.w600) : look.text(size: 12, color: color, weight: FontWeight.w600, spacing: 0)),

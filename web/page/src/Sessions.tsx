@@ -103,6 +103,9 @@ export function scopePath(scope: Scope): string {
   return `/h/${encodeURIComponent(scope.host)}${scope.group ? `/${encodeURIComponent(scope.group)}` : ""}`;
 }
 
+// The counts a list can be narrowed to (counted).
+type Counted = "asking" | "working" | "done";
+
 // A list of rows: plain in Quiet and Cockpit, on a card in Triage and
 // Native.
 const rows = "cards:mx-3 cards:divide-y cards:divide-rule cards:overflow-hidden cards:rounded-[14px] cards:border cards:border-rule cards:bg-card native:mx-4 native:border-0";
@@ -144,23 +147,38 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
   const news = withNews(p.sessions);
   const starts = STARTS.update(p.sessions);
   const order = compare(starts, title);
-  const toggle = (key: string) => {
-    const next = new Set(open);
-    if (!next.delete(key)) next.add(key);
-    setOpen(next);
-    saveOpen(next);
-  };
   const shown = p.sessions.filter((s) => (!host || hostOf(s) === host) && (!group || s.place?.group === group));
-  const hosts = new Map<string, SessionView[]>();
-  for (const s of shown) hosts.set(hostOf(s), [...(hosts.get(hostOf(s)) ?? []), s]);
-  const found = useMemo(() => (query.trim() ? rank(query, shown, searched) : []),
-    // shown is derived from these.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [query, p.sessions, host, group]);
   // Each session once (counted), so that they add up.
   const working = shown.filter((s) => counted(s, news.has(s.id)) === "working").length;
   const asking = shown.filter((s) => counted(s, news.has(s.id)) === "asking").length;
   const fresh = shown.filter((s) => counted(s, news.has(s.id)) === "done").length;
+  // A count tapped shows only its sessions, under their hosts and groups,
+  // all unfolded; tapped again, or "in all", shows every one. Kept while
+  // the list is, and dropped when its count is down to none, so that the
+  // list is never empty for it.
+  const [only, setOnly] = useState<Counted>();
+  const filter = only && { asking, done: fresh, working }[only] > 0 ? only : undefined;
+  const listedHere = filter ? shown.filter((s) => counted(s, news.has(s.id)) === filter) : shown;
+  // What is folded while a count shows, starting with nothing.
+  const [shut, setShut] = useState<Set<string>>(new Set());
+  const choose = (c: Counted | undefined) => {
+    setOnly(c === filter ? undefined : c);
+    setShut(new Set());
+  };
+  const isOpen = (key: string) => (filter ? !shut.has(key) : open.has(key));
+  const toggle = (key: string) => {
+    const next = new Set(filter ? shut : open);
+    if (!next.delete(key)) next.add(key);
+    if (filter) return setShut(next);
+    setOpen(next);
+    saveOpen(next);
+  };
+  const hosts = new Map<string, SessionView[]>();
+  for (const s of listedHere) hosts.set(hostOf(s), [...(hosts.get(hostOf(s)) ?? []), s]);
+  const found = useMemo(() => (query.trim() ? rank(query, listedHere, searched) : []),
+    // listedHere is derived from these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [query, p.sessions, host, group, filter]);
   const row = (s: SessionView, window?: string) => <Row key={s.id} session={s} window={window} open={p.open} news={news.has(s.id)} now={now} selected={s.id === p.selected} />;
   // Each with its window's name above its own, the most recent first.
   const listed = (sessions: SessionView[], className = "") => (
@@ -184,13 +202,13 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
                 {/* Beside the name, so that the chevron is at the end whether or
                     not there is a plus. */}
                 {newAgent(g.sessions, g.name)}
-                <button className="flex min-h-11 flex-1 items-center gap-2.5 pl-2.5 text-left" onClick={() => toggle(groupKey)} aria-expanded={open.has(groupKey)} aria-label={`${open.has(groupKey) ? "Fold" : "Unfold"} ${g.name}`}>
+                <button className="flex min-h-11 flex-1 items-center gap-2.5 pl-2.5 text-left" onClick={() => toggle(groupKey)} aria-expanded={isOpen(groupKey)} aria-label={`${isOpen(groupKey) ? "Fold" : "Unfold"} ${g.name}`}>
                   <Counts sessions={g.sessions} news={news} />
                   <span className="flex-1 border-t border-rule cards:border-transparent cockpit:border-transparent" />
-                  <Chevron open={open.has(groupKey)} />
+                  <Chevron open={isOpen(groupKey)} />
                 </button>
               </div>
-              {open.has(groupKey) && listed(g.sessions)}
+              {isOpen(groupKey) && listed(g.sessions)}
             </div>
           );
         })}
@@ -244,6 +262,9 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
     p.settings();
   });
   const up: Scope | undefined = group ? { host } : host ? {} : undefined;
+  // A count is a button: its wider target a margin of its own that moves
+  // nothing; the one showing, ringed.
+  const chip = "relative before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[''] aria-pressed:underline aria-pressed:decoration-2 aria-pressed:underline-offset-4 cards:aria-pressed:no-underline cards:aria-pressed:ring-2 cards:aria-pressed:ring-current cards:aria-pressed:ring-inset";
   const pill = "cards:inline-flex cards:h-[26px] cards:items-center cards:rounded-full cards:border cards:border-rule cards:bg-card cards:px-2.5 cards:text-[13px] native:border-0";
   return (
     <div ref={box} className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
@@ -268,10 +289,10 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
         </div>
         {shown.length > 0 && (
           <p className="flex flex-wrap items-center gap-3 text-sm text-ink2 cards:gap-1.5 cockpit:font-mono cockpit:text-[13px]">
-            {asking > 0 && <span className={`${tone.asking} ${pill} native:bg-accent-soft`}><Sym>?</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{asking}</b><Word>asking</Word></span>}
-            {fresh > 0 && <span className={`${tone.done} ${pill} native:bg-done-wash`}><Sym>✓</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{fresh}</b><Word>done</Word></span>}
-            {working > 0 && <span className={`${tone.working} ${pill} native:bg-work-wash`}><Sym>◐</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{working}</b><Word>working</Word></span>}
-            <span className={`${pill} native:bg-wash`}><Sym>·</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0 cockpit:font-medium">{shown.length}</b><Word>in all</Word></span>
+            {asking > 0 && <button className={`${tone.asking} ${pill} ${chip} native:bg-accent-soft`} aria-pressed={filter === "asking"} title="Show only these" onClick={() => choose("asking")}><Sym>?</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{asking}</b><Word>asking</Word></button>}
+            {fresh > 0 && <button className={`${tone.done} ${pill} ${chip} native:bg-done-wash`} aria-pressed={filter === "done"} title="Show only these" onClick={() => choose("done")}><Sym>✓</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{fresh}</b><Word>done</Word></button>}
+            {working > 0 && <button className={`${tone.working} ${pill} ${chip} native:bg-work-wash`} aria-pressed={filter === "working"} title="Show only these" onClick={() => choose("working")}><Sym>◐</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0">{working}</b><Word>working</Word></button>}
+            <button className={`${pill} ${chip} native:bg-wash`} aria-pressed={!filter} title="Show every session" onClick={() => choose(undefined)}><Sym>·</Sym><b className="mr-1 font-mono font-semibold cockpit:mr-0 cockpit:font-medium">{shown.length}</b><Word>in all</Word></button>
             {host && (group ?? oneGroup(shown)) && launchable(shown) && (
               // The counts' size, its wider target a margin of its own
               // that moves nothing.
@@ -295,7 +316,7 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
                 if (e.key === "Enter" && found[0]) p.open(found[0].item.id);
                 if (e.key === "Escape") setQuery("");
               }}
-              placeholder={`Search ${shown.length} session${shown.length === 1 ? "" : "s"}${group ? ` in ${group}` : host ? ` on ${host}` : ""}`}
+              placeholder={`Search ${listedHere.length}${filter ? ` ${filter === "done" ? "done" : filter}` : ""} session${listedHere.length === 1 ? "" : "s"}${group ? ` in ${group}` : host ? ` on ${host}` : ""}`}
               aria-label="Search sessions"
               autoCapitalize="off"
               autoCorrect="off"
@@ -323,9 +344,9 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
           </>
         )
         : group
-        ? listed(shown, "pt-1.5 cards:pt-0")
+        ? listed(listedHere, "pt-1.5 cards:pt-0")
         : host
-        ? <div className="pt-1">{body(host, shown)}</div>
+        ? <div className="pt-1">{body(host, listedHere)}</div>
         : [...hosts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([h, list]) => {
           const hostKey = `h:${h}`;
           return (
@@ -340,13 +361,13 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
                     fold button is and as tall, its icon centred as the chevron. */}
                 <div className="flex flex-1 items-baseline self-baseline">
                   {oneGroup(list) && newAgent(list, oneGroup(list)!, "self-stretch pt-4.5 pb-1")}
-                  <button className="flex min-h-11 flex-1 items-center justify-end gap-2.5 pt-4.5 pb-1 pl-2.5" onClick={() => toggle(hostKey)} aria-expanded={open.has(hostKey)} aria-label={`${open.has(hostKey) ? "Fold" : "Unfold"} ${h}`}>
+                  <button className="flex min-h-11 flex-1 items-center justify-end gap-2.5 pt-4.5 pb-1 pl-2.5" onClick={() => toggle(hostKey)} aria-expanded={isOpen(hostKey)} aria-label={`${isOpen(hostKey) ? "Fold" : "Unfold"} ${h}`}>
                     <Counts sessions={list} news={news} />
-                    <Chevron open={open.has(hostKey)} />
+                    <Chevron open={isOpen(hostKey)} />
                   </button>
                 </div>
               </div>
-              {open.has(hostKey) && body(h, list)}
+              {isOpen(hostKey) && body(h, list)}
             </section>
           );
         })}

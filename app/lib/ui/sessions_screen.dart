@@ -103,6 +103,20 @@ class SessionsScreen extends StatefulWidget {
 class _SessionsScreenState extends State<SessionsScreen> {
   late Set<String> _open = {...widget.unfolded};
   final _query = TextEditingController();
+  // A count tapped shows only its sessions (asking, done or working), under
+  // their hosts and groups, all unfolded; tapped again, or "in all", every
+  // one, as the web page's. Gone when its count is down to none.
+  Status? _only;
+  // What is folded while a count shows, starting with nothing.
+  Set<String> _shut = {};
+  Status? _filter;
+
+  void _choose(Status? only) => setState(() {
+        _only = only == _filter ? null : only;
+        _shut = {};
+      });
+
+  bool _isOpen(String key) => _filter != null ? !_shut.contains(key) : _open.contains(key);
 
   @override
   void dispose() {
@@ -111,6 +125,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   void _toggle(String key) {
+    if (_filter != null) return setState(() => _shut = {..._shut}..toggle(key));
     setState(() => _open = {..._open}..toggle(key));
     widget.onFold?.call(_open);
   }
@@ -144,15 +159,24 @@ class _SessionsScreenState extends State<SessionsScreen> {
       listenable: Listenable.merge([model, _query, ?widget.selected]),
       builder: (context, _) {
         final host = widget.host, group = widget.group;
-        final sessions = [for (final s in model.sessions) if ((host == null || _hostOf(s) == host) && (group == null || s.place?.group == group)) s];
+        final all = [for (final s in model.sessions) if ((host == null || _hostOf(s) == host) && (group == null || s.place?.group == group)) s];
         final news = model.news;
+        final (:asking, :working, :fresh) = counts(all, news);
+        final only = _only;
+        _filter = only != null && switch (only) { Status.asking => asking, Status.done => fresh, Status.working => working, Status.idle => 0 } > 0 ? only : null;
+        final sessions = _filter == null ? all : [for (final s in all) if (statusOf(s, news) == _filter) s];
         final hosts = <String, List<SessionView>>{};
         for (final s in sessions) {
           hosts.putIfAbsent(_hostOf(s), () => []).add(s);
         }
         final query = _query.text.trim();
         final found = query.isEmpty ? const <({SessionView item, FuzzyMatch match})>[] : rank(query, sessions, _searched);
-        final (:asking, :working, :fresh) = counts(sessions, news);
+        Widget count(Status? kind, int n, String word, Color color, Color wash) => _Filter(
+              selected: _filter == kind,
+              label: kind == null ? '$n in all: show every session' : '$n $word: show only these',
+              onTap: () => _choose(kind),
+              child: Pill(count: n, word: word, color: color, wash: wash, big: true, ring: _filter == kind && kind != null),
+            );
         Widget row(SessionView s, {bool window = true, Set<int>? matched}) =>
             _Row(s, news: news.contains(s.id), now: model.now(), window: window, matched: matched, open: _openChat, selected: widget.selected?.value == s.id);
         return CupertinoPageScaffold(
@@ -209,24 +233,24 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   ]),
                 ),
               ),
-              if (sessions.isNotEmpty)
+              if (all.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    child: Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      if (asking > 0) Pill(count: asking, word: 'asking', color: look.accent, wash: look.accentSoft, big: true),
-                      if (fresh > 0) Pill(count: fresh, word: 'done', color: look.done, wash: look.doneWash, big: true),
-                      if (working > 0) Pill(count: working, word: 'working', color: look.work, wash: look.workWash, big: true),
-                      Pill(count: sessions.length, word: 'in all', color: look.ink2, wash: look.wash, big: true),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                    child: Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      if (asking > 0) count(Status.asking, asking, 'asking', look.accent, look.accentSoft),
+                      if (fresh > 0) count(Status.done, fresh, 'done', look.done, look.doneWash),
+                      if (working > 0) count(Status.working, working, 'working', look.work, look.workWash),
+                      count(null, all.length, 'in all', look.ink2, look.wash),
                       if (host != null && (group ?? _oneGroup(sessions)) != null && launchable(sessions) != null)
                         _NewAgentPill(onTap: () => showSheet<void>(context, (_) => LaunchSheet(model: widget.model, beside: launchable(sessions)!, open: widget.open))),
                     ]),
                   ),
                 ),
               SliverToBoxAdapter(child: JoinRequests(model: model, day: day)),
-              if (sessions.isNotEmpty)
-                PinnedHeaderSliver(child: _SearchBar(look, _query, sessions.length, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
-              if (sessions.isEmpty && model.relay.state == 'ready')
+              if (all.isNotEmpty)
+                PinnedHeaderSliver(child: _SearchBar(look, _query, sessions.length, kind: switch (_filter) { Status.asking => ' asking', Status.done => ' done', Status.working => ' working', _ => '' }, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
+              if (all.isEmpty && model.relay.state == 'ready')
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
@@ -278,7 +302,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // and the sessions in none.
   Widget _host(Look look, String host, List<SessionView> list, Set<String> news, Widget Function(SessionView) row) {
     final key = 'h:$host';
-    final open = _open.contains(key);
+    final open = _isOpen(key);
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -305,9 +329,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final g in groups) ...[
         _Header(
-          open: _open.contains('g:$host/${g.name}'),
+          open: _isOpen('g:$host/${g.name}'),
           toggle: () => _toggle('g:$host/${g.name}'),
-          label: '${_open.contains('g:$host/${g.name}') ? 'Fold' : 'Unfold'} ${g.name}',
+          label: '${_isOpen('g:$host/${g.name}') ? 'Fold' : 'Unfold'} ${g.name}',
           go: () => _go(host, g.name),
           goLabel: 'Open ${g.name}',
           padding: const EdgeInsets.fromLTRB(32, 0, 20, 0),
@@ -317,7 +341,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           counts: _Counts(g.sessions, news),
           add: _newAgent(g.sessions, g.name),
         ),
-        if (_open.contains('g:$host/${g.name}')) _Card([for (final s in g.sessions) row(s)]),
+        if (_isOpen('g:$host/${g.name}')) _Card([for (final s in g.sessions) row(s)]),
       ],
       if (loose.isNotEmpty) Padding(padding: EdgeInsets.only(top: groups.isEmpty ? 6 : 8), child: _Card([for (final s in loose) row(s)])),
     ]);
@@ -328,6 +352,26 @@ extension on Set<String> {
   void toggle(String key) {
     if (!remove(key)) add(key);
   }
+}
+
+// One of the list's counts, as a button that shows only its sessions (or,
+// "in all", every one): the count's size, centred in a whole 44 points.
+class _Filter extends StatelessWidget {
+  const _Filter({required this.selected, required this.label, required this.onTap, required this.child});
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        excludeSemantics: true,
+        onTap: onTap,
+        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: SizedBox(height: 44, child: Center(widthFactor: 1, child: child))),
+      );
 }
 
 // A host's or group's line: its name, what it holds, and a chevron that
@@ -567,10 +611,12 @@ class _Usage extends StatelessWidget {
 
 // The search, held under the bar as the list scrolls.
 class _SearchBar extends StatelessWidget {
-  const _SearchBar(this.look, this.query, this.count, {this.where = ''});
+  const _SearchBar(this.look, this.query, this.count, {this.kind = '', this.where = ''});
   final Look look;
   final TextEditingController query;
   final int count;
+  // " asking", " done", " working" while a count shows, or nothing.
+  final String kind;
   // " in <group>", " on <host>", or nothing for every session.
   final String where;
 
@@ -580,7 +626,7 @@ class _SearchBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
         child: CupertinoSearchTextField(
           controller: query,
-          placeholder: 'Search $count session${count == 1 ? '' : 's'}$where',
+          placeholder: 'Search $count$kind session${count == 1 ? '' : 's'}$where',
           style: look.text(size: 17),
           placeholderStyle: look.text(size: 17, color: look.ink3),
           backgroundColor: look.wash,

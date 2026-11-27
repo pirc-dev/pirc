@@ -720,6 +720,28 @@ void main() {
     expect(seen, [1, 0.5, 0, 0.5, 1]);
   }, skip: !drawsGoldens);
 
+  testWidgets('a count tapped shows only its sessions, unfolded; tapped again, every one as it was', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    // Everything folded.
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {})));
+    await tester.pump();
+    expect(find.text('fix the flaky tests'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('1 asking: show only these'));
+    await tester.pump();
+    expect(find.text('fix the flaky tests'), findsOneWidget, reason: 'its host and group unfolded');
+    expect(find.text('release'), findsNothing, reason: 'a working one, not shown');
+    expect(find.text('docs'), findsNothing);
+    expect(find.text('SERVER'), findsNothing, reason: 'a host with none of them');
+    expect(find.text('Search 1 asking session'), findsOneWidget);
+    // Folded under the filter, then the filter gone: the folding as before.
+    await tester.tap(find.bySemanticsLabel('1 asking: show only these'));
+    await tester.pump();
+    expect(find.text('fix the flaky tests'), findsNothing);
+    expect(find.text('SERVER'), findsOneWidget);
+    expect(find.text('Search 4 sessions'), findsOneWidget);
+  });
+
   testWidgets("larger text: a host's and a group's counts fit their line", (tester) async {
     await phone(tester);
     final model = await fixture(tester);

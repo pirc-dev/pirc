@@ -36,6 +36,10 @@ release that needs its parts upgraded together says so here.
   their line with a long name or large text.
 - On a small phone with the keyboard up, a question's options and its note
   scroll within the space left, rather than running off the screen.
+- The counts at the top of the session list narrow it, in the web app and
+  the phone apps: tap "asking", "done" or "working" to see only those
+  sessions, unfolded under their hosts and groups, and tap it again or
+  "in all" to see every one.
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 

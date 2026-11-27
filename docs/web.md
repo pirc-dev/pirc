@@ -440,6 +440,15 @@ not in `web/`, since they belong to neither client.
   session or herdr workspace; a group's lists its sessions alone. Each has
   its own counts and searches only what it shows; back goes up a level, and
   a chat goes back to the list it was opened from.
+- **The counts at the top narrow the list**: tapping "asking", "done" or
+  "working" shows only those sessions, under their hosts and groups, all
+  unfolded (folding them then lasts until the filter changes), and the
+  search looks only among them; tapping it again, or "in all", shows every
+  session. The filter lasts while the list is shown, and goes when its
+  count is down to none, so that the list is never left empty by it. The
+  same in the phone apps. Reason: finding the session that waits for the
+  reader is what the list is for, and the counts already looked like
+  buttons.
 - **The most recent session comes first**, as in
   Claude's apps, whatever its status: under a host, in a tmux session or
   herdr workspace, among sessions in neither, and in search results' ties.
