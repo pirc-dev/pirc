@@ -18,6 +18,8 @@ export const UPLOAD_IDLE_MS = 2 * 60 * 1000;
 // Files older than this are swept when the extension starts.
 export const SWEEP_AGE_MS = 24 * 60 * 60 * 1000;
 const NAME_MAX = 200;
+// Files saved for prompts, kept for a retry that names them again.
+const TAKEN_MAX = 200;
 
 // The line naming a file to pi, and the pattern that finds it again in the
 // message pi keeps, so that history shows the file and not the line.
@@ -104,6 +106,10 @@ export function splitAttachments(text: string): { text: string; attachments: { n
 
 export class Uploads {
   private readonly uploads = new Map<string, Upload>();
+  // Each file a prompt took, by its upload's key: a retry of the prompt,
+  // after an answer that let it be tried again, names the same ids
+  // without sending their pieces again.
+  private readonly taken = new Map<string, Saved>();
   private base: string | undefined;
 
   constructor(private readonly root?: string) {}
@@ -173,6 +179,11 @@ export class Uploads {
       const files: Saved[] = [];
       for (const [i, a] of attachments.entries()) {
         const u = this.uploads.get(keys[i]!);
+        const kept = this.taken.get(keys[i]!);
+        if (a.id && !u && kept && BigInt(kept.size) === a.size && existsSync(kept.path)) {
+          files.push(kept);
+          continue;
+        }
         if (!a.id || !u) return { error: `no file came for ${safeName(a.name)}` };
         if (u.failed) return { error: u.failed };
         if (BigInt(u.received) !== a.size) return { error: `${safeName(a.name)} came incomplete` };
@@ -182,7 +193,12 @@ export class Uploads {
         renameSync(join(u.dir, ".part"), path);
         files.push({ path, name: safeName(a.name), mimeType: safeMime(a.mimeType), size: u.received });
       }
-      for (const k of keys) this.forget(k);
+      for (const [i, k] of keys.entries()) {
+        this.forget(k);
+        this.taken.delete(k);
+        this.taken.set(k, files[i]!);
+      }
+      while (this.taken.size > TAKEN_MAX) this.taken.delete(this.taken.keys().next().value!);
       return { files };
     } finally {
       for (const k of keys) if (this.uploads.has(k)) this.drop(k);
@@ -192,6 +208,7 @@ export class Uploads {
   // The session's files and uploads, gone: it has ended.
   endSession(sessionId: string): void {
     for (const k of [...this.uploads.keys()]) if (k.startsWith(`${sessionId}/`)) this.drop(k);
+    for (const k of [...this.taken.keys()]) if (k.startsWith(`${sessionId}/`)) this.taken.delete(k);
     // Also files an earlier load of the extension saved, in this process.
     if (!this.exists()) return;
     rmSync(this.sessionDir(sessionId), { recursive: true, force: true });

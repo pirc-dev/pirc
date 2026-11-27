@@ -863,7 +863,8 @@ same limits. *Run*:
   that fails its file, and a prompt naming a file that failed, is missing
   or came short is refused INVALID with why. A file with no piece or
   prompt for two minutes is dropped. A piece at offset 0 starts its file
-  afresh, as a retry does. A session's files go when it ends, and any a
+  afresh; a retry that names a file the session saved already, with no
+  pieces, gets that file. A session's files go when it ends, and any a
   day old when the extension starts (`attachments.ts`). Clients send
   files only to a session whose requests include `attachment_chunk`.
 - **A client's images in pi's own chat.** pi's terminal draws only the

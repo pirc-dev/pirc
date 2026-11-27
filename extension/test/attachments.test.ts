@@ -129,3 +129,23 @@ test("history shows the files the lines named, and not the lines", () => {
   const typed = "[pirc attachment] /x (a/b, 1 bytes)\nmore";
   assert.deepEqual(splitAttachments(typed), { text: typed, attachments: [] });
 });
+
+test("a retry naming the same file without its pieces gets the file saved already; new pieces replace it", () => {
+  const u = new Uploads(root());
+  u.chunk("s1", "c1", chunk("a", 0, [1, 2]));
+  const first = u.take("s1", "c1", [att("a", "x.pdf", 2)]);
+  assert.ok("files" in first);
+  const again = u.take("s1", "c1", [att("a", "x.pdf", 2)]);
+  assert.ok("files" in again, JSON.stringify(again));
+  assert.equal(again.files[0]!.path, first.files[0]!.path);
+  // Another size is another file: refused.
+  assert.match((u.take("s1", "c1", [att("a", "x.pdf", 3)]) as { error: string }).error, /no file came/);
+  // Not for another client.
+  assert.match((u.take("s1", "c2", [att("a", "x.pdf", 2)]) as { error: string }).error, /no file came/);
+  u.chunk("s1", "c1", chunk("a", 0, [9]));
+  const fresh = u.take("s1", "c1", [att("a", "x.pdf", 1)]);
+  assert.ok("files" in fresh);
+  assert.deepEqual([...readFileSync(fresh.files[0]!.path)], [9]);
+  u.endSession("s1");
+  assert.match((u.take("s1", "c1", [att("a", "x.pdf", 1)]) as { error: string }).error, /no file came/);
+});

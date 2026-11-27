@@ -1346,8 +1346,8 @@ test("a prompt's files reach pi as lines naming where they were saved, and histo
   assert.ok(item?.body.case === "userMessage");
   assert.equal(item.body.value.text, "summarise");
   assert.deepEqual(item.body.value.attachments.map((a) => [a.id, a.name, a.mimeType, a.size]), [["", "a.pdf", "application/pdf", 4n]]);
-  // Sent again with no pieces: refused, and pi gets nothing more.
-  request("s1", prompt("r2", "again", { attachments: [{ id: "f1", name: "a.pdf", mimeType: "application/pdf", size: 4n }] }));
+  // A file whose pieces never came: refused, and pi gets nothing more.
+  request("s1", prompt("r2", "again", { attachments: [{ id: "f2", name: "a.pdf", mimeType: "application/pdf", size: 4n }] }));
   const r = replies().at(-1)!;
   assert.ok(r.body.case === "error" && r.body.value.code === ErrorCode.INVALID && /no file came/.test(r.body.value.message), JSON.stringify(r.body));
   assert.equal(pi.sent.length, 1);
