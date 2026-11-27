@@ -11,6 +11,7 @@ import { Thumbs } from "./Images.tsx";
 import { FileChips, size } from "./Files.tsx";
 import { useKeyboard, useKeys } from "./keys.ts";
 import { live } from "./live.ts";
+import { SHORT, useMedia } from "./media.ts";
 import { FILES_BYTES_MAX, FILES_MAX, FILES_REQUEST, IMAGES_MAX } from "../../core/api.ts";
 
 // How long the turn has run, by the host's clock.
@@ -82,6 +83,7 @@ export function Composer(p: {
   const [mode, setMode] = useState<"followUp" | "steer">("steer");
   const keyboard = useKeyboard();
   const keys = useKeys();
+  const short = useMedia(SHORT);
   const busy = p.session.working || p.session.compacting;
   const [problem, setProblem] = useState<string>();
   // What was refused is not said again once the message goes.
@@ -100,9 +102,10 @@ export function Composer(p: {
     const el = area.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    // On a phone on its side, four lines, leaving the chat some room.
+    el.style.height = `${Math.min(el.scrollHeight, short ? 100 : 200)}px`;
     // Also when it comes back, after a question.
-  }, [text, Boolean(p.session.questions?.length)]);
+  }, [text, Boolean(p.session.questions?.length), short]);
   const empty = (!text.trim() && p.images.length === 0 && p.files.length === 0) || !p.ready;
   const picker = useRef<HTMLInputElement>(null);
   // Whether the session's extension takes files (session.proto, Prompt).

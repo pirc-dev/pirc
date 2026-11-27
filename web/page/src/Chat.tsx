@@ -24,6 +24,7 @@ import { Thumbs } from "./Images.tsx";
 import { FileChips } from "./Files.tsx";
 import { Actions, type FromMessage, MessageSheet } from "./SessionSheets.tsx";
 import { SideToggle } from "./SideToggle.tsx";
+import { SHORT, useMedia } from "./media.ts";
 
 type Pending = SentPending<Attachment, PickedFile>;
 
@@ -78,9 +79,11 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   // On a phone, the header lies over the chat, and folds to one line while
   // the reader is back in it: neither at its end, where one arrives and
   // writes, nor at its top. The chat starts below the header unfolded, so
-  // that folding moves nothing.
+  // that folding moves nothing. On a phone on its side it is always
+  // folded, and the chat starts below it so.
+  const short = useMedia(SHORT);
   const [folded, setFolded] = useState(false);
-  const fold = folded && !p.wide;
+  const fold = (folded || short) && !p.wide;
   const over = useRef<HTMLDivElement>(null);
   const [overHeight, setOverHeight] = useState(0);
   useLayoutEffect(() => {
@@ -95,9 +98,10 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
     const sized = new ResizeObserver(measure);
     sized.observe(el);
     return () => sized.disconnect();
-  }, [p.wide]);
+  }, [p.wide, short]);
+  // Folded by the reader's scrolling, which the chat's start does not follow.
   const foldedNow = useRef(fold);
-  foldedNow.current = fold;
+  foldedNow.current = folded && !short && !p.wide;
   // A reload for a new version would lose both.
   useHold(text !== "" || pending.length > 0);
   const s = p.session;

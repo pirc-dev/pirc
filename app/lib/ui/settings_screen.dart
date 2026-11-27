@@ -80,95 +80,100 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     final s = widget.settings;
     return CupertinoPageScaffold(
       backgroundColor: look.page,
-      child: ListenableBuilder(
-        listenable: Listenable.merge([s, ?widget.subscription]),
-        builder: (context, _) => ListView(
-          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top, bottom: MediaQuery.paddingOf(context).bottom + 40),
-          children: [
-            // Beside the list, the button that hides it, at the start of
-            // the pane as in a chat.
-            if (widget.wide)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(4, 4, 20, 0),
-                child: Align(alignment: Alignment.centerLeft, child: SideToggle()),
-              ),
-            if (!widget.wide)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: BackLink(label: 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-              child: Semantics(header: true, child: Text('Settings', style: look.text(size: 34, weight: FontWeight.w700, spacing: 0.34, height: 1.25))),
-            ),
-            _Section(title: 'This phone', sub: 'Kept here: each phone has its own.', rows: [
-              _Row(
-                label: 'Lock with ${s.lockWith}',
-                sub: s.lock ? 'Asked for when PiRC opens.' : 'Off: PiRC opens without asking.',
-                end: _Switch(on: s.lock, disabled: s.busy || s.key == null, set: s.setLock),
-                problem: s.lockProblem,
-              ),
-              if (s.lock)
-                _Row(
-                  label: 'Ask again after',
-                  below: _Holds(hold: s.hold, set: s.setHold),
-                ),
-              if (s.push != null) ...[
-                _Row(
-                  label: 'Notifications',
-                  sub: s.permission == Permission.denied ? "Off for PiRC in the phone's Settings." : 'When a turn ends or pi asks.',
-                  // Refused by the phone: turned on only in its Settings.
-                  end: _Switch(on: s.notifying, disabled: s.busy || s.permission == null || s.permission == Permission.denied, set: s.setNotify),
-                ),
-                if (s.permission == Permission.denied) _Link(label: "Open the phone's Settings", onTap: s.openPhoneSettings),
-              ],
-              // Beside the list, a tablet's: what a keyboard's keys do.
-              if (widget.wide) _Row(label: 'Keys', sub: keysSaid(apple: !onAndroid)),
-            ]),
-            if (widget.hostedAccount case final a?)
-              _Section(title: 'Account', sub: 'Its subscription covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])
-            else if (widget.subscription?.value case final sub?) _Section(title: 'Subscription', sub: 'Through your ${_store()}.', rows: [
-              // The stores' reviewers, who may not subscribe; the store's own
-              // answer, beside it, is shown only when it allows the phone.
-              if (s.relay == reviewRelay) const _Row(label: 'Review access', sub: "Joined to PiRC's app review relay, which works without a subscription."),
-              if (sub.access == Access.allowed) _Row(label: _subscribed(sub), sub: _until(sub), problem: sub.graceEnds != null ? _grace(sub) : null),
-              if (widget.manage != null) _Link(label: 'Manage subscription', onTap: () => widget.manage!()),
-            ]),
-            if (s.relay case final relay? when widget.follow != null && widget.hosted == null)
-              _Section(title: 'Relay', sub: 'Where this phone reaches your hosts.', rows: [
-                _Row(label: relay),
-                _Link(
-                  label: 'Change address',
-                  onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => RelayAddressScreen(relay: relay, follow: widget.follow!))),
-                ),
-                if (widget.leave != null)
-                  _Link(
-                    label: 'Leave this relay',
-                    danger: true,
-                    onTap: () => leaveRelay(context, relay: relay, leave: widget.leave!, onlyClient: widget.model != null && onlyClient(widget.model!)),
+      // Clear of a phone's notch, on its side.
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: ListenableBuilder(
+            listenable: Listenable.merge([s, ?widget.subscription]),
+            builder: (context, _) => ListView(
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top, bottom: MediaQuery.paddingOf(context).bottom + 40),
+              children: [
+                // Beside the list, the button that hides it, at the start of
+                // the pane as in a chat.
+                if (widget.wide)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(4, 4, 20, 0),
+                    child: Align(alignment: Alignment.centerLeft, child: SideToggle()),
                   ),
-              ]),
-            if (widget.model != null && widget.hosted != null) ...[
-              _Section(title: 'Computers', sub: 'Running pi, their sessions shown here. Each has its own keys: none can read another\'s sessions.', rows: [
-                HostedDeviceList(model: widget.model!, role: 'host', devices: widget.hosted!),
-              ]),
-              _Section(title: 'Phones and browsers', sub: 'Each reaches every computer. Only the account\'s phone adds devices.', rows: [
-                HostedDeviceList(model: widget.model!, role: 'client', devices: widget.hosted!),
-              ]),
-            ] else if (widget.model != null) ...[
-              _Section(title: 'Hosts', sub: 'Computers running pi, whose sessions show here.', rows: [DeviceList(model: widget.model!, role: 'host', relay: s.relay)]),
-              _Section(title: 'Clients', sub: 'This phone, the web app and the other phones, each reaching every host.', rows: [DeviceList(model: widget.model!, role: 'client', relay: s.relay)]),
-            ],
-            if (hostedBuild)
-              _Section(title: 'Hosted relay', sub: 'A test build: tries what the stores say of this phone.', rows: [
-                _Link(label: "Try the stores' checks", onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => const TryStoresScreen()))),
-              ]),
-            _Section(title: 'About', sub: 'PiRC and what it is built from.', rows: [_Link(label: 'Licences', onTap: _licences)]),
-          ],
-        ),
+                if (!widget.wide)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: BackLink(label: 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                  child: Semantics(header: true, child: Text('Settings', style: look.text(size: 34, weight: FontWeight.w700, spacing: 0.34, height: 1.25))),
+                ),
+                _Section(title: 'This phone', sub: 'Kept here: each phone has its own.', rows: [
+                  _Row(
+                    label: 'Lock with ${s.lockWith}',
+                    sub: s.lock ? 'Asked for when PiRC opens.' : 'Off: PiRC opens without asking.',
+                    end: _Switch(on: s.lock, disabled: s.busy || s.key == null, set: s.setLock),
+                    problem: s.lockProblem,
+                  ),
+                  if (s.lock)
+                    _Row(
+                      label: 'Ask again after',
+                      below: _Holds(hold: s.hold, set: s.setHold),
+                    ),
+                  if (s.push != null) ...[
+                    _Row(
+                      label: 'Notifications',
+                      sub: s.permission == Permission.denied ? "Off for PiRC in the phone's Settings." : 'When a turn ends or pi asks.',
+                      // Refused by the phone: turned on only in its Settings.
+                      end: _Switch(on: s.notifying, disabled: s.busy || s.permission == null || s.permission == Permission.denied, set: s.setNotify),
+                    ),
+                    if (s.permission == Permission.denied) _Link(label: "Open the phone's Settings", onTap: s.openPhoneSettings),
+                  ],
+                  // Beside the list, a tablet's: what a keyboard's keys do.
+                  if (widget.wide) _Row(label: 'Keys', sub: keysSaid(apple: !onAndroid)),
+                ]),
+                if (widget.hostedAccount case final a?)
+                  _Section(title: 'Account', sub: 'Its subscription covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])
+                else if (widget.subscription?.value case final sub?) _Section(title: 'Subscription', sub: 'Through your ${_store()}.', rows: [
+                  // The stores' reviewers, who may not subscribe; the store's own
+                  // answer, beside it, is shown only when it allows the phone.
+                  if (s.relay == reviewRelay) const _Row(label: 'Review access', sub: "Joined to PiRC's app review relay, which works without a subscription."),
+                  if (sub.access == Access.allowed) _Row(label: _subscribed(sub), sub: _until(sub), problem: sub.graceEnds != null ? _grace(sub) : null),
+                  if (widget.manage != null) _Link(label: 'Manage subscription', onTap: () => widget.manage!()),
+                ]),
+                if (s.relay case final relay? when widget.follow != null && widget.hosted == null)
+                  _Section(title: 'Relay', sub: 'Where this phone reaches your hosts.', rows: [
+                    _Row(label: relay),
+                    _Link(
+                      label: 'Change address',
+                      onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => RelayAddressScreen(relay: relay, follow: widget.follow!))),
+                    ),
+                    if (widget.leave != null)
+                      _Link(
+                        label: 'Leave this relay',
+                        danger: true,
+                        onTap: () => leaveRelay(context, relay: relay, leave: widget.leave!, onlyClient: widget.model != null && onlyClient(widget.model!)),
+                      ),
+                  ]),
+                if (widget.model != null && widget.hosted != null) ...[
+                  _Section(title: 'Computers', sub: 'Running pi, their sessions shown here. Each has its own keys: none can read another\'s sessions.', rows: [
+                    HostedDeviceList(model: widget.model!, role: 'host', devices: widget.hosted!),
+                  ]),
+                  _Section(title: 'Phones and browsers', sub: 'Each reaches every computer. Only the account\'s phone adds devices.', rows: [
+                    HostedDeviceList(model: widget.model!, role: 'client', devices: widget.hosted!),
+                  ]),
+                ] else if (widget.model != null) ...[
+                  _Section(title: 'Hosts', sub: 'Computers running pi, whose sessions show here.', rows: [DeviceList(model: widget.model!, role: 'host', relay: s.relay)]),
+                  _Section(title: 'Clients', sub: 'This phone, the web app and the other phones, each reaching every host.', rows: [DeviceList(model: widget.model!, role: 'client', relay: s.relay)]),
+                ],
+                if (hostedBuild)
+                  _Section(title: 'Hosted relay', sub: 'A test build: tries what the stores say of this phone.', rows: [
+                    _Link(label: "Try the stores' checks", onTap: () => Navigator.of(context).push(pageRoute<void>(builder: (_) => const TryStoresScreen()))),
+                  ]),
+                _Section(title: 'About', sub: 'PiRC and what it is built from.', rows: [_Link(label: 'Licences', onTap: _licences)]),
+              ],
+            ),
+          ),
       ),
     );
   }

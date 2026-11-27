@@ -241,14 +241,15 @@ Future<PircModel> fixture(WidgetTester tester) async {
 }
 
 // [keyboard]: the height of one open over the screen; [text], the text
-// size as a scale (the phone's Larger Text).
-Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0, bool still = false, double text = 1, Size size = const Size(390, 844)}) {
+// size as a scale (the phone's Larger Text); [padding], the status bar's,
+// the home bar's and a notch's.
+Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0, bool still = false, double text = 1, Size size = const Size(390, 844), EdgeInsets padding = const EdgeInsets.only(top: 47, bottom: 34)}) {
   final look = (brightness == Brightness.dark ? Look.dark : Look.light).withFont(font, mono: mono);
   return MediaQuery(
     data: MediaQueryData(
         size: size,
         platformBrightness: brightness,
-        padding: const EdgeInsets.only(top: 47, bottom: 34),
+        padding: padding,
         viewInsets: EdgeInsets.only(bottom: keyboard),
         disableAnimations: still,
         textScaler: TextScaler.linear(text)),
@@ -1109,6 +1110,46 @@ void main() {
     await tester.pump();
     return model;
   }
+
+  testWidgets('a phone on its side: the header on one line, the box at three, everything clear of the notch', (tester) async {
+    final model = await docs(tester);
+    // An iPhone's notch on the left, its home bar under.
+    const size = Size(932, 430);
+    const padding = EdgeInsets.fromLTRB(59, 0, 59, 21);
+    tester.view.physicalSize = size * 3;
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i3'), size: size, padding: padding));
+    await tester.pumpAndSettle();
+    // The way back, the title and the actions, on one line 44 high.
+    final back = tester.getRect(find.byType(BackLink));
+    final name = tester.getRect(find.text('docs').first);
+    final actions = tester.getRect(find.bySemanticsLabel('Session actions'));
+    expect((back.center.dy - name.center.dy).abs(), lessThan(2));
+    expect((actions.center.dy - name.center.dy).abs(), lessThan(2));
+    expect(find.text('laptop · site'), findsNothing);
+    expect(actions.bottom, lessThanOrEqualTo(44));
+    expect(back.left, greaterThanOrEqualTo(59));
+    expect(actions.right, lessThanOrEqualTo(932 - 59));
+    // The box, clear of the notch, three lines at most.
+    final box = tester.getRect(find.byType(CupertinoTextField));
+    expect(box.left, greaterThanOrEqualTo(59));
+    expect(box.right, lessThanOrEqualTo(932 - 59));
+    await tester.enterText(find.byType(CupertinoTextField), List.filled(8, 'a line').join('\n'));
+    await tester.pump();
+    expect(tester.getRect(find.byType(CupertinoTextField)).height, lessThan(110));
+    await tester.enterText(find.byType(CupertinoTextField), '');
+    await tester.pump();
+    await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('landscape_light.png')));
+    // The list, as clear of it.
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, settings: () {}), size: size, padding: padding));
+    await tester.pump();
+    expect(tester.getRect(find.text('Sessions')).left, greaterThanOrEqualTo(59));
+    expect(tester.getRect(find.bySemanticsLabel('Settings')).right, lessThanOrEqualTo(932 - 59));
+    // Upright again, the header in full.
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i3')));
+    await tester.pump();
+    expect(find.text('laptop · site'), findsOneWidget);
+  }, variant: both);
 
   // The request the chat sent last, and its answer from pi.
   SessionMessage asked() => SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload);

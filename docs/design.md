@@ -1824,6 +1824,11 @@ built; steps 14 and 15 are not finished.
         it, both kept on the device. Narrower (Split View, every phone,
         a phone on its side) it is as on a phone. Sheets there are at most
         512 wide, in the middle, as the web page's.
+        The same rule holds by width on Android, for tablets and opened
+        foldables. Crossing the width keeps what is open. The App Store
+        submission therefore carries iPad screenshots, and Apple reviews it
+        on an iPad. Rejected: iPhone only, which Apple does not let a later
+        update undo for an app already on iPad.
       - **A hardware keyboard** (an iPad's, a tablet's), as the web page's
         keys where they fit: in the message box Return sends, Shift-Return
         makes a new line, Option (Alt)-Return queues and Esc leaves the
@@ -1834,11 +1839,14 @@ built; steps 14 and 15 are not finished.
         line), since some Android keyboards send their return as a key.
         Rejected: Apple's ⌘-held list of shortcuts and Android's, which
         Flutter cannot fill.
-        The same rule holds by width on Android, for tablets and opened
-        foldables. Crossing the width keeps what is open. The App Store
-        submission therefore carries iPad screenshots, and Apple reviews it
-        on an iPad. Rejected: iPhone only, which Apple does not let a later
-        update undo for an app already on iPad.
+      - **A phone on its side** (landscape, under 500 points high, as the
+        web page's): the chat's header is one line, the way back, the
+        title, the cost and the actions, and the message box grows to three
+        lines rather than six (the web page's to 100 pixels rather than
+        200), so that with the keyboard up the chat keeps room. Everything
+        is clear of the notch and the rounded corners: the list and
+        Settings are inset by the safe area, and the chat's rows, header
+        and box by it while their backgrounds reach the edges.
       - **Images**: a message's as thumbnails that open full screen, and
         pictures chosen from the phone's photos, made to fit pi's limits as
         they are picked (the platform's picker, which asks for no

@@ -363,7 +363,9 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
                 child: Stack(children: [
                   LayoutBuilder(builder: (context, c) {
                     // Read by row as the lists lay their rows out, after this.
-                    side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14;
+                    // Clear of a phone's notch, on its side.
+                    final pad = MediaQuery.paddingOf(context);
+                    side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14 + math.max(pad.left, pad.right);
                     return NotificationListener<ScrollNotification>(
                       // The screen's height changed (the keyboard, turning
                       // the phone), or a scroll ended: placed again.
@@ -409,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
                       ),
                     );
                   }),
-                  if (!_atEnd) Positioned(right: 16, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
+                  if (!_atEnd) Positioned(right: 16 + MediaQuery.paddingOf(context).right, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
                 ]),
               ),
               if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
@@ -546,9 +548,27 @@ class _Header extends StatelessWidget {
     // Its words grow with the text size only so far, as a navigation bar's
     // do: its lines are cut to one each, and its way back has a fixed
     // height; the chat under it grows in full.
+    final pad = MediaQuery.paddingOf(context);
+    // On a phone on its side, one line: the way back, the title and the
+    // actions, as the web page's folded header.
+    if (back && isShort(MediaQuery.sizeOf(context))) {
+      return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.3, child: Container(
+        decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
+        padding: EdgeInsets.fromLTRB(pad.left + 4, pad.top, pad.right + 8, 0),
+        height: pad.top + 44,
+        child: Row(children: [
+          _Back(),
+          const SizedBox(width: 8),
+          if (s != null) ...[StatusBadge(statusOf(s, news), compacting: s.compacting), const SizedBox(width: 8)],
+          Expanded(child: Text(s == null ? 'Session ended' : title(s), style: look.text(size: 17, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (spend != null) ...[const SizedBox(width: 8), Text(spend!, style: small.copyWith(fontFeatures: const [FontFeature.tabularFigures()]))],
+          ?more,
+        ]),
+      ));
+    }
     return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.5, child: Container(
       decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
-      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + (back ? 0 : 8), bottom: 10),
+      padding: EdgeInsets.only(top: pad.top + (back ? 0 : 8), bottom: 10, left: pad.left, right: pad.right),
       // Beside the list, the button that hides it first, as the web page's.
       child: Row(children: [
         if (!back) ...[const SizedBox(width: 4), const SideToggle()],
@@ -611,7 +631,7 @@ class _Notice extends StatelessWidget {
       liveRegion: true,
       child: Container(
         decoration: BoxDecoration(color: notice.bad ? look.blockWash : look.wash, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
-        padding: const EdgeInsets.fromLTRB(20, 6, 8, 6),
+        padding: EdgeInsets.fromLTRB(20 + MediaQuery.paddingOf(context).left, 6, 8 + MediaQuery.paddingOf(context).right, 6),
         child: Row(children: [
           Expanded(child: NoticeText(notice.text, color: ink)),
           Semantics(
@@ -1508,11 +1528,13 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     void send() => _send();
 
     final questions = s.questions ?? const <QuestionView>[];
+    final pad = MediaQuery.paddingOf(context);
+    final short = isShort(MediaQuery.sizeOf(context));
     return LayoutBuilder(
       builder: (context, c) => Container(
         decoration: BoxDecoration(color: look.page, border: Border(top: BorderSide(color: look.rule, width: 0.5))),
         padding: EdgeInsets.fromLTRB(
-            widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, questions.isNotEmpty ? 2 : 10, widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12, 10 + MediaQuery.paddingOf(context).bottom),
+            widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12 + pad.left, questions.isNotEmpty ? 2 : 10, widget.wide ? math.max(12, (c.maxWidth - 640) / 2) : 12 + pad.right, 10 + pad.bottom),
         // While pi asks, the question in the composer's place: a message
         // could not reach pi until it is answered. The text written so far
         // waits in its controller.
@@ -1601,7 +1623,9 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                       placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
                       style: look.text(size: 16, height: 1.35, spacing: 0),
                       minLines: 1,
-                      maxLines: 6,
+                      // On a phone on its side, fewer, leaving the chat
+                      // some room.
+                      maxLines: short ? 3 : 6,
                       // As a phone's own message boxes: each sentence starts
                       // with a capital.
                       textCapitalization: TextCapitalization.sentences,

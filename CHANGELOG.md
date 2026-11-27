@@ -8,6 +8,9 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- On a phone on its side, the chat's header is one line and the
+  message box grows less, leaving the chat room above the keyboard; in
+  the apps nothing sits under the notch any more.
 - With a keyboard on an iPad or an Android tablet, Return sends a
   message (Shift-Return makes a new line, Option- or Alt-Return queues
   it), Esc stops pi, n opens the next session waiting, / searches and

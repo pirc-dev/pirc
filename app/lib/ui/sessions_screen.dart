@@ -216,102 +216,107 @@ class _SessionsScreenState extends State<SessionsScreen> with ScreenKeys {
             _Row(s, news: news.contains(s.id), now: model.now(), window: window, matched: matched, open: _openChat, selected: widget.selected?.value == s.id);
         return CupertinoPageScaffold(
           backgroundColor: look.page,
-          child: CustomScrollView(
-            slivers: [
-              // The title under the phone's status bar, as the web page's
-              // header: no bar of its own above it. The status bar's strip
-              // stays, so that the search held under it is not behind it.
-              PinnedHeaderSliver(child: Container(height: MediaQuery.paddingOf(context).top, color: look.page)),
-              if (host != null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: BackLink(label: group != null ? host : 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
-                    ),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, host == null ? 12 : 0, 10, 6),
-                  child: Row(children: [
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text(group ?? host ?? 'Sessions',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: look.text(size: group != null ? 28 : 34, weight: FontWeight.w700, spacing: group != null ? 0 : 0.34, height: 1.25)),
-                      ),
-                    ),
-                    if (widget.settings != null && host == null)
-                      Semantics(
-                        button: true,
-                        label: 'Settings',
-                        excludeSemantics: true,
-                        onTap: widget.settings,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: widget.settings,
-                          child: SizedBox(width: 44, height: 44, child: Center(child: CustomPaint(size: const Size.square(22), painter: _SettingsIcon(look.accent)))),
+          // Clear of a phone's notch, on its side.
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: CustomScrollView(
+                slivers: [
+                  // The title under the phone's status bar, as the web page's
+                  // header: no bar of its own above it. The status bar's strip
+                  // stays, so that the search held under it is not behind it.
+                  PinnedHeaderSliver(child: Container(height: MediaQuery.paddingOf(context).top, color: look.page)),
+                  if (host != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: BackLink(label: group != null ? host : 'Sessions', onPressed: () => Navigator.of(context).maybePop()),
                         ),
                       ),
-                  ]),
-                ),
-              ),
-              if (all.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                    child: Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                      if (asking > 0) count(Status.asking, asking, 'asking', look.accent, look.accentSoft),
-                      if (fresh > 0) count(Status.done, fresh, 'done', look.done, look.doneWash),
-                      if (working > 0) count(Status.working, working, 'working', look.work, look.workWash),
-                      count(null, all.length, 'in all', look.ink2, look.wash),
-                      if (host != null && (group ?? _oneGroup(sessions)) != null && launchable(sessions) != null)
-                        _NewAgentPill(onTap: () => showSheet<void>(context, (_) => LaunchSheet(model: widget.model, beside: launchable(sessions)!, open: widget.open))),
-                    ]),
-                  ),
-                ),
-              SliverToBoxAdapter(child: JoinRequests(model: model, day: day)),
-              if (all.isNotEmpty)
-                PinnedHeaderSliver(child: _SearchBar(look, _query, _search, sessions.length, kind: switch (_filter) { Status.asking => ' asking', Status.done => ' done', Status.working => ' working', _ => '' }, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
-              if (all.isEmpty && model.relay.state == 'ready')
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(32, 80, 32, 32),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(host == null ? 'No pi sessions are running.' : 'No pi sessions ${group != null ? 'in $group' : 'on $host'} now.', style: look.text(size: 24)),
-                      if (host == null) ...[
-                        const SizedBox(height: 10),
-                        Text('Start pi with the PiRC extension on any of your machines and it appears here.', style: look.text(size: 17, color: look.ink2, height: 1.5)),
-                      ],
-                    ]),
-                  ),
-                ),
-              if (query.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-                    child: Text(
-                      (found.isEmpty ? 'No session matches “$query”' : '${found.length} ${found.length == 1 ? 'match' : 'matches'}, best first').toUpperCase(),
-                      style: look.text(size: 11.5, weight: FontWeight.w600, color: look.ink2, spacing: 1.6),
+                    ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, host == null ? 12 : 0, 10, 6),
+                      child: Row(children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(group ?? host ?? 'Sessions',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: look.text(size: group != null ? 28 : 34, weight: FontWeight.w700, spacing: group != null ? 0 : 0.34, height: 1.25)),
+                          ),
+                        ),
+                        if (widget.settings != null && host == null)
+                          Semantics(
+                            button: true,
+                            label: 'Settings',
+                            excludeSemantics: true,
+                            onTap: widget.settings,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: widget.settings,
+                              child: SizedBox(width: 44, height: 44, child: Center(child: CustomPaint(size: const Size.square(22), painter: _SettingsIcon(look.accent)))),
+                            ),
+                          ),
+                      ]),
                     ),
                   ),
-                ),
-                if (found.isNotEmpty)
-                  SliverToBoxAdapter(child: _Card([for (final f in found) row(f.item, window: false, matched: {...f.match.positions})])),
-              ] else if (group != null) ...[
-                if (sessions.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 6), child: _Card([for (final s in sessions) row(s)]))),
-              ] else if (host != null) ...[
-                if (sessions.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 4), child: _body(look, host, sessions, news, row))),
-              ] else
-                for (final MapEntry(key: host, value: list) in (hosts.entries.toList()..sort((a, b) => a.key.compareTo(b.key))))
-                  SliverToBoxAdapter(child: _host(look, host, list, news, row)),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            ],
+                  if (all.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                        child: Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                          if (asking > 0) count(Status.asking, asking, 'asking', look.accent, look.accentSoft),
+                          if (fresh > 0) count(Status.done, fresh, 'done', look.done, look.doneWash),
+                          if (working > 0) count(Status.working, working, 'working', look.work, look.workWash),
+                          count(null, all.length, 'in all', look.ink2, look.wash),
+                          if (host != null && (group ?? _oneGroup(sessions)) != null && launchable(sessions) != null)
+                            _NewAgentPill(onTap: () => showSheet<void>(context, (_) => LaunchSheet(model: widget.model, beside: launchable(sessions)!, open: widget.open))),
+                        ]),
+                      ),
+                    ),
+                  SliverToBoxAdapter(child: JoinRequests(model: model, day: day)),
+                  if (all.isNotEmpty)
+                    PinnedHeaderSliver(child: _SearchBar(look, _query, _search, sessions.length, kind: switch (_filter) { Status.asking => ' asking', Status.done => ' done', Status.working => ' working', _ => '' }, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
+                  if (all.isEmpty && model.relay.state == 'ready')
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(32, 80, 32, 32),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(host == null ? 'No pi sessions are running.' : 'No pi sessions ${group != null ? 'in $group' : 'on $host'} now.', style: look.text(size: 24)),
+                          if (host == null) ...[
+                            const SizedBox(height: 10),
+                            Text('Start pi with the PiRC extension on any of your machines and it appears here.', style: look.text(size: 17, color: look.ink2, height: 1.5)),
+                          ],
+                        ]),
+                      ),
+                    ),
+                  if (query.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                        child: Text(
+                          (found.isEmpty ? 'No session matches “$query”' : '${found.length} ${found.length == 1 ? 'match' : 'matches'}, best first').toUpperCase(),
+                          style: look.text(size: 11.5, weight: FontWeight.w600, color: look.ink2, spacing: 1.6),
+                        ),
+                      ),
+                    ),
+                    if (found.isNotEmpty)
+                      SliverToBoxAdapter(child: _Card([for (final f in found) row(f.item, window: false, matched: {...f.match.positions})])),
+                  ] else if (group != null) ...[
+                    if (sessions.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 6), child: _Card([for (final s in sessions) row(s)]))),
+                  ] else if (host != null) ...[
+                    if (sessions.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.only(top: 4), child: _body(look, host, sessions, news, row))),
+                  ] else
+                    for (final MapEntry(key: host, value: list) in (hosts.entries.toList()..sort((a, b) => a.key.compareTo(b.key))))
+                      SliverToBoxAdapter(child: _host(look, host, list, news, row)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                ],
+              ),
           ),
         );
       },

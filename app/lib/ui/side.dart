@@ -19,6 +19,10 @@ const sideRoom = 400.0;
 // the chat as it is.
 bool isWide(Size size) => size.width >= 700 && size.height >= 500;
 
+// A phone on its side: too little height for the chat's header in full, or
+// a message box that grows far.
+bool isShort(Size size) => size.width > size.height && size.height < 500;
+
 class Side {
   const Side({this.width = sideWidthDefault, this.hidden = false});
   final double width;
