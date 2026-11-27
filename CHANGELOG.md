@@ -29,6 +29,13 @@ release that needs its parts upgraded together says so here.
   screen, in a line across the top as the web app has: before, only the
   session list said so, in small grey type, and a chat left open still
   looked live.
+- In the phone apps with larger text, Stop is never pushed off the screen:
+  the switch and Stop move to a line of their own when the status leaves
+  them no room, and the message box's buttons and the chat's header stop
+  growing before they crowd out the message. A host's or group's counts fit
+  their line with a long name or large text.
+- On a small phone with the keyboard up, a question's options and its note
+  scroll within the space left, rather than running off the screen.
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 

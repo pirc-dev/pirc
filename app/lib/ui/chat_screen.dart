@@ -326,6 +326,9 @@ class _ChatScreenState extends State<ChatScreen> {
             );
         int? at(Key key, int from, int to) => switch (index[key]) { final i? when i >= from && i < to => i, _ => null };
         _later();
+        // The height above the keyboard, read here: the scaffold makes room
+        // for the keyboard and takes it out of what it passes down.
+        final room = MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom - MediaQuery.paddingOf(context).top;
         return CupertinoPageScaffold(
           backgroundColor: look.card,
           child: Column(
@@ -385,7 +388,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (!_atEnd) Positioned(right: 16, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
                 ]),
               ),
-              if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide),
+              if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
             ],
           ),
         );
@@ -512,7 +515,10 @@ class _Header extends StatelessWidget {
               child: Icon(CupertinoIcons.ellipsis, size: 22, color: look.ink),
             ),
           );
-    return Container(
+    // Its words grow with the text size only so far, as a navigation bar's
+    // do: its lines are cut to one each, and its way back has a fixed
+    // height; the chat under it grows in full.
+    return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.5, child: Container(
       decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
       padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + (back ? 0 : 8), bottom: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -554,7 +560,7 @@ class _Header extends StatelessWidget {
             ]),
           ),
       ]),
-    );
+    ));
   }
 }
 
@@ -1264,9 +1270,11 @@ class _TurnTimeState extends State<_TurnTime> {
 // whole task is done (Queue, as Alt+Enter in pi), and Stop, the only one
 // that interrupts pi; the send button says which.
 class _Composer extends StatefulWidget {
-  const _Composer({required this.model, required this.session, required this.text, required this.images, required this.files, this.wide = false});
+  const _Composer({required this.model, required this.session, required this.text, required this.images, required this.files, this.wide = false, this.room});
   // Beside the list: in the conversation's column.
   final bool wide;
+  // The screen's height above the keyboard, for pi's question.
+  final double? room;
   final PircModel model;
   final SessionView session;
   final TextEditingController text;
@@ -1455,29 +1463,40 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
         // could not reach pi until it is answered. The text written so far
         // waits in its controller.
         child: questions.isNotEmpty
-            ? QuestionDock(q: questions.first, key: ValueKey(questions.first.id), more: questions.length - 1, model: widget.model, session: s)
+            ? QuestionDock(q: questions.first, key: ValueKey(questions.first.id), more: questions.length - 1, model: widget.model, session: s, room: widget.room)
             : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
+                // The status, then the switch and Stop at the end of the line;
+                // with large text, those on a line of their own, so that Stop
+                // is never pushed off the screen.
                 if (busy)
-                  Row(children: [
-                    StatusGlyph(Status.working, size: 9),
-                    const SizedBox(width: 10),
-                    _TurnTime(model: widget.model, id: s.id, compacting: s.compacting),
-                    const Spacer(),
-                    _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
-                    const SizedBox(width: 6),
-                    CupertinoButton(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      minimumSize: const Size(0, 36),
-                      color: look.blockWash,
-                      borderRadius: BorderRadius.circular(12),
-                      onPressed: () => widget.model.stop(s.id),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Container(width: 9, height: 9, decoration: BoxDecoration(color: look.block, borderRadius: BorderRadius.circular(1.5))),
-                        const SizedBox(width: 8),
-                        Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    runSpacing: 8,
+                    children: [
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        StatusGlyph(Status.working, size: 9),
+                        const SizedBox(width: 10),
+                        _TurnTime(model: widget.model, id: s.id, compacting: s.compacting),
                       ]),
-                    ),
-                  ]),
+                      _compact(Row(mainAxisSize: MainAxisSize.min, children: [
+                        _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
+                        const SizedBox(width: 6),
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          minimumSize: const Size(0, 36),
+                          color: look.blockWash,
+                          borderRadius: BorderRadius.circular(12),
+                          onPressed: () => widget.model.stop(s.id),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Container(width: 9, height: 9, decoration: BoxDecoration(color: look.block, borderRadius: BorderRadius.circular(1.5))),
+                            const SizedBox(width: 8),
+                            Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
+                          ]),
+                        ),
+                      ])),
+                    ],
+                  ),
                 if (images.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, right: 8),
@@ -1509,7 +1528,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                   ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: CupertinoTextField(
+                    child: LayoutBuilder(builder: (context, field) => CupertinoTextField(
                       controller: widget.text,
                       focusNode: _focus,
                       contextMenuBuilder: _menu,
@@ -1521,7 +1540,8 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                           if (data != null) _put((_) => insertedImage(data));
                         },
                       ),
-                      placeholder: busy ? 'Steer, or queue a follow-up' : 'Message',
+                      // The longest that fits on its one line, or none.
+                      placeholder: [if (busy) 'Steer, or queue a follow-up', 'Message'].where((p) => _fits(context, p, look.text(size: 16, spacing: 0), field.maxWidth - 32)).firstOrNull,
                       placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
                       style: look.text(size: 16, height: 1.35, spacing: 0),
                       minLines: 1,
@@ -1531,10 +1551,10 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                       textCapitalization: TextCapitalization.sentences,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(color: look.card, borderRadius: BorderRadius.circular(19), border: Border.all(color: look.rule)),
-                    ),
+                    )),
                   ),
                   const SizedBox(width: 10),
-                  Semantics(
+                  _compact(Semantics(
                     key: const ValueKey('send'),
                     button: true,
                     label: busy ? (_steer ? 'Steer' : 'Queue') : 'Send',
@@ -1552,13 +1572,27 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                             : Icon(CupertinoIcons.arrow_up, size: 20, color: empty ? look.ink3 : look.onAccent),
                       ),
                     ),
-                  ),
+                  )),
                 ]),
               ]),
       ),
     );
   }
 }
+
+// Whether text fits on one line of width at the text size: the box is one
+// line high while empty, so a placeholder that wraps is cut.
+bool _fits(BuildContext context, String text, TextStyle style, double width) {
+  final painter = TextPainter(text: TextSpan(text: text, style: style), textDirection: TextDirection.ltr, textScaler: MediaQuery.textScalerOf(context), maxLines: 1)..layout();
+  final fits = painter.width <= width;
+  painter.dispose();
+  return fits;
+}
+
+// The message box's small controls (the switch, Stop, Send): their words
+// grow with the text size only so far, as the system's own compact controls
+// do, so that they leave the message itself its room.
+Widget _compact(Widget child) => MediaQuery.withClampedTextScaling(maxScaleFactor: 1.3, child: child);
 
 // Steer or Queue: a small switch that sends nothing.
 class _Switch extends StatelessWidget {

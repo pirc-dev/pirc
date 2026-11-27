@@ -385,12 +385,22 @@ class _Header extends StatelessWidget {
             expanded: open,
             box(
               padding.copyWith(left: 0),
-              Row(children: [
-                SizedBox(width: add == null ? 10 : 0),
-                if (rule) ...[counts, const SizedBox(width: 10), Expanded(child: Container(height: 1, color: look.rule))] else ...[const Spacer(), counts],
-                const SizedBox(width: 10),
-                AnimatedRotation(turns: open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 14, color: look.ink3)),
-              ]),
+              LayoutBuilder(builder: (context, line) {
+                // The counts in the room the line leaves them, made smaller
+                // only when they would not fit (a long name, large text).
+                final lead = add == null ? 10.0 : 0.0;
+                final room = math.max(0.0, line.maxWidth - lead - 10 - 14 - (rule ? 10 : 0));
+                final fitted = ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: room),
+                  child: FittedBox(fit: BoxFit.scaleDown, alignment: rule ? Alignment.centerLeft : Alignment.centerRight, child: counts),
+                );
+                return Row(children: [
+                  SizedBox(width: lead),
+                  if (rule) ...[fitted, const SizedBox(width: 10), Expanded(child: Container(height: 1, color: look.rule))] else ...[const Spacer(), fitted],
+                  const SizedBox(width: 10),
+                  AnimatedRotation(turns: open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 14, color: look.ink3)),
+                ]);
+              }),
             ),
           ),
         ),

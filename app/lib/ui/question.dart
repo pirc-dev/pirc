@@ -4,6 +4,8 @@
 // text, which is the answer; "Dismiss and stop", which closes the question
 // and stops the turn. An editor or an extension's own dialog only pi's
 // terminal can answer: where pi runs, and Stop.
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 
 import '../app/model.dart';
@@ -14,8 +16,11 @@ import 'look.dart';
 import 'selectable.dart';
 
 class QuestionDock extends StatefulWidget {
-  const QuestionDock({super.key, required this.q, required this.more, required this.model, required this.session});
+  const QuestionDock({super.key, required this.q, required this.more, required this.model, required this.session, this.room});
   final QuestionView q;
+  // The screen's height above the keyboard, as the chat read it: under its
+  // scaffold the keyboard is no longer in the MediaQuery.
+  final double? room;
   // Questions waiting after this one.
   final int more;
   final PircModel model;
@@ -140,11 +145,21 @@ class _QuestionDockState extends State<QuestionDock> {
       ]),
     );
 
+    // What is left above the keyboard: everything under the eyebrow scrolls
+    // within a share of it, so that on a small phone with the keyboard up
+    // no option nor the note is out of reach; the question's own text
+    // within a share of that, as before when there is room.
+    final media = MediaQuery.of(context);
+    final full = media.size.height - media.padding.top;
+    final left = widget.room ?? full;
+    // Less of it with the keyboard up, so that the chat keeps a little.
+    final budget = math.max(120.0, left * (left < full - 1 ? 0.4 : 0.7));
+    final questionMax = math.min(media.size.height * 0.38, budget * 0.6);
+
     return Semantics(
       label: 'pi asks',
       container: true,
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // The eyebrow, with Dismiss at its end as a whole 44 points.
           SizedBox(
             height: 44,
@@ -161,10 +176,13 @@ class _QuestionDockState extends State<QuestionDock> {
             ]),
           ),
           ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.38),
-            child: SingleChildScrollView(child: question),
-          ),
-        ]),
+            constraints: BoxConstraints(maxHeight: budget),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: questionMax),
+          child: SingleChildScrollView(child: question),
+        ),
         if (!answerable) ...[
           Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 4, children: [
             Text("This needs pi's terminal to answer.", style: look.text(size: 14, color: look.ink2, spacing: 0)),
@@ -206,6 +224,9 @@ class _QuestionDockState extends State<QuestionDock> {
           button('Send', () => _answer(text: _text.text), primary: true),
         ],
         if (_error != null) Text(_error!, style: look.text(size: 13.5, color: look.block, spacing: 0)),
+              ]),
+            ),
+          ),
       ]),
     );
   }

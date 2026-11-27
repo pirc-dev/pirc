@@ -234,12 +234,18 @@ Future<PircModel> fixture(WidgetTester tester) async {
   return model;
 }
 
-// [keyboard]: the height of one open over the screen.
-Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0, bool still = false}) {
+// [keyboard]: the height of one open over the screen; [text], the text
+// size as a scale (the phone's Larger Text).
+Widget frame(Widget child, {Brightness brightness = Brightness.light, double keyboard = 0, bool still = false, double text = 1, Size size = const Size(390, 844)}) {
   final look = (brightness == Brightness.dark ? Look.dark : Look.light).withFont(font, mono: mono);
   return MediaQuery(
     data: MediaQueryData(
-        size: const Size(390, 844), platformBrightness: brightness, padding: const EdgeInsets.only(top: 47, bottom: 34), viewInsets: EdgeInsets.only(bottom: keyboard), disableAnimations: still),
+        size: size,
+        platformBrightness: brightness,
+        padding: const EdgeInsets.only(top: 47, bottom: 34),
+        viewInsets: EdgeInsets.only(bottom: keyboard),
+        disableAnimations: still,
+        textScaler: TextScaler.linear(text)),
     child: LookScope(
       look: look,
       child: CupertinoApp(
@@ -713,6 +719,34 @@ void main() {
     }
     expect(seen, [1, 0.5, 0, 0.5, 1]);
   }, skip: !drawsGoldens);
+
+  testWidgets("larger text: a host's and a group's counts fit their line", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    for (final scale in [1.0, 1.35, 2.0, 3.1]) {
+      await tester.pumpWidget(frame(SessionsScreen(model: model, open: (_) {}, unfolded: const {'h:laptop', 'h:server', 'g:laptop/work'}, settings: () {}), text: scale));
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: 'nothing overflows at $scale');
+    }
+  });
+
+  testWidgets('larger text: Stop stays on the screen, the switch and Stop on a line of their own when the status leaves no room', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    // The largest of the standard sizes, then the accessibility ones.
+    for (final scale in [1.0, 1.35, 2.0, 3.1]) {
+      await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1'), text: scale));
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: 'nothing overflows at $scale');
+      final stop = tester.getRect(find.text('Stop'));
+      final status = tester.getRect(find.textContaining('Working'));
+      expect(stop.right, lessThanOrEqualTo(390), reason: 'Stop on the screen at $scale');
+      if (scale == 1) expect((stop.center.dy - status.center.dy).abs(), lessThan(4), reason: 'one line at $scale');
+      if (scale >= 2) expect(stop.top, greaterThan(status.bottom), reason: 'a line of their own at $scale');
+      // The header's way back is not cut: its words stop growing.
+      expect(tester.getRect(find.text('Sessions')).top, greaterThanOrEqualTo(47), reason: 'under the status bar at $scale');
+    }
+  });
 
   testWidgets('scrolled up, a button goes back to the end, and says when more has come', (tester) async {
     await phone(tester);
@@ -1462,20 +1496,40 @@ void main() {
   group("pi's questions, in the composer's place", () {
     const automode = 'Rule: bash(git push *)\n\nAction:\nbash {\n  "command": "git push nowhere main"\n}\n\nAllow this action to continue to auto-mode classification?';
     // release (i1), its check still running, asked a question.
-    Future<PircModel> asked(WidgetTester tester, Question q, {Brightness brightness = Brightness.light, String id = 'i1'}) async {
+    Future<PircModel> asked(WidgetTester tester, Question q, {Brightness brightness = Brightness.light, String id = 'i1', Size size = const Size(390, 844), double keyboard = 0}) async {
       await phone(tester);
       final model = await fixture(tester);
       model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry(id, 'laptop', SessionAnnouncement(
         name: 'release', cwd: '/home/me/src/pirc', hostname: 'laptop.local', working: true, launcher: 'tmux',
         place: Place(kind: 'tmux', group: 'work', window: 'pirc'), questions: [q],
       )))));
-      await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-$id'), brightness: brightness));
+      await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-$id'), brightness: brightness, size: size, keyboard: keyboard));
       await tester.pump();
       return model;
     }
 
     Question confirm({String id = 'q9'}) => Question(id: id, kind: QuestionKind.QUESTION_KIND_CONFIRM, title: 'Auto mode permission ask', message: automode, answerable: true, askedAt: ts(now));
     Answer answered() => SessionMessage.fromBuffer(sent.lastWhere((f) => f.hasRouted()).routed.payload).answer;
+
+    testWidgets('a small phone with its keyboard up: every option and the note in reach', (tester) async {
+      const se = Size(375, 667);
+      await asked(tester, Question(id: 'q8', kind: QuestionKind.QUESTION_KIND_SELECT, title: 'tests/fixtures/cart.json is out of date. What should I do?',
+          options: ['Regenerate it', 'Fix the tests to match it', 'Leave both for now', 'Ask me again later', 'Something else'], answerable: true, askedAt: ts(now)));
+      tester.view.physicalSize = se * 3;
+      final model = tester.widget<ChatScreen>(find.byType(ChatScreen)).model;
+      await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1'), size: se, keyboard: 260));
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: 'nothing overflows');
+      // Above the keyboard, each reachable: on the screen, or by scrolling.
+      for (final o in ['Regenerate it', 'Something else', 'Add a note for pi']) {
+        final f = find.text(o);
+        await tester.ensureVisible(f);
+        await tester.pump();
+        final r = tester.getRect(f);
+        expect(r.bottom, lessThanOrEqualTo(667 - 260), reason: '$o above the keyboard');
+        expect(r.top, greaterThanOrEqualTo(0), reason: '$o on the screen');
+      }
+    });
 
     for (final b in [Brightness.light, Brightness.dark]) {
       testWidgets('a confirm: its text as written, the tool waiting on it, Yes with a note, ${b.name}', (tester) async {
