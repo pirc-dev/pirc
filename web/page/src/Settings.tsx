@@ -4,13 +4,14 @@
 // the look and the keys, each kept in it), then the hosts and the clients
 // registered with the relay (docs/web.md, section 5).
 import type { DeviceView } from "../../core/view.ts";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Devices } from "./Devices.tsx";
 import { Icon } from "./icons.tsx";
 import { free, setKeys, useKey, useKeyboard, useKeys } from "./keys.ts";
 import { LOOKS, setLook, useLook } from "./look.ts";
-import { unblock, useNotify } from "./Notify.tsx";
+import { live } from "./live.ts";
+import { unblock, unsubscribe, useNotify } from "./Notify.tsx";
 
 export function Settings(p: { back: () => void; wide: boolean; devices: DeviceView[]; connected: boolean }) {
   // Focus comes to the title, so that a screen reader starts here.
@@ -39,6 +40,7 @@ export function Settings(p: { back: () => void; wide: boolean; devices: DeviceVi
           <Notifications />
           <LookChoice />
           <Keys />
+          <SignOut />
         </Section>
         <Section title="Hosts" sub="Computers running pi, whose sessions show here.">
           <Devices role="host" devices={p.devices} connected={p.connected} />
@@ -48,6 +50,35 @@ export function Settings(p: { back: () => void; wide: boolean; devices: DeviceVi
         </Section>
       </div>
     </div>
+  );
+}
+
+// Signing out of this browser, as on a computer that is not one's own:
+// its notifications stop too, which otherwise outlive a sign-in.
+function SignOut() {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const out = async () => {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      await unsubscribe().catch(() => {});
+      await live.signOut();
+    } catch (e) {
+      setProblem((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <Row
+      label="Sign out"
+      sub={problem ? <span className="text-block" role="alert">{problem}</span> : "Ends this browser's sign-in and its notifications. The passkey stays, to sign in again."}
+      end={
+        <button className="min-h-11 flex-none rounded-full px-4 text-[15px] font-semibold text-block ring-1 ring-block ring-inset disabled:opacity-40 cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash" disabled={busy} onClick={() => void out()}>
+          Sign out
+        </button>
+      }
+    />
   );
 }
 

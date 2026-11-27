@@ -1,14 +1,14 @@
 // A question pi is asking in its terminal for an extension (core/view.ts,
 // QuestionView), in the composer's place while it waits (docs/design.md,
-// section 8): "pi asks", Dismiss, the question with its text kept as
+// section 8): "pi asks", "Dismiss and stop", the question with its text kept as
 // written (asked.ts), then the answer. A confirm's No and Yes and a
 // select's options go with a note for pi, if one is written, which pi
 // reads with what follows from the answer; an input's own text is the
-// answer. Dismiss closes the question and stops the turn. The terminal can
+// answer. "Dismiss and stop" closes the question and stops the turn. The terminal can
 // still answer it; whichever answers first wins, and the composer comes
 // back once it is gone. An editor or a custom dialog can be answered only
 // in pi's terminal: it says so, with where pi runs and Stop.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { QuestionView, SessionView } from "../../core/view.ts";
 import { parts, type Part } from "./asked.ts";
 import type { Run } from "./chat.ts";
@@ -16,7 +16,7 @@ import { where } from "./names.ts";
 
 const choice = "min-h-12 w-full rounded-[13px] bg-wash2 px-4 text-[15.5px] font-semibold text-ink disabled:opacity-40 hover:bg-wash cards:bg-wash native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
 const primary = "min-h-12 w-full rounded-[13px] bg-accent px-4 text-[15.5px] font-semibold text-on-accent disabled:opacity-40 native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
-const field = "w-full min-w-0 rounded-[14px] border border-rule bg-paper px-3 py-2.5 text-base text-ink outline-none placeholder:text-ink3 focus:border-accent cards:bg-card native:rounded-xl cockpit:rounded-[10px] cockpit:text-[15px]";
+const field = "w-full min-w-0 rounded-[14px] border border-rule bg-paper px-3 py-2.5 text-base text-ink outline-none placeholder:text-ink3 focus:border-accent cards:bg-card native:rounded-xl cockpit:rounded-[10px] cockpit:text-[15px] touch:text-base!";
 
 export function Ask(p: { q: QuestionView; more: number; session: SessionView; run: Run }) {
   const q = p.q;
@@ -32,6 +32,13 @@ export function Ask(p: { q: QuestionView; more: number; session: SessionView; ru
       setSending(false);
     }
   };
+  // In the composer's place, it took the focus with it: the question has
+  // it then, so that a screen reader reads it and the keys typed next are
+  // not the page's (j, k, n: keys.ts).
+  const self = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!document.activeElement || document.activeElement === document.body) self.current?.focus({ preventScroll: true });
+  }, []);
   const [first = "", ...rest] = q.title.split("\n");
   const body = parts([rest.join("\n"), q.message ?? ""].filter((s) => s.trim()).join("\n\n"));
   const noteField = (
@@ -48,7 +55,7 @@ export function Ask(p: { q: QuestionView; more: number; session: SessionView; ru
     </>
   );
   return (
-    <section className="flex flex-col gap-2.5" aria-label="pi asks" role="group">
+    <section ref={self} tabIndex={-1} data-own-keys className="flex flex-col gap-2.5 outline-none" aria-label="pi asks" role="group">
       <div className="flex min-h-8 items-center gap-2">
         <span className="flex items-center gap-1.5 text-[12px] font-semibold tracking-[0.04em] text-accent uppercase cockpit:font-mono cockpit:tracking-normal">
           <span className="size-[7px] rounded-full bg-current" aria-hidden="true" />
@@ -56,8 +63,8 @@ export function Ask(p: { q: QuestionView; more: number; session: SessionView; ru
         </span>
         {p.more > 0 && <span className="text-[12.5px] text-ink3">{p.more} more after this one</span>}
         {q.answerable && (
-          <button className="ml-auto px-1 py-1.5 text-[14px] font-medium text-ink2 hover:text-ink disabled:opacity-40" disabled={sending} onClick={() => void answer({ dismissed: true })} title="Close the question and stop pi">
-            Dismiss
+          <button className="-my-1.5 ml-auto min-h-11 px-1 text-[14px] font-medium text-ink2 hover:text-ink disabled:opacity-40" disabled={sending} onClick={() => void answer({ dismissed: true })}>
+            Dismiss and stop
           </button>
         )}
       </div>

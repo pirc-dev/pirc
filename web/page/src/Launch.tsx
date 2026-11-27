@@ -30,7 +30,7 @@ export function folderName(cwd: string): string {
   return last === "~" ? "" : last;
 }
 
-const field = "min-w-0 flex-1 border-b-[1.5px] border-ink bg-transparent py-2 text-[15px] text-ink outline-none placeholder:text-ink3 cards:min-h-11 cards:rounded-xl cards:border cards:border-rule cards:bg-card cards:px-3.5 cards:py-0 cards:focus:border-accent cockpit:min-h-11 cockpit:rounded-lg cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:py-0 cockpit:focus:border-accent";
+const field = "min-w-0 flex-1 border-b-[1.5px] border-ink bg-transparent py-2 text-[15px] text-ink outline-none placeholder:text-ink3 cards:min-h-11 cards:rounded-xl cards:border cards:border-rule cards:bg-card cards:px-3.5 cards:py-0 cards:focus:border-accent cockpit:min-h-11 cockpit:rounded-lg cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:py-0 cockpit:focus:border-accent touch:text-base!";
 
 export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (id: string) => void }) {
   const s = p.beside;

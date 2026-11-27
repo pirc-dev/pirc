@@ -192,8 +192,8 @@ export function Composer(p: {
     </div>
   );
   const shell = "flex-none border-t border-rule bg-paper px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] cards:bg-card cards:px-3 native:bg-paper cockpit:px-3";
-  // While pi asks, the question is in the composer's place, Dismiss in
-  // Stop's; what was being written waits for it to go.
+  // While pi asks, the question is in the composer's place, "Dismiss and
+  // stop" in Stop's; what was being written waits for it to go.
   const asked = p.session.questions?.[0];
   if (asked) {
     return (
@@ -280,7 +280,7 @@ export function Composer(p: {
             enterKeyHint={keyboard ? "send" : "enter"}
             placeholder={busy ? "Steer, or queue a follow-up" : "Message"}
             aria-label="Message"
-            className="min-h-11 min-w-0 flex-1 resize-none rounded-[22px] bg-wash px-4 py-[11px] text-base leading-[1.35] outline-none placeholder:text-ink3 cards:min-h-[46px] cards:rounded-[23px] cards:py-3 cards:text-[15.5px] native:min-h-[38px] native:rounded-[19px] native:border native:border-rule native:bg-card native:py-2 native:text-base cockpit:rounded-[10px] cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:text-[15px]"
+            className="min-h-11 min-w-0 flex-1 resize-none rounded-[22px] bg-wash px-4 py-[11px] text-base leading-[1.35] outline-none placeholder:text-ink3 cards:min-h-[46px] cards:rounded-[23px] cards:py-3 cards:text-[15.5px] native:min-h-[38px] native:rounded-[19px] native:border native:border-rule native:bg-card native:py-2 native:text-base cockpit:rounded-[10px] cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:text-[15px] touch:text-base!"
           />
           {/* Native's idle send is a round arrow, as a messaging app's. */}
           <button

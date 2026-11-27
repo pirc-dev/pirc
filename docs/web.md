@@ -74,6 +74,10 @@ key, which every browser shares.
 - **The event stream** checks the sign-in before every batch of events and
   at its 15-second heartbeat, so a lapsed or revoked sign-in stops it at
   once, however busy the session.
+- **Signing out**: Settings → This browser → Sign out ends this
+  browser's session (`/api/logout`) and turns off its notifications,
+  which would otherwise outlive the sign-in (section 6): what a computer
+  that is not one's own needs. The passkey stays, to sign in again.
 - `pirc-web list` shows the passkeys and `pirc-web revoke` deletes one,
   ending its sessions. Removing the server's key on the relay cuts off
   every browser at once.
@@ -364,7 +368,8 @@ not in `web/`, since they belong to neither client.
   in the message box leaves it, and only a second Esc stops pi, so that
   Esc pressed from habit while writing does not stop a turn (the reason
   Stop moved away from Steer, above); nor while pi asks a question,
-  which has its own answers. Reasons: a letter alone can be pressed by
+  which has its own answers and takes the focus when the message box it
+  replaces had it. Reasons: a letter alone can be pressed by
   mistake or by voice control, hence the switch; the mock-up's status
   line was not taken, Settings being where the app's other settings are.
 - **Search stays at the top of the list**, held there while the list
@@ -549,9 +554,9 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
   terminal. The question takes the composer's place while it waits, under
   "pi asks", its text kept as written, indented and bracketed blocks as
   code and "Name: value" lines as a label and value; a yes or no and a
-  select's options go with an optional note for pi, Dismiss closes the
-  question and stops pi, an input's text is the answer, and one only pi's
-  terminal can answer says so, with where pi runs and Stop; the tool call
+  select's options go with an optional note for pi, "Dismiss and stop"
+  closes the question and stops pi's turn, an input's text is the
+  answer, and one only pi's terminal can answer says so, with where pi runs and Stop; the tool call
   it holds up says "Waiting for you". `?` in the accent colour marks a
   session that asks, in the list and the chat, and the list's counts
   count each session once, asking before working before done, so that

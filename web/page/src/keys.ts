@@ -57,9 +57,10 @@ export function typing(t: EventTarget | null): boolean {
 }
 
 // A key press the app's keys may take: no modifier, no input method
-// composing, nothing over the page, and not typed into a field.
+// composing, nothing over the page, not typed into a field, and not in
+// a part that has keys of its own (data-own-keys: pi's question).
 export function free(e: KeyboardEvent): boolean {
-  return !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && !layerOpen() && !typing(e.target);
+  return !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && !layerOpen() && !typing(e.target) && !(e.target instanceof Element && e.target.closest("[data-own-keys]"));
 }
 
 // Listens for keys while enabled.

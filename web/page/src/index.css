@@ -17,6 +17,10 @@
 @custom-variant triage (&:where([data-look="triage"], [data-look="triage"] *));
 @custom-variant native (&:where([data-look="native"], [data-look="native"] *));
 @custom-variant cockpit (&:where([data-look="cockpit"], [data-look="cockpit"] *));
+/* A touch screen. iOS Safari zooms the page into a field whose text is
+   under 16px as it takes focus, and leaves it zoomed: on touch screens a
+   field is 16px or more, "touch:text-base!" where a look makes it less. */
+@custom-variant touch (@media (pointer: coarse));
 
 :root {
   --paper: #fbfbf9;

@@ -1044,7 +1044,8 @@ prompt is on its way from pi's `input` event (after commands, before
 `before_agent_start`), stops that run itself as it starts, if it starts
 within 5 seconds of the dismiss. Clients
 show an answerable question in place of the composer, with the note field
-(`web.md`, section 3).
+(`web.md`, section 3), and name its dismiss for what it does: "Dismiss and
+stop", since a bare "Dismiss" reads as closing the question alone.
 
 **pi's notifications, in the chat.** Extensions tell the person things
 through `ctx.ui.notify` (info, warning, error), which only pi's terminal

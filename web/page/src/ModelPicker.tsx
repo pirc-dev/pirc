@@ -100,7 +100,7 @@ export function ModelPicker(p: {
             aria-expanded="true"
             aria-controls="model-results"
             aria-activedescendant={results[active] ? `model-${active}` : undefined}
-            className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink3 native:text-[17px] cockpit:font-mono cockpit:text-sm"
+            className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink3 native:text-[17px] cockpit:font-mono cockpit:text-sm cockpit:touch:text-base!"
           />
         </label>
         <ul ref={list} id="model-results" role="listbox" className="flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">

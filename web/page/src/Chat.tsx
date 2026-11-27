@@ -396,8 +396,10 @@ function Items(p: {
       if (away) setAway(false);
       if (more) setMore(false);
     }
-    if (atEnd.current) {
+    if (follow()) {
       el.scrollTop = el.scrollHeight;
+      lastSeen.current = last;
+    } else if (atEnd.current) {
       lastSeen.current = last;
     } else if (last !== lastSeen.current && !more) setMore(true);
   });
@@ -413,7 +415,7 @@ function Items(p: {
     const toggled = () => (opened = true);
     el.addEventListener("toggle", toggled, true);
     const grown = new ResizeObserver(() => {
-      if (atEnd.current && !opened) el.scrollTop = el.scrollHeight;
+      if (follow() && !opened) el.scrollTop = el.scrollHeight;
       opened = false;
     });
     grown.observe(inner);
@@ -422,10 +424,25 @@ function Items(p: {
       el.removeEventListener("toggle", toggled, true);
     };
   }, [p.chat === undefined]);
+  // Near the end is at it, but any move up the reader makes leaves it at
+  // once: the next token would otherwise pull a slow drag back down. Only
+  // the reader moves the chat up; the page only ever scrolls it down, and
+  // content that shrinks under it leaves it at the very end.
+  const lastTop = useRef(0);
+  // A wheel or finger moving up holds the end off for a moment, until its
+  // scroll says whether the chat moved (a code block inside may have
+  // taken it instead).
+  const fingerY = useRef(0);
+  const reaching = useRef(0);
+  const reach = () => (reaching.current = performance.now());
+  const follow = () => atEnd.current && performance.now() - reaching.current > 250;
   const onScroll = () => {
     const el = box.current;
     if (!el) return;
-    atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const up = el.scrollTop < lastTop.current - 1 && gap > 1;
+    lastTop.current = el.scrollTop;
+    atEnd.current = !up && gap < 80;
     setAway(!atEnd.current);
     // Back in the chat: away from its end and from its top, folding a
     // little further down than it unfolds, so that it does not flicker.
@@ -476,7 +493,19 @@ function Items(p: {
   if (!p.chat) return <div className="flex-1" />;
   return (
     <div className="relative flex min-h-0 flex-1 flex-col native:bg-card">
-      <div ref={box} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 native:px-3.5 cockpit:px-3.5" style={p.top ? { paddingTop: p.top + 16 } : undefined}>
+      <div
+        ref={box}
+        onScroll={onScroll}
+        // Before the scroll itself: a token rendered in between would
+        // otherwise take the chat back to the end.
+        onWheel={(e) => e.deltaY < 0 && reach()}
+        onTouchStart={(e) => (fingerY.current = e.touches[0].clientY)}
+        onTouchMove={(e) => {
+          const y = e.touches[0].clientY;
+          if (y > fingerY.current + 2) reach();
+          fingerY.current = y;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-5 py-4 native:px-3.5 cockpit:px-3.5" style={p.top ? { paddingTop: p.top + 16 } : undefined}>
         <div className="mx-auto flex max-w-[40rem] flex-col gap-4">
           {earlier
             ? (

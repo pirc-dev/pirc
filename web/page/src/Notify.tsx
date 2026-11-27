@@ -74,6 +74,14 @@ async function turnOn(): Promise<string> {
   return sub.endpoint;
 }
 
+// Ends this browser's subscription, at the server and in the browser.
+export async function unsubscribe(): Promise<void> {
+  const sub = await subscription();
+  if (!sub) return;
+  await api.call("/api/push/unsubscribe", { endpoint: sub.endpoint }).catch(() => {});
+  await sub.unsubscribe();
+}
+
 // Gives the server the subscription this browser has, if any (the list
 // calls it as it loads).
 export async function resubscribe(): Promise<void> {
@@ -144,11 +152,7 @@ export function useNotify() {
     setProblem(undefined);
     setState({ kind: "busy", was: "on" });
     try {
-      const sub = await subscription();
-      if (sub) {
-        await api.call("/api/push/unsubscribe", { endpoint: sub.endpoint }).catch(() => {});
-        await sub.unsubscribe();
-      }
+      await unsubscribe();
       setState({ kind: "off" });
     } catch (e) {
       setState({ kind: "off" });

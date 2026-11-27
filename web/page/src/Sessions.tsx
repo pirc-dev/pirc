@@ -301,7 +301,7 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
               autoCorrect="off"
               spellCheck={false}
               enterKeyHint="go"
-              className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink3 native:text-[17px] cockpit:font-mono cockpit:text-sm"
+              className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink3 native:text-[17px] cockpit:font-mono cockpit:text-sm cockpit:touch:text-base!"
             />
             {query && <button className="min-h-11 text-[15px] text-ink cards:text-accent cockpit:font-mono cockpit:text-[13px] cockpit:text-link" onClick={() => setQuery("")}>Cancel</button>}
           </label>

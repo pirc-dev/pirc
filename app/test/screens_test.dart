@@ -1509,10 +1509,10 @@ void main() {
       model.client.onFrame(Frame(routed: Routed(session: sent.last.routed.session, payload: SessionMessage(error: Error(requestId: answered().requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'that question is no longer asked')).writeToBuffer())));
       await tester.pump();
       expect(find.textContaining('no longer asked'), findsOneWidget);
-      // Dismiss, tapped 17 points above and below the word.
+      // Dismiss and stop, tapped 17 points above and below the word.
       for (final dy in [-17.0, 17.0]) {
         sent.clear();
-        await tester.tapAt(tester.getCenter(find.text('Dismiss')).translate(0, dy));
+        await tester.tapAt(tester.getCenter(find.text('Dismiss and stop')).translate(0, dy));
         await tester.pump();
         expect((answered().questionId, answered().dismissed), ('q9', true), reason: '$dy from the word');
         model.client.onFrame(Frame(routed: Routed(session: sent.last.routed.session, payload: SessionMessage(error: Error(requestId: answered().requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'again')).writeToBuffer())));
@@ -1556,7 +1556,7 @@ void main() {
       await asked(tester, Question(id: 'q6', kind: QuestionKind.QUESTION_KIND_EDITOR, title: 'Commit message', answerable: false, askedAt: ts(now)));
       expect(find.text('PI ASKS IN ITS TERMINAL'), findsOneWidget);
       expect(find.text("This needs pi's terminal to answer."), findsOneWidget);
-      expect(find.text('Dismiss'), findsNothing);
+      expect(find.text('Dismiss and stop'), findsNothing);
       expect(find.text('Waiting for you'), findsNothing, reason: 'not for the app to answer');
       await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/question_terminal_light.png'));
       sent.clear();

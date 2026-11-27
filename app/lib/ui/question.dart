@@ -1,9 +1,9 @@
 // One of pi's questions, in the composer's place while it waits: pi cannot
 // read a message until it is answered. A confirm's No and Yes, a select's
 // options, each with a note for pi that goes with the answer; an input's
-// text, which is the answer; Dismiss, which closes the question and stops
-// the turn. An editor or an extension's own dialog only pi's terminal can
-// answer: where pi runs, and Stop.
+// text, which is the answer; "Dismiss and stop", which closes the question
+// and stops the turn. An editor or an extension's own dialog only pi's
+// terminal can answer: where pi runs, and Stop.
 import 'package:flutter/cupertino.dart';
 
 import '../app/model.dart';
@@ -156,7 +156,7 @@ class _QuestionDockState extends State<QuestionDock> {
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   minimumSize: const Size(44, 44),
                   onPressed: _sending ? null : () => _answer(dismissed: true),
-                  child: Text('Dismiss', style: look.text(size: 14, weight: FontWeight.w500, color: look.ink2, spacing: 0)),
+                  child: Text('Dismiss and stop', style: look.text(size: 14, weight: FontWeight.w500, color: look.ink2, spacing: 0)),
                 ),
             ]),
           ),

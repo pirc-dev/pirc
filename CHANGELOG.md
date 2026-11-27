@@ -14,6 +14,19 @@ release that needs its parts upgraded together says so here.
 - In the web app, closing an image opened full screen from a message no
   longer offers going back or forking from that message; with Enter, the
   image stayed open and the offer came over it.
+- The web app has Sign out, in Settings → This browser: it ends the
+  browser's sign-in and turns off its notifications, for a computer that is
+  not your own. The passkey stays.
+- A question's Dismiss is now "Dismiss and stop", in the web app and the
+  phone apps, since it has always stopped pi's turn too; on the web it is a
+  full-size target.
+- In the web app on a computer, a question that arrives while you type takes
+  the focus, so the keys you press next are not the list's (j, k, n), and a
+  screen reader reads it.
+- In the web app, scrolling up a little while a reply streams keeps your
+  place; before, anything short of 80 pixels was pulled back to the end.
+- On phones and tablets, the web app's text fields are at least 16 pixels in
+  every look, so iOS no longer zooms the page in when one is tapped.
 
 ## 0.3.13 (2026-11-21)
 

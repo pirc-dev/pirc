@@ -270,6 +270,12 @@ live.remove = async (key) => {
   return { ok: true };
 };
 
+// Signing out shows the sign-in, as it would.
+live.signOut = async () => {
+  await new Promise((r) => setTimeout(r, 400));
+  location.search = "?screen=signin";
+};
+
 const screen = new URLSearchParams(location.search).get("screen") ?? "list";
 const banner = new URLSearchParams(location.search).get("banner");
 const look = new URLSearchParams(location.search).get("look");

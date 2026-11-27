@@ -146,6 +146,13 @@ export class Live {
     return this.load();
   }
 
+  // Signing out on purpose (Settings): the server forgets this browser's
+  // sign-in, and the page shows the sign-in.
+  async signOut(): Promise<void> {
+    await call("/api/logout", {});
+    this.signedOut();
+  }
+
   signedOut(): void {
     this.close();
     this.replaced++;
