@@ -191,6 +191,20 @@ test("history's files come into the chat by name, type and size; a message with 
   assert.ok(plain.kind === "user" && !("attachments" in plain));
 });
 
+test("a tool's images come into its result, kept for the page by key; a placeholder has none", async () => {
+  const t = await setup();
+  const ev = (seq: string, item: JsonObject) => ({ routed: { session: REF, message: { event: { seq, at: "2026-10-25T10:00:00Z", item: { turnId: "t", ...item } } } } });
+  t.client.onFrame(frameIn(ev("1", { toolCall: { toolCallId: "c1", toolName: "read", argumentsJson: "{}" } })));
+  t.client.onFrame(frameIn(ev("2", { toolResult: { toolCallId: "c1", text: "Read image", images: [{ mimeType: "image/png", data: "iVBORw==" }, { mimeType: "image/jpeg" }] } })));
+  t.client.onFrame(frameIn(ev("3", { toolResult: { toolCallId: "c2", text: "no images" } })));
+  const [read, plain] = t.client.chat(VID)!.items;
+  assert.ok(read.kind === "tool" && read.result?.images?.length === 2);
+  const [kept, placeholder] = read.result!.images!;
+  assert.equal(t.client.image(kept.key!)?.mimeType, "image/png");
+  assert.deepEqual(placeholder, { mimeType: "image/jpeg" });
+  assert.ok(plain.kind === "tool" && !("images" in plain.result!));
+});
+
 test("the session list names a message of files alone by its file, or how many; images come first", () => {
   const user = (text: string, images: number, files: string[]): ChatItem => ({
     kind: "user", id: "u", turnId: "t", at: 1, text,

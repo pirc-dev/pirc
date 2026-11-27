@@ -2,6 +2,7 @@
 import { createContext, memo, useContext } from "react";
 import type { ToolItem } from "../../core/view.ts";
 import { Icon } from "./icons.tsx";
+import { Thumbs } from "./Images.tsx";
 import { useNow } from "./time.ts";
 import { diffLines, took } from "../../core/chat.ts";
 
@@ -70,7 +71,8 @@ export function Tool(p: { item: ToolItem }) {
   const diff = r?.diff && !r.isError ? r.diff : undefined;
   const label = "font-ui text-[10.5px] font-semibold tracking-[0.14em] text-ink3 uppercase";
   const pre = "max-h-96 overflow-auto whitespace-pre leading-[1.55]";
-  return (
+  const images = r?.images ?? [];
+  const tool = (
     <details open={running && Boolean(t.progress)} className={`font-mono text-[12.5px] cards:overflow-hidden cards:rounded-xl cards:border cards:bg-card native:bg-paper cockpit:overflow-hidden cockpit:rounded-lg cockpit:border ${t.result?.isError ? "cards:border-block cockpit:border-block" : "cards:border-rule native:border-transparent cockpit:border-rule"}`}>
       <summary className="flex min-h-[30px] cursor-pointer list-none items-baseline gap-2.5 py-1 [&::-webkit-details-marker]:hidden cards:min-h-10 cards:items-center cards:gap-2 cards:px-3 cockpit:min-h-9 cockpit:items-center cockpit:gap-2 cockpit:px-2.5">
         <span className={`w-3 flex-none text-center font-semibold ${t.result?.isError ? "text-block" : waiting ? "text-accent" : running ? "animate-pulse text-work" : "text-done"}`}>{t.result?.isError ? "✕" : running ? "●" : "✓"}</span>
@@ -97,6 +99,14 @@ export function Tool(p: { item: ToolItem }) {
         {out && !diff && <pre className={`${pre} ${t.result?.isError ? "text-block" : "text-ink2"}`}>{out.length > 20000 ? `${out.slice(0, 20000)}\n…` : out}</pre>}
       </div>
     </details>
+  );
+  if (!images.length) return tool;
+  // Shown open or folded: the result's point, often.
+  return (
+    <div className="flex flex-col gap-1.5">
+      {tool}
+      <Thumbs images={images} />
+    </div>
   );
 }
 

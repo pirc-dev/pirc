@@ -194,6 +194,8 @@ export interface ToolItem extends ItemBase {
     exitCode?: number;
     // A file edit's changes, as a unified diff (pi's edit tool).
     diff?: string;
+    // The images in the result, as pi shrank them; absent when none.
+    images?: ImageView[];
   };
 }
 

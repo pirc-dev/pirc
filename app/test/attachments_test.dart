@@ -153,6 +153,20 @@ void main() {
     expect(plain.toJson().containsKey('attachments'), isFalse, reason: 'left out when none, as the web has it');
   });
 
+  test("a tool's images come into its result, kept by key; a placeholder has none", () async {
+    final (m, _) = model(['prompt', 'history_request']);
+    await pumpEventQueue();
+    void ev(int seq, ConversationItem item) =>
+        m.client.onFrame(Frame(routed: Routed(session: ref, payload: SessionMessage(event: SessionEvent(seq: Int64(seq), item: item)).writeToBuffer())));
+    ev(2, ConversationItem(turnId: 't', toolCall: ToolCall(toolCallId: 'c1', toolName: 'read', argumentsJson: '{}')));
+    ev(3, ConversationItem(turnId: 't', toolResult: ToolResult(toolCallId: 'c1', text: 'Read image', images: [Image(mimeType: 'image/png', data: [1, 2, 3]), Image(mimeType: 'image/jpeg')])));
+    final r = m.chat(idOf(m))!.items.whereType<ToolItem>().single.result!;
+    expect([for (final i in r.images) (i.mimeType, i.key != null)], [('image/png', true), ('image/jpeg', false)]);
+    expect(m.client.image(r.images.first.key!)!.data, [1, 2, 3]);
+    expect(ToolResultView.fromJson(r.toJson()).images.length, 2);
+    expect(const ToolResultView(text: '', isError: false).toJson().containsKey('images'), isFalse);
+  });
+
   test('picked files kept while they fit in what is left; the others said', () {
     final r = fitFiles([
       {'name': 'a.txt', 'mimeType': 'text/plain', 'size': 6, 'data': bytes(6)},

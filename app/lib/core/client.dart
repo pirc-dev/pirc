@@ -672,6 +672,10 @@ class Client {
           durationMs: v.hasDurationMs() ? v.durationMs : null,
           exitCode: v.hasExitCode() ? v.exitCode : null,
           diff: v.diff.isEmpty ? null : v.diff,
+          images: [
+            for (final i in v.images)
+              ImageView(mimeType: i.mimeType, key: i.data.isNotEmpty ? _images.put(i.mimeType, Uint8List.fromList(i.data)) : null),
+          ],
         );
         final call = s.chat.items.whereType<ToolItem>().where((x) => x.id == v.toolCallId).firstOrNull;
         item = call != null

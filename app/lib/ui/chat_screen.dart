@@ -400,8 +400,11 @@ class _ChatScreenState extends State<ChatScreen> {
     return identical(widget.model.chat(widget.id)?.items.whereType<ToolItem>().lastOrNull, t);
   }
 
+  // An image's data by its key; null for a placeholder, or one no longer kept.
+  Uint8List? _image(String? key) => key == null ? null : widget.model.client.image(key)?.data;
+
   Widget _part(Part p) => switch (p) {
-        ToolsPart(:final tools) => _Folded(tools, now: widget.model.now),
+        ToolsPart(:final tools) => _Folded(tools, now: widget.model.now, image: _image),
         ItemPart(item: UserItem item) => _Bubble(
             text: item.text,
             images: [for (final i in item.images) i.key == null ? null : widget.model.client.image(i.key!)?.data],
@@ -410,7 +413,7 @@ class _ChatScreenState extends State<ChatScreen> {
             offer: item.entryId == null || widget.model.session(widget.id) == null ? null : () => _from(item),
           ),
         ItemPart(item: AssistantItem item) => _Reply(item),
-        ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item)),
+        ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item), image: _image),
         ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary),
         ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary),
         ItemPart(item: NotificationItem item) => _Notified(item),
@@ -1061,8 +1064,10 @@ class _MarkPainter extends CustomPainter {
 // output, and is open while it runs and shows output. An edit shows its
 // changes.
 class _Tool extends StatefulWidget {
-  const _Tool(this.t, {required this.now, this.waiting = false});
+  const _Tool(this.t, {required this.now, this.waiting = false, required this.image});
   final ToolItem t;
+  // An image of its result, by key.
+  final Uint8List? Function(String? key) image;
   // The host's clock, for how long a running tool has run.
   final int Function() now;
   // pi waits for an answer to run it, or not.
@@ -1131,6 +1136,12 @@ class _ToolState extends State<_Tool> {
             ]),
           ),
         ),
+        // Shown open or folded: the result's point, often.
+        if (r != null && r.images.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Align(alignment: Alignment.centerLeft, child: Thumbs(images: [for (final i in r.images) widget.image(i.key)])),
+          ),
         if (open)
           Selectable(
             child: Padding(
@@ -1166,8 +1177,9 @@ class _ToolState extends State<_Tool> {
 // Tool calls one after another, all finished well: one line, "✓ 3 tools
 // grep, read, edit", that opens to them.
 class _Folded extends StatefulWidget {
-  const _Folded(this.tools, {required this.now});
+  const _Folded(this.tools, {required this.now, required this.image});
   final List<ToolItem> tools;
+  final Uint8List? Function(String? key) image;
   final int Function() now;
 
   @override
@@ -1199,7 +1211,7 @@ class _FoldedState extends State<_Folded> {
           ]),
         ),
       ),
-      if (_open) for (final t in widget.tools) _Tool(t, now: widget.now),
+      if (_open) for (final t in widget.tools) _Tool(t, now: widget.now, image: widget.image),
     ]);
   }
 }

@@ -677,6 +677,7 @@ export class Client {
           ...(v.durationMs !== undefined ? { durationMs: v.durationMs } : {}),
           ...(v.exitCode !== undefined ? { exitCode: v.exitCode } : {}),
           ...(v.diff ? { diff: v.diff } : {}),
+          ...(v.images.length ? { images: v.images.map((i) => ({ mimeType: i.mimeType, ...(i.data.length > 0 ? { key: this.images.put(i.mimeType, i.data) } : {}) })) } : {}),
         };
         item = call?.kind === "tool"
           ? { ...call, progress: undefined, result }

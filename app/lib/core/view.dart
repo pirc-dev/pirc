@@ -430,13 +430,15 @@ class AssistantItem extends ChatItem {
 }
 
 class ToolResultView {
-  const ToolResultView({required this.text, required this.isError, this.durationMs, this.exitCode, this.diff});
+  const ToolResultView({required this.text, required this.isError, this.durationMs, this.exitCode, this.diff, this.images = const []});
 
   final String text;
   final bool isError;
   final int? durationMs;
   final int? exitCode;
   final String? diff;
+  // The images in the result, as pi shrank them.
+  final List<ImageView> images;
 
   factory ToolResultView.fromJson(Json j) => ToolResultView(
         text: j['text'] as String,
@@ -444,9 +446,17 @@ class ToolResultView {
         durationMs: _int(j['durationMs']),
         exitCode: _int(j['exitCode']),
         diff: j['diff'] as String?,
+        images: _list(j['images'], ImageView.fromJson) ?? const [],
       );
 
-  Json toJson() => _json({'text': text, 'isError': isError, 'durationMs': durationMs, 'exitCode': exitCode, 'diff': diff});
+  Json toJson() => _json({
+        'text': text,
+        'isError': isError,
+        'durationMs': durationMs,
+        'exitCode': exitCode,
+        'diff': diff,
+        if (images.isNotEmpty) 'images': images.map((i) => i.toJson()).toList(),
+      });
 }
 
 class ToolItem extends ChatItem {
