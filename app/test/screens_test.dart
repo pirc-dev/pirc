@@ -457,6 +457,12 @@ void main() {
       visit(tester.binding.renderViews.first.owner!.semanticsOwner!.rootSemanticsNode!);
       handle.dispose();
       expect(marked.where((l) => l.contains('release')), hasLength(1), reason: "the chat's row, marked as selected");
+      // The header in the messages' column: 640 in the middle of the pane,
+      // as the box under them.
+      final pane = tester.getRect(find.byType(ChatScreen));
+      final column = pane.left + (pane.width - 640) / 2;
+      expect(tester.getRect(find.descendant(of: find.byType(ChatScreen), matching: find.byType(StatusBadge)).first).left, closeTo(column, 0.5));
+      expect(tester.getRect(find.descendant(of: find.byType(ChatScreen), matching: find.byType(CupertinoTextField))).right, lessThanOrEqualTo(column + 640));
       await expectLater(find.byType(CupertinoApp), matchesGoldenFile(golden('wide_${b.name}.png')));
     }, skip: !drawsGoldens, variant: ios);
   }

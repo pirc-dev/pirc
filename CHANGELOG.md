@@ -8,6 +8,8 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Beside the list, on a computer or a tablet, the chat's title and its
+  lines are in line with the messages under them.
 - On a phone on its side, the chat's header is one line and the
   message box grows less, leaving the chat room above the keyboard; in
   the apps nothing sits under the notch any more.

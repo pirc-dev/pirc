@@ -218,16 +218,19 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
             </div>
           )}
           {!fold && (
-            <div className={`flex items-center ${p.wide ? "pr-2 pl-1" : ""}`}>
-              {p.wide && <SideToggle />}
-              <div className="mx-auto min-w-0 max-w-[44rem] flex-1">
-                <div className="flex items-baseline gap-2 px-4">
+            // Beside the list, the title and its lines in the messages'
+            // column (40rem, in the middle), the list's button and the
+            // actions in gutters of one width either side of it.
+            <div className={p.wide ? "grid grid-cols-[3.25rem_minmax(0,1fr)_3.25rem] items-start" : "flex items-center"}>
+              {p.wide && <div className="pl-2"><SideToggle /></div>}
+              <div className={`mx-auto w-full min-w-0 max-w-[40rem] ${p.wide ? "pt-1.5" : ""}`}>
+                <div className={`flex items-baseline gap-2 ${p.wide ? "" : "px-4"}`}>
                   {s && <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} className="w-4 text-[17px]" />}
                   <h1 className="min-w-0 flex-1 truncate font-read text-2xl font-medium tracking-[-0.01em] cards:text-xl cards:font-[650] native:text-lg native:font-semibold cockpit:font-mono cockpit:text-base cockpit:font-bold">{s ? title(s) : "Session ended"}</h1>
                 </div>
-                {s && <Meta session={s} spend={spend} />}
+                {s && <Meta session={s} spend={spend} wide={p.wide} />}
               </div>
-              {p.wide && actions}
+              {p.wide && <div className="justify-self-end pr-2">{actions}</div>}
             </div>
           )}
         </header>
@@ -339,11 +342,12 @@ function Spend(p: { text: string; className: string }) {
 // model, its provider and the thinking level, with the context and cost at
 // the right. Each line truncates at its end; the context and cost do not.
 // The whole folder is in the session's menu.
-function Meta(p: { session: SessionView; spend: string | undefined }) {
+function Meta(p: { session: SessionView; spend: string | undefined; wide?: boolean }) {
   const s = p.session;
   const place = [where(s), s.cwd && folder(s.cwd)].filter(Boolean).join(" · ");
   const model = [s.model && (s.model.name || s.model.id), s.model?.provider, s.thinking].filter(Boolean).join(" · ");
-  const line = "pr-4 pl-10 native:pl-[54px] cards:font-mono cockpit:font-mono";
+  // In line with the title, after the status mark (each look's width).
+  const line = `${p.wide ? "pl-6 cards:pl-[30px] native:pl-10" : "pr-4 pl-10 native:pl-[54px]"} cards:font-mono cockpit:font-mono`;
   return (
     <>
       {place && <p className={`truncate pt-0.5 text-[12.5px] text-ink2 cards:text-xs cards:text-ink3 native:font-ui native:text-xs native:text-ink2 cockpit:text-[11.5px] cockpit:text-ink3 ${line}`} title={s.cwd}>{place}</p>}

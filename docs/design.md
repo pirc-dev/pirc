@@ -1821,7 +1821,9 @@ built; steps 14 and 15 are not finished.
         the chat's row marked and neither with a way back; as on the web,
         its edge drags it between 280 and 560 (380 at first, the chat
         keeping 400) and a button at the start of the chat's header hides
-        it, both kept on the device. Narrower (Split View, every phone,
+        it, both kept on the device. The chat's header keeps to the
+        messages' column, 640 in the middle, the button and the actions in
+        gutters of one width either side. Narrower (Split View, every phone,
         a phone on its side) it is as on a phone. Sheets there are at most
         512 wide, in the middle, as the web page's.
         The same rule holds by width on Android, for tablets and opened

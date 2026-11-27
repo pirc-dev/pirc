@@ -566,51 +566,60 @@ class _Header extends StatelessWidget {
         ]),
       ));
     }
+    final badge = s == null ? null : StatusBadge(statusOf(s, news), compacting: s.compacting);
+    final name = Text(s == null ? 'Session ended' : title(s), style: look.text(size: 18, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis);
+    final placeLine = place.isEmpty ? null : Text(place, style: look.text(size: 12, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis);
+    final modelLine = s == null || (model.isEmpty && spend == null)
+        ? null
+        : Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Expanded(child: Text(model, style: small, maxLines: 1, overflow: TextOverflow.ellipsis)),
+            if (spend != null) ...[
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Context used · cost so far: $spend',
+                excludeSemantics: true,
+                child: Text(spend!, style: small.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+              ),
+            ],
+          ]);
+    // Beside the list, the title and its lines in the messages' column (640
+    // in the middle), the list's button and the actions in gutters of one
+    // width either side of it, as the web page's.
+    if (!back) {
+      return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.5, child: LayoutBuilder(builder: (context, box) {
+        final gutter = math.max(52.0, (box.maxWidth - 640) / 2);
+        return Container(
+          decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
+          padding: EdgeInsets.only(top: pad.top + 8, bottom: 10),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(width: gutter, child: const Align(alignment: Alignment.topLeft, child: Padding(padding: EdgeInsets.only(left: 4), child: SideToggle()))),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SizedBox(height: 44, child: Row(children: [if (badge != null) ...[badge, const SizedBox(width: 8)], Expanded(child: name)])),
+              if (placeLine != null) Padding(padding: const EdgeInsets.only(left: 40), child: placeLine),
+              if (modelLine != null) Padding(padding: const EdgeInsets.only(left: 40, top: 2), child: modelLine),
+            ])),
+            SizedBox(width: gutter, child: Align(alignment: Alignment.topRight, child: Padding(padding: const EdgeInsets.only(right: 8), child: more))),
+          ]),
+        );
+      }));
+    }
     return MediaQuery.withClampedTextScaling(maxScaleFactor: 1.5, child: Container(
       decoration: BoxDecoration(color: look.card, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
-      padding: EdgeInsets.only(top: pad.top + (back ? 0 : 8), bottom: 10, left: pad.left, right: pad.right),
-      // Beside the list, the button that hides it first, as the web page's.
-      child: Row(children: [
-        if (!back) ...[const SizedBox(width: 4), const SideToggle()],
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // Over the list, a line for the way back and the actions; beside
-        // it, the actions at the end of the title's line, as the web page's.
-        if (back)
-          SizedBox(
-            height: 44,
-            child: Row(children: [const SizedBox(width: 4), _Back(), const Spacer(), ?more, const SizedBox(width: 8)]),
-          ),
+      padding: EdgeInsets.only(top: pad.top, bottom: 10, left: pad.left, right: pad.right),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // A line for the way back and the actions, then the title.
+        SizedBox(
+          height: 44,
+          child: Row(children: [const SizedBox(width: 4), _Back(), const Spacer(), ?more, const SizedBox(width: 8)]),
+        ),
         Padding(
-          padding: EdgeInsets.only(left: back ? 16 : 4, right: back ? 16 : 8),
-          child: Row(children: [
-            if (s != null) ...[StatusBadge(statusOf(s, news), compacting: s.compacting), const SizedBox(width: 8)],
-            Expanded(child: Text(s == null ? 'Session ended' : title(s), style: look.text(size: 18, weight: FontWeight.w600, spacing: -0.2), maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (!back && more != null) ...[const SizedBox(width: 4), more],
-          ]),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(children: [if (badge != null) ...[badge, const SizedBox(width: 8)], Expanded(child: name)]),
         ),
         // In line with the title; each line cut at its end, the context
         // and cost never.
-        if (place.isNotEmpty)
-          Padding(
-            padding: EdgeInsets.fromLTRB(back ? 56 : 44, 2, 16, 0),
-            child: Text(place, style: look.text(size: 12, color: look.ink2, spacing: 0), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        if (s != null && (model.isNotEmpty || spend != null))
-          Padding(
-            padding: EdgeInsets.fromLTRB(back ? 56 : 44, 2, 16, 0),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-              Expanded(child: Text(model, style: small, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              if (spend != null) ...[
-                const SizedBox(width: 8),
-                Semantics(
-                  label: 'Context used · cost so far: $spend',
-                  excludeSemantics: true,
-                  child: Text(spend!, style: small.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-                ),
-              ],
-            ]),
-          ),
-      ])),
+        if (placeLine != null) Padding(padding: const EdgeInsets.fromLTRB(56, 2, 16, 0), child: placeLine),
+        if (modelLine != null) Padding(padding: const EdgeInsets.fromLTRB(56, 2, 16, 0), child: modelLine),
       ]),
     ));
   }
