@@ -1,5 +1,5 @@
-// The key store, the prefs, the private folder, the clipboard, the
-// screen's cover, the app's version, notifications, join links and the
+// The key store, the prefs, the private folder, the clipboard, the file
+// picker, the screen's cover, the app's version, notifications, join links and the
 // subscription, registered on the app's Flutter engine; told of the APNs
 // token as the app's delegate, and of links opened as the scene's.
 import Flutter
@@ -12,6 +12,7 @@ public final class PircPlatformPlugin: NSObject, FlutterPlugin, FlutterSceneLife
   private var screen: Screen?
   private var links: Links?
   private var store: Store?
+  private var picker: Picker?
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     KeyStore.register(with: registrar.messenger())
@@ -22,6 +23,7 @@ public final class PircPlatformPlugin: NSObject, FlutterPlugin, FlutterSceneLife
     Attest.register(with: registrar.messenger())
     let plugin = PircPlatformPlugin()
     plugin.screen = Screen.register(with: registrar.messenger())
+    plugin.picker = Picker.register(with: registrar.messenger())
     plugin.push = Push(channel: FlutterMethodChannel(name: "dev.pirc.app/push", binaryMessenger: registrar.messenger()))
     plugin.links = Links(channel: FlutterMethodChannel(name: "dev.pirc.app/links", binaryMessenger: registrar.messenger()))
     plugin.store = Store(channel: FlutterMethodChannel(name: "dev.pirc.app/store", binaryMessenger: registrar.messenger()))

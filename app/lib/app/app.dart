@@ -743,7 +743,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         if (mounted && _relay == relay) await _removed(relay);
       },
     );
-    model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey);
+    model = PircModel(send: run.send, cache: widget.cache, publicKey: open.main.signing.publicKey, backlog: run.backlog);
     _notes?.attach(model, run.send);
     final key = await DeviceKey.fromSeed(open.mainSeed);
     if (!mounted) {

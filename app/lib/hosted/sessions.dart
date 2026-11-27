@@ -711,6 +711,14 @@ class HostedSessions implements ChannelEvents {
 
   // --- From the Client -----------------------------------------------------
 
+  /// The bytes held back on their way to a session's computer: queued for
+  /// its channel's window, or held until the channel opens.
+  int backlog(common.SessionRef ref) {
+    final p = _processes[_processId(ref.hostKey, ref.instanceId)];
+    if (p == null) return 0;
+    return (p.channel?.backlog ?? 0) + p.held.fold(0, (n, h) => n + h.$2.length);
+  }
+
   /// A frame the Client sends; false when it could not be sent.
   bool fromClient(v1.Frame f) {
     if (!_connected) return false;

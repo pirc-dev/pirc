@@ -1,5 +1,6 @@
 // Messages sent from this client that pi has not yet shown in the chat. A
 // port of web/core/pending.ts; images are the app's own kind (I).
+import 'attachments.dart';
 import 'view.dart';
 
 class Pending<I> {
@@ -8,6 +9,7 @@ class Pending<I> {
     required this.requestId,
     required this.text,
     this.images,
+    this.files,
     this.delivery,
     required this.state,
     this.error,
@@ -21,6 +23,8 @@ class Pending<I> {
   final String requestId;
   final String text;
   final List<I>? images;
+  // Sent with it, kept to send it again.
+  final List<OutgoingFile>? files;
   // "steer" or "followUp".
   final String? delivery;
   // "sending", "sent", "queued", "failed" or "lost".
@@ -32,7 +36,7 @@ class Pending<I> {
   final Set<String> before;
 
   Pending<I> copyWith({String? state, String? error, bool? unsure}) => Pending(
-        key: key, requestId: requestId, text: text, images: images, delivery: delivery,
+        key: key, requestId: requestId, text: text, images: images, files: files, delivery: delivery,
         state: state ?? this.state, error: error ?? this.error, unsure: unsure ?? this.unsure, before: before,
       );
 }
@@ -67,7 +71,8 @@ List<Pending<I>> settle<I>(List<Pending<I>> pending, List<ChatItem> items) {
 // "/" command gets no copy in the chat; anything else waits for its copy.
 Pending<I>? answered<I>(Pending<I> p, bool ok, [String? error, bool unsure = false]) {
   if (!ok) return p.copyWith(state: 'failed', error: error, unsure: unsure ? true : null);
-  if (p.text.startsWith('/')) return null;
+  // A message with files is never run as a command.
+  if (p.text.startsWith('/') && (p.files ?? const []).isEmpty) return null;
   return p.copyWith(state: p.delivery != null ? 'queued' : 'sent');
 }
 

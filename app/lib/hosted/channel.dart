@@ -277,6 +277,9 @@ class HostedChannel {
   }
 
   /// Sends a session's message; false if the channel is not ready.
+  /// The bytes queued for the window.
+  int get backlog => _queued;
+
   bool sendSession(String sessionId, Uint8List message) {
     if (!ready) return false;
     _queuePieces(ChannelFrame(session: SessionFrame(sessionId: sessionId, message: message)));

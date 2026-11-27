@@ -213,6 +213,7 @@ class Client {
     Clock? clock,
     int? imageBytes,
     this.publicKey,
+    this.backlog,
   })  : _newId = newId ?? _randomId,
         _clock = clock ?? _RealClock(),
         _images = ImageStore(imageBytes ?? imageBytes_);
@@ -225,6 +226,9 @@ class Client {
   final void Function(ViewEvent) onEvent;
   // This client's own public key, to mark it in the devices.
   final List<int>? publicKey;
+  // The bytes sent and held back on their way to a session's computer;
+  // null when the connection holds none back.
+  final int Function(SessionRef)? backlog;
   final String Function() _newId;
   final Clock _clock;
   final ImageStore _images;
@@ -626,6 +630,7 @@ class Client {
             for (final i in v.images)
               ImageView(mimeType: i.mimeType, key: i.data.isNotEmpty ? _images.put(i.mimeType, Uint8List.fromList(i.data)) : null),
           ],
+          attachments: [for (final a in v.attachments) AttachmentView(name: a.name, mimeType: a.mimeType, size: a.size.toInt())],
           requestId: v.requestId.isEmpty ? null : v.requestId,
         );
       case ConversationItem_Body.assistantMessage:
@@ -753,6 +758,24 @@ class Client {
 
   // A fresh request ID.
   String id() => _newId();
+
+  // Whether the session says it takes a request, by its name in
+  // SessionAnnouncement.requests ("attachment_chunk").
+  bool takes(String id, String request) => _sessions[id]?.view.requests?.contains(request) ?? false;
+
+  // Sends a message that is never answered (an AttachmentChunk); false when
+  // it could not be sent.
+  bool tell(String id, SessionMessage m) {
+    final s = _sessions[id];
+    if (s == null || s.endTimer != null) return false;
+    return _send(Frame(routed: Routed(session: s.ref, payload: m.writeToBuffer())));
+  }
+
+  // The bytes held back on their way to the session; 0 when unknown.
+  int waiting(String id) {
+    final s = _sessions[id];
+    return s == null ? 0 : backlog?.call(s.ref) ?? 0;
+  }
 
   // Whether the session is compacting, for a compaction's deadline.
   bool compacting(String id) => _sessions[id]?.view.compacting ?? false;

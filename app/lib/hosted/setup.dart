@@ -14,6 +14,7 @@ import 'package:fixnum/fixnum.dart';
 
 import '../core/view.dart' show RelayView;
 import '../e2e/list.dart';
+import '../gen/pirc/v1alpha1/common.pb.dart' as common;
 import '../gen/pirc/v1alpha1/common.pbenum.dart' show ErrorCode;
 import '../gen/pirc/v1alpha1/relay.pb.dart' as v1;
 import '../gen/pirc/v1alpha2/relay.pb.dart';
@@ -349,6 +350,7 @@ class HostedRun {
   late final HostedSessions sessions;
 
   bool send(v1.Frame f) => sessions.fromClient(f);
+  int backlog(common.SessionRef ref) => sessions.backlog(ref);
   void start() => conn.start();
   void stop() => conn.stop();
 

@@ -1,5 +1,5 @@
-// The key store, the prefs, the private folder, the clipboard, the
-// screen's secure flag, the app's version, notifications, join links and the
+// The key store, the prefs, the private folder, the clipboard, the file
+// picker, the screen's secure flag, the app's version, notifications, join links and the
 // subscription on every Flutter engine: the app's, and the one WakeService
 // starts for a push, which has no activity, so that a protected key cannot be
 // asked for there (nor a purchase made).
@@ -20,6 +20,7 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
     private var links: Links? = null
     private var store: Store? = null
     private var clipboard: Clipboard? = null
+    private var picker: Picker? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         val context = binding.applicationContext
@@ -31,6 +32,9 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
             clipboard = c
             setMethodCallHandler(c)
         }
+        val pk = Picker(context) { activity }
+        picker = pk
+        channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/pick").apply { setMethodCallHandler(pk) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/about").apply { setMethodCallHandler(About(context)) }
         channels += MethodChannel(binding.binaryMessenger, "dev.pirc.app/attest").apply { setMethodCallHandler(Attest(context)) }
         val sc = Screen { activity }
@@ -77,6 +81,7 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
             binding.addOnNewIntentListener(it)
             binding.addOnSaveStateListener(it)
         }
+        picker?.let { binding.addActivityResultListener(it) }
     }
 
     override fun onDetachedFromActivityForConfigChanges() = onDetachedFromActivity()
@@ -92,6 +97,7 @@ class PircPlatformPlugin : FlutterPlugin, ActivityAware {
             binding?.removeOnNewIntentListener(it)
             binding?.removeOnSaveStateListener(it)
         }
+        picker?.let { binding?.removeActivityResultListener(it) }
         binding = null
         activity = null
     }

@@ -16,6 +16,7 @@ import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import '../app/drafts.dart';
 import '../app/model.dart';
 import '../core/chat.dart';
+import '../core/attachments.dart';
 import '../core/images.dart';
 import '../core/names.dart';
 import '../core/pending.dart';
@@ -24,6 +25,7 @@ import '../core/results.dart';
 import '../core/view.dart';
 import 'actions.dart';
 import 'look.dart';
+import 'files.dart';
 import 'images.dart';
 import 'markdown.dart';
 import 'question.dart';
@@ -52,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _text = TextEditingController();
   // Images to send with it; not kept with the draft, as the web's are not.
   final _images = ValueNotifier<List<StoredImage>>(const []);
+  final _files = ValueNotifier<List<OutgoingFile>>(const []);
   // The chat keeps a reader's place as the web page's does: two lists about
   // a centre, the rows before [_split] running up from it and the rest
   // down. While the reader is at the end, the centre is kept above the last
@@ -119,6 +122,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_keepDraft?.isActive ?? false) _saveDraft();
     _text.dispose();
     _images.dispose();
+    _files.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -292,6 +296,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ('unsent ${p.key}', _Unsent(p, asking: (s?.questions ?? const []).isNotEmpty, compacting: s?.compacting ?? false, model: model, id: widget.id, edit: () {
               model.dismiss(widget.id, p);
               if (p.images != null) _images.value = [...p.images!, ..._images.value].take(imagesMax).toList();
+              if (p.files != null) _files.value = [...p.files!, ..._files.value];
               _text.text = _text.text.trim().isEmpty ? p.text : '${p.text}\n\n${_text.text}';
             })),
         ];
@@ -380,7 +385,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (!_atEnd) Positioned(right: 16, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
                 ]),
               ),
-              if (s != null) _Composer(model: model, session: s, text: _text, images: _images, wide: widget.wide),
+              if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide),
             ],
           ),
         );
@@ -400,6 +405,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ItemPart(item: UserItem item) => _Bubble(
             text: item.text,
             images: [for (final i in item.images) i.key == null ? null : widget.model.client.image(i.key!)?.data],
+            files: [for (final a in item.attachments) (name: a.name, size: a.size)],
             // Not where pi cannot: a message it has not saved, a session ended.
             offer: item.entryId == null || widget.model.session(widget.id) == null ? null : () => _from(item),
           ),
@@ -639,10 +645,11 @@ class _Loading extends StatelessWidget {
 // The user's message, on the right, in the accent: faded while unsent,
 // ringed in red when it was not. Tapped, it offers going back or a fork.
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.text, this.images = const [], this.faded = false, this.refused = false, this.offer});
+  const _Bubble({required this.text, this.images = const [], this.files = const [], this.faded = false, this.refused = false, this.offer});
   final String text;
   // Each image's data; null for one that came without it.
   final List<Uint8List?> images;
+  final List<({String name, int size})> files;
   final bool faded;
   final bool refused;
   final VoidCallback? offer;
@@ -662,7 +669,8 @@ class _Bubble extends StatelessWidget {
             borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20), bottomLeft: Radius.circular(20), bottomRight: Radius.circular(6)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            if (images.isNotEmpty) Padding(padding: EdgeInsets.only(bottom: text.isEmpty ? 0 : 6), child: Thumbs(images: images)),
+            if (images.isNotEmpty) Padding(padding: EdgeInsets.only(bottom: text.isEmpty && files.isEmpty ? 0 : 6), child: Thumbs(images: images)),
+            if (files.isNotEmpty) Padding(padding: EdgeInsets.only(bottom: text.isEmpty ? 0 : 6), child: FileChips(files: files, onAccent: !refused)),
             if (text.isNotEmpty)
               // Selected, lighter on the accent: the system's own tint is
               // the accent's.
@@ -771,7 +779,13 @@ class _Unsent extends StatelessWidget {
           child: Text(label, style: look.text(size: 14, weight: quiet ? FontWeight.w400 : FontWeight.w600, color: quiet ? look.ink2 : look.ink).copyWith(decoration: TextDecoration.underline, decorationColor: look.ink3)),
         );
     return Column(crossAxisAlignment: CrossAxisAlignment.end, spacing: 6, children: [
-      _Bubble(text: p.text, images: [for (final i in p.images ?? const <StoredImage>[]) i.data], faded: !trouble, refused: trouble),
+      _Bubble(
+        text: p.text,
+        images: [for (final i in p.images ?? const <StoredImage>[]) i.data],
+        files: [for (final f in p.files ?? const <OutgoingFile>[]) (name: f.name, size: f.data.length)],
+        faded: !trouble,
+        refused: trouble,
+      ),
       if (trouble) ...[
         Text(why, textAlign: TextAlign.right, style: look.text(size: 13.5, color: look.block, spacing: 0)),
         Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1238,13 +1252,14 @@ class _TurnTimeState extends State<_TurnTime> {
 // whole task is done (Queue, as Alt+Enter in pi), and Stop, the only one
 // that interrupts pi; the send button says which.
 class _Composer extends StatefulWidget {
-  const _Composer({required this.model, required this.session, required this.text, required this.images, this.wide = false});
+  const _Composer({required this.model, required this.session, required this.text, required this.images, required this.files, this.wide = false});
   // Beside the list: in the conversation's column.
   final bool wide;
   final PircModel model;
   final SessionView session;
   final TextEditingController text;
   final ValueNotifier<List<StoredImage>> images;
+  final ValueNotifier<List<OutgoingFile>> files;
 
   @override
   State<_Composer> createState() => _ComposerState();
@@ -1272,6 +1287,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     super.initState();
     widget.text.addListener(_changed);
     widget.images.addListener(_changed);
+    widget.files.addListener(_changed);
     WidgetsBinding.instance.addObserver(this);
     _focus.addListener(() {
       if (_focus.hasFocus) _askClipboard();
@@ -1285,6 +1301,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   void dispose() {
     widget.text.removeListener(_changed);
     widget.images.removeListener(_changed);
+    widget.files.removeListener(_changed);
     WidgetsBinding.instance.removeObserver(this);
     _clip?.cancel();
     _focus.dispose();
@@ -1338,21 +1355,37 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
 
   void _changed() => setState(() {});
 
-  // Where the image comes from, as the web's file input asks on a phone.
+  // The bytes of files still free in the message.
+  int get _fileRoom => attachmentsMax - widget.files.value.fold(0, (n, f) => n + f.data.length);
+
+  // Where it comes from: the camera, the photos, or, for a session that
+  // takes them, a file.
   Future<void> _add() async {
     final room = imagesMax - widget.images.value.length;
-    if (room <= 0) return;
-    final camera = await showSheet<bool>(
+    final files = widget.model.client.takes(widget.session.id, takesFiles);
+    if (room <= 0 && !files) return;
+    final from = await showSheet<String>(
       context,
-      (context) => Sheet(title: 'Add an image', done: 'Cancel', children: [
+      (context) => Sheet(title: files ? 'Add to the message' : 'Add an image', done: 'Cancel', children: [
         SheetGroup(children: [
-          SheetRow(label: 'Take a photo', onTap: () => Navigator.of(context).pop(true)),
-          SheetRow(label: 'Choose from your photos', onTap: () => Navigator.of(context).pop(false)),
+          if (room > 0) SheetRow(label: 'Take a photo', onTap: () => Navigator.of(context).pop('camera')),
+          if (room > 0) SheetRow(label: 'Choose from your photos', onTap: () => Navigator.of(context).pop('photos')),
+          if (files) SheetRow(label: 'Choose a file', onTap: () => Navigator.of(context).pop('file')),
         ]),
       ]),
     );
-    if (camera == null || !mounted) return;
+    if (from == null || !mounted) return;
     setState(() => _problem = null);
+    if (from == 'file') {
+      final left = _fileRoom;
+      if (left <= 0) return setState(() => _problem = 'The files of a message come to ${sizeText(attachmentsMax)} at most.');
+      final r = await pickFiles(left);
+      if (!mounted) return;
+      widget.files.value = [...widget.files.value, ...r.files];
+      if (r.problem != null) setState(() => _problem = r.problem);
+      return;
+    }
+    final camera = from == 'camera';
     try {
       final r = camera ? await takePhoto() : await pickImages(room);
       if (!mounted) return;
@@ -1386,15 +1419,18 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
       _steer = true;
     }
     final images = widget.images.value;
-    final empty = widget.text.text.trim().isEmpty && images.isEmpty;
+    final files = widget.files.value;
+    final empty = widget.text.text.trim().isEmpty && images.isEmpty && files.isEmpty;
+    final canAdd = images.length < imagesMax || widget.model.client.takes(s.id, takesFiles);
     _askBlind(s);
     void send() {
       if (empty) return;
       final text = widget.text.text;
       widget.text.clear();
       widget.images.value = const [];
+      widget.files.value = const [];
       setState(() => _problem = null);
-      widget.model.prompt(s.id, text, images: images, delivery: busy ? (_steer ? 'steer' : 'followUp') : null);
+      widget.model.prompt(s.id, text, images: images, files: files, delivery: busy ? (_steer ? 'steer' : 'followUp') : null);
     }
 
     final questions = s.questions ?? const <QuestionView>[];
@@ -1435,6 +1471,11 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                     padding: const EdgeInsets.only(top: 8, right: 8),
                     child: Align(alignment: Alignment.centerLeft, child: Thumbs(images: [for (final i in images) i.data], onRemove: (i) => widget.images.value = [...images]..removeAt(i))),
                   ),
+                if (files.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FileChips(files: [for (final f in files) (name: f.name, size: f.data.length)], onRemove: (i) => widget.files.value = [...files]..removeAt(i)),
+                  ),
                 if (_problem != null || (images.isNotEmpty && _blind))
                   Semantics(
                     liveRegion: true,
@@ -1443,15 +1484,15 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                 Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   Semantics(
                     button: true,
-                    label: 'Add an image',
+                    label: widget.model.client.takes(s.id, takesFiles) ? 'Add an image or a file' : 'Add an image',
                     excludeSemantics: true,
-                    enabled: images.length < imagesMax,
-                    onTap: images.length >= imagesMax ? null : _add,
+                    enabled: canAdd,
+                    onTap: canAdd ? _add : null,
                     child: CupertinoButton(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(38, 38),
-                      onPressed: images.length >= imagesMax ? null : _add,
-                      child: Icon(CupertinoIcons.photo, size: 24, color: images.length >= imagesMax ? look.ink3 : look.ink2),
+                      onPressed: canAdd ? _add : null,
+                      child: Icon(widget.model.client.takes(s.id, takesFiles) ? CupertinoIcons.paperclip : CupertinoIcons.photo, size: 24, color: canAdd ? look.ink2 : look.ink3),
                     ),
                   ),
                   const SizedBox(width: 6),

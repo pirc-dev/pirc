@@ -4,6 +4,9 @@
 // states; the screens listen to it.
 import 'package:flutter/foundation.dart';
 
+import 'package:fixnum/fixnum.dart';
+
+import '../core/attachments.dart';
 import '../core/client.dart';
 import '../core/images.dart';
 import '../core/names.dart';
@@ -18,10 +21,17 @@ import 'chat_cache.dart';
 // shown first holds up until the person answers (web/server/app.ts).
 const askingMaxMs = 30 * 60 * 1000;
 
+// A file's chunks wait while the connection holds back more than this for
+// the session, and give up after backlogWaitMs of it.
+const backlogMax = 1 << 20;
+const backlogWaitMs = 60 * 1000;
+
 class PircModel extends ChangeNotifier {
   // publicKey: this phone's, so that the relay's list of keys marks its own.
-  PircModel({required bool Function(Frame) send, String Function()? newId, Clock? clock, this.now = _now, this.cache, List<int>? publicKey}) {
-    client = Client(send: send, onEvent: _onEvent, newId: newId, clock: clock, publicKey: publicKey);
+  // backlog: the bytes the connection holds back on their way to a
+  // session, for files sent in pieces.
+  PircModel({required bool Function(Frame) send, String Function()? newId, Clock? clock, this.now = _now, this.cache, List<int>? publicKey, int Function(SessionRef)? backlog}) {
+    client = Client(send: send, onEvent: _onEvent, newId: newId, clock: clock, publicKey: publicKey, backlog: backlog);
     cache?.prune(now());
   }
 
@@ -144,20 +154,27 @@ class PircModel extends ChangeNotifier {
 
   // Sends a message; it shows until pi's copy of it does. delivery is
   // "steer" or "followUp" while pi works.
-  // Sends a message, with images (each within pi's limits, attach.dart).
-  Future<Outcome> prompt(String id, String text, {List<StoredImage> images = const [], String? delivery, int? retryKey}) async {
+  // Sends a message, with images (each within pi's limits, attach.dart)
+  // and files, whose bytes go first.
+  Future<Outcome> prompt(String id, String text, {List<StoredImage> images = const [], List<OutgoingFile> files = const [], String? delivery, int? retryKey}) async {
     final items = client.chat(id)?.items ?? const [];
     final key = retryKey ?? _nextKey++;
     final requestId = client.id();
-    final sent = Pending<StoredImage>(key: key, requestId: requestId, text: text, images: images.isEmpty ? null : images, delivery: delivery, state: 'sending', before: userIds(items));
+    final sent = Pending<StoredImage>(key: key, requestId: requestId, text: text, images: images.isEmpty ? null : images, files: files.isEmpty ? null : files, delivery: delivery, state: 'sending', before: userIds(items));
     _pending[id] = [...pending(id).where((p) => p.key != key), sent];
     notifyListeners();
+    final ids = [for (final _ in files) client.id()];
+    final unsent = files.isEmpty ? null : await _sendFiles(id, files, ids);
+    if (unsent != null) return _answer(id, key, outcome(errorReply(requestId, ErrorCode.ERROR_CODE_INVALID, unsent)));
     final asked = now();
     final m = SessionMessage(
       prompt: Prompt(
         requestId: requestId,
         text: text,
         images: [for (final i in images) Image(mimeType: i.mimeType, data: i.data)],
+        attachments: [
+          for (final (n, f) in files.indexed) Attachment(id: ids[n], name: f.name, mimeType: f.mimeType, size: Int64(f.data.length)),
+        ],
         delivery: delivery == 'steer'
             ? Delivery.DELIVERY_STEER
             : delivery == 'followUp'
@@ -166,7 +183,10 @@ class PircModel extends ChangeNotifier {
       ),
     );
     final reply = await client.ask(id, m, () => client.compacting(id) || (client.asking(id) && now() - asked < askingMaxMs));
-    final o = outcome(reply);
+    return _answer(id, key, outcome(reply));
+  }
+
+  Outcome _answer(String id, int key, Outcome o) {
     _pending[id] = [
       for (final p in pending(id))
         if (p.key != key) p else ?answered(p, o.ok, o.message, !o.ok && o.code == 'TIMEOUT'),
@@ -177,7 +197,25 @@ class PircModel extends ChangeNotifier {
   }
 
   // Sends a failed message again, in its place.
-  Future<Outcome> retry(String id, Pending<StoredImage> p) => prompt(id, p.text, images: p.images ?? const [], delivery: p.delivery, retryKey: p.key);
+  Future<Outcome> retry(String id, Pending<StoredImage> p) =>
+      prompt(id, p.text, images: p.images ?? const [], files: p.files ?? const [], delivery: p.delivery, retryKey: p.key);
+
+  // Sends files' chunks, each once the connection holds back less than
+  // backlogMax for the session; why not, if they could not all go.
+  Future<String?> _sendFiles(String id, List<OutgoingFile> files, List<String> ids) async {
+    if (!client.takes(id, takesFiles)) return "this session's extension does not take files; update it";
+    for (final (n, f) in files.indexed) {
+      for (final c in chunksOf(ids[n], f.data)) {
+        final until = now() + backlogWaitMs;
+        while (client.waiting(id) > backlogMax) {
+          if (now() > until) return 'the computer is not taking the files';
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        }
+        if (!client.tell(id, SessionMessage(attachmentChunk: c))) return 'not connected to the computer';
+      }
+    }
+    return null;
+  }
 
   void dismiss(String id, Pending<StoredImage> p) {
     _pending[id] = [for (final x in pending(id)) if (x.key != p.key) x];

@@ -40,6 +40,7 @@ import 'package:pirc/ui/scan_screen.dart';
 import 'package:pirc/ui/selectable.dart';
 import 'package:pirc/ui/devices.dart';
 import 'package:pirc/ui/hosts.dart';
+import 'package:pirc/ui/files.dart';
 import 'package:pirc/ui/images.dart';
 import 'package:pirc/ui/invite.dart';
 import 'package:pirc/ui/launch.dart';
@@ -1394,6 +1395,35 @@ void main() {
       final photo = (await tester.runAsync(() => fit(img.encodePng(noise))))!;
       expect((imageType(photo), photo.length <= imageBytesMax), ('image/jpeg', true));
     });
+  });
+
+  testWidgets('a file chosen for a session that takes them: a chip, sent as chunks then the Prompt; one too large said', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(pickChannel, (call) async => [
+          {'name': 'notes.pdf', 'mimeType': 'application/pdf', 'size': 3, 'data': Uint8List.fromList([1, 2, 3])},
+          {'name': 'film.mov', 'mimeType': 'video/quicktime', 'size': 50 << 20},
+        ]);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(pickChannel, null));
+    final model = await docs(tester);
+    expect(find.bySemanticsLabel('Add an image or a file'), findsNothing, reason: 'not offered where the session does not say it takes them');
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: entry('i3', 'laptop', SessionAnnouncement(
+      name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local', requests: ['prompt', 'attachment_chunk', 'history_request', 'list_models'],
+    )))));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Add an image or a file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose a file'));
+    await tester.pumpAndSettle();
+    expect(find.text('notes.pdf'), findsOneWidget);
+    expect(find.text('film.mov is too large: the files of a message come to 10 MB at most.'), findsOneWidget);
+    sent.clear();
+    await tester.tap(find.byKey(const ValueKey('send')));
+    await tester.pump();
+    await tester.pump();
+    final out = [for (final f in sent.where((f) => f.hasRouted())) SessionMessage.fromBuffer(f.routed.payload)];
+    expect(out.map((m) => m.whichBody()), [SessionMessage_Body.attachmentChunk, SessionMessage_Body.prompt]);
+    expect((out.last.prompt.attachments.single.name, out.last.prompt.attachments.single.id), ('notes.pdf', out.first.attachmentChunk.id));
+    expect(find.text('notes.pdf'), findsOneWidget, reason: 'in the message as it is sent');
+    await answer(tester, model, SessionMessage(accepted: Accepted(requestId: out.last.prompt.requestId)));
   });
 
   testWidgets('a photo taken with the camera, made to fit and sent; one refused, said why', (tester) async {

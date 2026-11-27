@@ -311,12 +311,14 @@ sealed class ChatItem {
 }
 
 class UserItem extends ChatItem {
-  const UserItem({required super.id, super.entryId, required super.turnId, required super.at, required this.text, this.requestId, required this.images});
+  const UserItem({required super.id, super.entryId, required super.turnId, required super.at, required this.text, this.requestId, required this.images, this.attachments = const []});
 
   final String text;
   // The request that sent it, when a client did.
   final String? requestId;
   final List<ImageView> images;
+  // The files sent with it, by name.
+  final List<AttachmentView> attachments;
 
   factory UserItem.fromJson(Json j) => UserItem(
         id: j['id'] as String,
@@ -326,6 +328,7 @@ class UserItem extends ChatItem {
         text: j['text'] as String,
         requestId: j['requestId'] as String?,
         images: _list(j['images'], ImageView.fromJson)!,
+        attachments: _list(j['attachments'], AttachmentView.fromJson) ?? const [],
       );
 
   @override
@@ -334,7 +337,21 @@ class UserItem extends ChatItem {
         'text': text,
         if (requestId != null) 'requestId': requestId,
         'images': images.map((i) => i.toJson()).toList(),
+        if (attachments.isNotEmpty) 'attachments': attachments.map((a) => a.toJson()).toList(),
       };
+}
+
+// A file sent with a user message: its name, type and size, not its bytes.
+class AttachmentView {
+  const AttachmentView({required this.name, required this.mimeType, required this.size});
+
+  final String name;
+  final String mimeType;
+  final int size;
+
+  factory AttachmentView.fromJson(Json j) => AttachmentView(name: j['name'] as String, mimeType: j['mimeType'] as String, size: _int(j['size'])!);
+
+  Json toJson() => {'name': name, 'mimeType': mimeType, 'size': size};
 }
 
 class ImageView {
@@ -796,12 +813,18 @@ LastView? lastOf(List<ChatItem> items) {
     final x = items[i];
     String? text;
     if (x is UserItem) {
-      // A message of images alone says so.
-      text = x.text.trim().isNotEmpty || x.images.isEmpty
+      // A message of images or files alone says so.
+      text = x.text.trim().isNotEmpty
           ? x.text
-          : x.images.length > 1
-              ? '${x.images.length} images'
-              : 'An image';
+          : x.images.isNotEmpty
+              ? x.images.length > 1
+                  ? '${x.images.length} images'
+                  : 'An image'
+              : x.attachments.isNotEmpty
+                  ? x.attachments.length > 1
+                      ? '${x.attachments.length} files'
+                      : x.attachments.single.name
+                  : x.text;
     } else if (x is AssistantItem && !x.streaming) {
       final texts = x.blocks.where((b) => b.kind == 'text' && b.text.trim().isNotEmpty);
       text = texts.isNotEmpty
