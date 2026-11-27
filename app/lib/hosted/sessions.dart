@@ -379,15 +379,19 @@ class HostedSessions implements ChannelEvents {
     final sessionId = utf8.encode(ref.sessionId);
     if (!goodSessionId(sessionId)) return null;
     final key = '${hexOf(ref.hostKey)}/${ref.sessionId}/a';
+    final known = _processes[_processId(ref.hostKey, ref.instanceId)]?.sessions[ref.sessionId];
+    // A session not held now, as after the connection went, takes the copy
+    // it last took again: an idle computer announces nothing newer, and its
+    // session would stay out. An older copy is still refused.
+    final highest = _highest[key];
     final r = e2e.openAnnouncement(
       sealed: e.sealed,
       slot: Slot(accountId: account.accountId, computerKey: ref.hostKey, sessionId: sessionId),
       recipientSecretKey: _boxSecret,
       list: account.newest.body,
-      highest: _highest[key],
+      highest: known == null && highest != null ? highest - 1 : highest,
       now: _now(),
     );
-    final known = _processes[_processId(ref.hostKey, ref.instanceId)]?.sessions[ref.sessionId];
     if (r.result != 'accepted') {
       // An older copy than one seen keeps the one seen; anything else is
       // left out, and opens nothing.

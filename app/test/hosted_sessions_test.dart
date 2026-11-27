@@ -162,6 +162,24 @@ void main() {
     expect(devices.where((d) => d.role == 'host').single.online, isTrue);
   });
 
+  test('an idle session is back after the connection went and came again', () async {
+    final c = connect();
+    addTearDown(() {
+      c.sessions.dispose();
+      c.conn.stop();
+    });
+    await until('the session', () => c.client.snapshot().sessions.where((s) => s.hostname == 'build-box').firstOrNull);
+    // As the app does when it goes to the background, and back.
+    c.conn.stop();
+    await until('stopped', () => c.client.snapshot().relay.state == 'stopped' ? true : null);
+    c.conn.start();
+    await until('ready', () => c.client.snapshot().relay.state == 'ready' ? true : null);
+    // Past the client's wait for a session that the new list left out.
+    await Future<void>.delayed(const Duration(milliseconds: endGraceMs + 1000));
+    expect(c.client.snapshot().sessions, hasLength(1), reason: 'the copy it took before, taken again');
+    await until('its channel again', () => c.client.snapshot().sessions.where((s) => s.hostname == 'build-box').firstOrNull);
+  });
+
   test('a newer list this phone has reaches the computer through a channel, and the relay from it', () async {
     // A version the relay does not have: this phone takes it, and tells
     // only the computer, by its next channel.

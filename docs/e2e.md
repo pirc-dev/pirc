@@ -244,6 +244,11 @@ when:
 - its ordering value is higher than the highest it has seen for that computer, session and kind
   (announcements and notices are counted apart), and no more than a day ahead of its own clock.
 
+A client that no longer holds the session, as after its connection to the relay went, also
+accepts an announcement equal to the highest it has seen: the relay gives the copy it holds
+again at each login, and an idle computer announces nothing newer, so its session would stay
+out. That copy is one the client accepted before.
+
 So the relay cannot replay an old announcement to a client that has seen a newer one, or move
 one to another session, and one computer cannot write over another's. A computer whose clock is
 set back and then restarted sends announcements its clients refuse, without either side
