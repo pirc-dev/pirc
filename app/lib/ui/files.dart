@@ -46,6 +46,18 @@ Future<({List<OutgoingFile> files, String? problem})> pickFiles(int room) async 
   return (files: files, problem: problem);
 }
 
+// Files in order, each kept while they come to attachmentsMax together.
+List<OutgoingFile> fitTogether(List<OutgoingFile> files) {
+  var room = attachmentsMax;
+  final kept = <OutgoingFile>[];
+  for (final f in files) {
+    if (f.data.length > room) continue;
+    room -= f.data.length;
+    kept.add(f);
+  }
+  return kept;
+}
+
 // Files as chips: each one's name and size, with a button to take it out
 // when onRemove is given.
 class FileChips extends StatelessWidget {

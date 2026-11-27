@@ -93,17 +93,48 @@ void main() {
     expect((await done).ok, isTrue);
   });
 
+  test('a message sent while files upload waits for their Prompt; a second message of files waits too', () async {
+    var held = backlogMax + 1;
+    final (m, sent) = model(['prompt', 'attachment_chunk', 'history_request'], backlog: (_) => held);
+    final id = idOf(m);
+    final a = m.prompt(id, 'A', files: [OutgoingFile(name: 'a.bin', mimeType: 'application/octet-stream', data: bytes(10))]);
+    final b = m.prompt(id, 'B');
+    final c = m.prompt(id, 'C', files: [OutgoingFile(name: 'c.bin', mimeType: 'application/octet-stream', data: bytes(10))]);
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(sent, isEmpty, reason: 'B waits behind A\'s files');
+    held = 0;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect([for (final x in sent) x.hasPrompt() ? x.prompt.text : 'chunk'], ['chunk', 'A', 'B', 'chunk', 'C']);
+    for (final x in sent.where((x) => x.hasPrompt())) {
+      answer(m, x.prompt.requestId);
+    }
+    expect([for (final o in await Future.wait([a, b, c])) o.ok], [true, true, true]);
+  });
+
+  test('files over the cap together are refused before any chunk goes', () async {
+    final (m, sent) = model(['prompt', 'attachment_chunk', 'history_request']);
+    final o = await m.prompt(idOf(m), 'big', files: [
+      OutgoingFile(name: 'a', mimeType: 'application/octet-stream', data: Uint8List(attachmentsMax ~/ 2 + 1)),
+      OutgoingFile(name: 'b', mimeType: 'application/octet-stream', data: Uint8List(attachmentsMax ~/ 2 + 1)),
+    ]);
+    expect((o.ok, o.message), (false, 'the files come to more than 10 MB'));
+    expect(sent, isEmpty);
+    expect(fitTogether(m.pending(idOf(m)).single.files!).length, 1, reason: 'Edit puts back what fits');
+  });
+
   test('a retry sends the chunks again from offset 0', () async {
     final (m, sent) = model(['prompt', 'attachment_chunk', 'history_request']);
     final id = idOf(m);
     final first = m.prompt(id, '/look', files: [OutgoingFile(name: 'a.txt', mimeType: 'text/plain', data: bytes(10))]);
     await pumpEventQueue();
+    final firstId = sent.first.attachmentChunk.id;
     m.client.onFrame(Frame(routed: Routed(session: ref, payload: SessionMessage(error: Error(requestId: sent.last.prompt.requestId, code: ErrorCode.ERROR_CODE_INVALID, message: 'a.txt is short')).writeToBuffer())));
     expect((await first).message, 'a.txt is short');
     sent.clear();
     final again = m.retry(id, m.pending(id).single);
     await pumpEventQueue();
     expect([for (final s in sent.where((s) => s.hasAttachmentChunk())) s.attachmentChunk.offset.toInt()], [0]);
+    expect(sent.firstWhere((s) => s.hasAttachmentChunk()).attachmentChunk.id, firstId, reason: 'the same upload, started afresh');
     answer(m, sent.last.prompt.requestId);
     expect((await again).ok, isTrue);
     expect(m.pending(id).single.state, 'sent', reason: 'with files, "/" is no command: its copy comes');

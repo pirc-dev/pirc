@@ -1,6 +1,6 @@
 // Files the person picks with the document picker, for lib/ui/files.dart
 // over the channel 'dev.pirc.app/pick': each as its name, type and size,
-// with its bytes when it is no larger than the call's max. The picker hands
+// with its bytes while they come to the call's max together. The picker hands
 // over copies, which are removed once read.
 import Flutter
 import UIKit
@@ -46,11 +46,13 @@ final class Picker: NSObject, UIDocumentPickerDelegate {
     pending = nil
     DispatchQueue.global(qos: .userInitiated).async {
       var files: [[String: Any]] = []
+      var room = max
       for url in urls {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
         var file: [String: Any] = ["name": url.lastPathComponent, "mimeType": mime, "size": size]
-        if size <= max, let data = try? Data(contentsOf: url), data.count <= max {
+        if size <= room, let data = try? Data(contentsOf: url), data.count <= room {
+          room -= data.count
           file["size"] = data.count
           file["data"] = FlutterStandardTypedData(bytes: data)
         }

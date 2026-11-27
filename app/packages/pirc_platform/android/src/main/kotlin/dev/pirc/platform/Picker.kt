@@ -1,7 +1,7 @@
 // Files the person picks with the system's document picker, for
 // lib/ui/files.dart over 'dev.pirc.app/pick': each as its name, type and
-// size, with its bytes when it is no larger than the call's max, read off
-// the main thread.
+// size, with its bytes while they come to the call's max together, read
+// off the main thread; one that cannot be read comes without them.
 package dev.pirc.platform
 
 import android.app.Activity
@@ -45,7 +45,16 @@ class Picker(private val context: Context, private val activity: () -> Activity?
         }
         val max = this.max
         Thread {
-            val files = uris.map { read(it, max) }
+            var room = max
+            val files = uris.map { uri ->
+                val f = try {
+                    read(uri, room)
+                } catch (e: Exception) {
+                    mapOf<String, Any>("name" to (uri.lastPathSegment ?: "file"), "mimeType" to "application/octet-stream", "size" to 0L)
+                }
+                (f["data"] as? ByteArray)?.let { room -= it.size }
+                f
+            }
             Handler(Looper.getMainLooper()).post { result.success(files) }
         }.start()
         return true

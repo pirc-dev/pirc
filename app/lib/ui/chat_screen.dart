@@ -296,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ('unsent ${p.key}', _Unsent(p, asking: (s?.questions ?? const []).isNotEmpty, compacting: s?.compacting ?? false, model: model, id: widget.id, edit: () {
               model.dismiss(widget.id, p);
               if (p.images != null) _images.value = [...p.images!, ..._images.value].take(imagesMax).toList();
-              if (p.files != null) _files.value = [...p.files!, ..._files.value];
+              if (p.files != null) _files.value = fitTogether([...p.files!, ..._files.value]);
               _text.text = _text.text.trim().isEmpty ? p.text : '${p.text}\n\n${_text.text}';
             })),
         ];

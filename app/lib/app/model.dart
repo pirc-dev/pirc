@@ -2,9 +2,10 @@
 // messages sent and not yet shown, and the requests the core version makes
 // (prompt, stop, pi's questions). The relay connection feeds it frames and
 // states; the screens listen to it.
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 import 'package:fixnum/fixnum.dart';
+import 'package:flutter/foundation.dart';
 
 import '../core/attachments.dart';
 import '../core/client.dart';
@@ -50,6 +51,8 @@ class PircModel extends ChangeNotifier {
   final _starts = Starts();
   var _turnStarts = <String, int>{};
   final _pending = <String, List<Pending<StoredImage>>>{};
+  // Each session's files on their way, until their Prompt goes.
+  final _uploading = <String, Future<void>>{};
   // Sessions finished since the reader last opened them.
   final news = <String>{};
   var _nextKey = 0;
@@ -156,16 +159,42 @@ class PircModel extends ChangeNotifier {
   // "steer" or "followUp" while pi works.
   // Sends a message, with images (each within pi's limits, attach.dart)
   // and files, whose bytes go first.
-  Future<Outcome> prompt(String id, String text, {List<StoredImage> images = const [], List<OutgoingFile> files = const [], String? delivery, int? retryKey}) async {
+  // A retry passes its files' ids again (fileIds), so that their chunks
+  // start those uploads afresh rather than leave them counted against the
+  // session's cap.
+  Future<Outcome> prompt(String id, String text,
+      {List<StoredImage> images = const [], List<OutgoingFile> files = const [], List<String>? fileIds, String? delivery, int? retryKey}) async {
     final items = client.chat(id)?.items ?? const [];
     final key = retryKey ?? _nextKey++;
     final requestId = client.id();
-    final sent = Pending<StoredImage>(key: key, requestId: requestId, text: text, images: images.isEmpty ? null : images, files: files.isEmpty ? null : files, delivery: delivery, state: 'sending', before: userIds(items));
+    final ids = fileIds != null && fileIds.length == files.length ? fileIds : [for (final _ in files) client.id()];
+    final sent = Pending<StoredImage>(
+        key: key, requestId: requestId, text: text, images: images.isEmpty ? null : images, files: files.isEmpty ? null : files, fileIds: files.isEmpty ? null : ids,
+        delivery: delivery, state: 'sending', before: userIds(items));
     _pending[id] = [...pending(id).where((p) => p.key != key), sent];
     notifyListeners();
-    final ids = [for (final _ in files) client.id()];
-    final unsent = files.isEmpty ? null : await _sendFiles(id, files, ids);
-    if (unsent != null) return _answer(id, key, outcome(errorReply(requestId, ErrorCode.ERROR_CODE_INVALID, unsent)));
+    // In order: a message waits for the files of one sent before it, whose
+    // Prompt goes once they have.
+    final ahead = _uploading[id];
+    final mine = files.isEmpty ? null : Completer<void>();
+    if (mine != null) _uploading[id] = mine.future;
+    void done() {
+      if (mine == null) return;
+      mine.complete();
+      if (identical(_uploading[id], mine.future)) _uploading.remove(id);
+    }
+
+    if (ahead != null) await ahead;
+    final total = files.fold(0, (n, f) => n + f.data.length);
+    final unsent = files.isEmpty
+        ? null
+        : total > attachmentsMax
+            ? 'the files come to more than ${sizeText(attachmentsMax)}'
+            : await _sendFiles(id, files, ids);
+    if (unsent != null) {
+      done();
+      return _answer(id, key, outcome(errorReply(requestId, ErrorCode.ERROR_CODE_INVALID, unsent)));
+    }
     final asked = now();
     final m = SessionMessage(
       prompt: Prompt(
@@ -182,8 +211,9 @@ class PircModel extends ChangeNotifier {
                 : Delivery.DELIVERY_UNSPECIFIED,
       ),
     );
-    final reply = await client.ask(id, m, () => client.compacting(id) || (client.asking(id) && now() - asked < askingMaxMs));
-    return _answer(id, key, outcome(reply));
+    final reply = client.ask(id, m, () => client.compacting(id) || (client.asking(id) && now() - asked < askingMaxMs));
+    done();
+    return _answer(id, key, outcome(await reply));
   }
 
   Outcome _answer(String id, int key, Outcome o) {
@@ -198,7 +228,7 @@ class PircModel extends ChangeNotifier {
 
   // Sends a failed message again, in its place.
   Future<Outcome> retry(String id, Pending<StoredImage> p) =>
-      prompt(id, p.text, images: p.images ?? const [], files: p.files ?? const [], delivery: p.delivery, retryKey: p.key);
+      prompt(id, p.text, images: p.images ?? const [], files: p.files ?? const [], fileIds: p.fileIds, delivery: p.delivery, retryKey: p.key);
 
   // Sends files' chunks, each once the connection holds back less than
   // backlogMax for the session; why not, if they could not all go.

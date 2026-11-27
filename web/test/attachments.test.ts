@@ -121,6 +121,28 @@ test("a prompt refused sends its files again from offset 0 when retried, and the
   }
 });
 
+test("a prompt with files that timed out is retried without its files: the session may have taken them", async () => {
+  const t = await setup();
+  const body = { requestId: "page-request-0003", text: "see", files: [{ name: "a.bin", mimeType: "application/octet-stream", data: b64(10, 1) }] };
+  const kinds = () => t.out().map((x) => (x.attachmentChunk ? "piece" : "prompt"));
+  const first = t.prompt(body);
+  await tick();
+  assert.deepEqual(kinds(), ["piece", "prompt"]);
+  t.answer("page-request-0003", { error: { requestId: "page-request-0003", code: "ERROR_CODE_TIMEOUT", message: "no answer from the session" } });
+  assert.equal((await (await first).json() as { ok: boolean }).ok, false);
+  const again = t.prompt(body);
+  await tick();
+  assert.deepEqual(kinds(), ["prompt"]);
+  t.answer("page-request-0003", { error: { requestId: "page-request-0003", code: "ERROR_CODE_INVALID", message: "a.bin is missing" } });
+  await again;
+  // Refused: the next retry sends them all.
+  const third = t.prompt(body);
+  await tick();
+  assert.deepEqual(kinds(), ["piece", "prompt"]);
+  t.answer("page-request-0003");
+  assert.equal((await (await third).json() as { ok: boolean }).ok, true);
+});
+
 test("files go only to a session that lists attachment_chunk; too many, too large or malformed are refused, and nothing is sent", async () => {
   const t = await setup(["prompt", "history_request"]);
   const r = await (await t.prompt({ text: "hi", files: [{ name: "a.txt", mimeType: "text/plain", data: "aGk=" }] })).json() as { ok: boolean; code: string; message: string };

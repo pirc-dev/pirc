@@ -741,10 +741,15 @@ export class Client {
       return Promise.resolve(errorReply(requestId, ErrorCode.BUSY, "not connected to the relay, or its files could not be sent"));
     }
     return this.request(s.ref, body, requestId, extend).then((r) => {
-      if (r.body.case === "accepted") {
+      // Taken, or perhaps taken with the answer lost: a retry would leave
+      // its pieces unclaimed, since the session answers it from the first.
+      if (r.body.case === "accepted" || (r.body.case === "error" && r.body.value.code === ErrorCode.TIMEOUT)) {
         this.accepted.delete(requestId);
         this.accepted.add(requestId);
         if (this.accepted.size > ACCEPTED_KEPT) this.accepted.delete(this.accepted.values().next().value!);
+      } else {
+        // Refused, a missing file among the reasons: a retry sends them all.
+        this.accepted.delete(requestId);
       }
       return r;
     });

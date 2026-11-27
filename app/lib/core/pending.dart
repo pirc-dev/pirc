@@ -10,6 +10,7 @@ class Pending<I> {
     required this.text,
     this.images,
     this.files,
+    this.fileIds,
     this.delivery,
     required this.state,
     this.error,
@@ -25,6 +26,8 @@ class Pending<I> {
   final List<I>? images;
   // Sent with it, kept to send it again.
   final List<OutgoingFile>? files;
+  // Their ids, the same in a retry.
+  final List<String>? fileIds;
   // "steer" or "followUp".
   final String? delivery;
   // "sending", "sent", "queued", "failed" or "lost".
@@ -36,7 +39,7 @@ class Pending<I> {
   final Set<String> before;
 
   Pending<I> copyWith({String? state, String? error, bool? unsure}) => Pending(
-        key: key, requestId: requestId, text: text, images: images, files: files, delivery: delivery,
+        key: key, requestId: requestId, text: text, images: images, files: files, fileIds: fileIds, delivery: delivery,
         state: state ?? this.state, error: error ?? this.error, unsure: unsure ?? this.unsure, before: before,
       );
 }
