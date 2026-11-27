@@ -174,6 +174,17 @@ build and remove it after, since git ignores it. Runner's first build
 phase (`ios/store-build.sh`) stops a build whose `PIRC_HOSTED` and that
 file disagree.
 
+A hosted build tells App Store Connect it uses encryption beyond the
+system's (libsodium, Noise). The last build phase of Runner and of
+Notifications (`ios/encryption-plist.sh`) writes the built Info.plist:
+once Apple has accepted the encryption documentation, its code goes in
+that file as `PIRC_ENCRYPTION_CODE = <code>` and the build says
+`ITSAppUsesNonExemptEncryption` true with it as
+`ITSAppEncryptionExportComplianceCode`; until then a hosted build carries
+neither key (App Store Connect refuses true without the code of a
+declaration it has) and its export compliance is answered in App Store
+Connect. Any other build says false, as the source does.
+
 ## Android release
 
 A release (`flutter build appbundle`) is signed with Play's upload key,

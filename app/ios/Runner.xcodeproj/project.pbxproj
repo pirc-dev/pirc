@@ -215,6 +215,7 @@
 				6B7E635B4D73992EDB998375 /* Sources */,
 				E064063CA930BBBFACB90C10 /* Frameworks */,
 				7C6636AF32F5FD25285D238A /* Resources */,
+				E1C7A0010000000000000002 /* Encryption */,
 			);
 			buildRules = (
 			);
@@ -240,6 +241,7 @@
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				8691ABBB7EF5E64EF5E52C33 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
+				E1C7A0010000000000000001 /* Encryption */,
 			);
 			buildRules = (
 			);
@@ -330,6 +332,40 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		E1C7A0010000000000000001 /* Encryption */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/encryption-plist.sh",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Encryption";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/encryption-plist.sh\"\n";
+		};
+		E1C7A0010000000000000002 /* Encryption */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/encryption-plist.sh",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Encryption";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/encryption-plist.sh\"\n";
+		};
 		002CB405B97EBD7D7D1A40F2 /* Store Build */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
