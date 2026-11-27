@@ -87,6 +87,10 @@ try {
   // Shown without.
 }
 
+// A picture the gallery has (Thumbs takes a url in place of a key), to
+// open full screen.
+const picture = { mimeType: "image/png", url: "/icon-192.png" } as ImageView;
+
 let i = 0;
 const at = () => now - 30 * min + i++ * 20_000;
 const user = (text: string, images: ImageView[] = []): ChatItem => ({ kind: "user", id: `i${i}`, turnId: "", at: at(), text, images });
@@ -136,7 +140,8 @@ socket.on("close", (code) => {
 I would start with **B**; see [the RFC](https://www.rfc-editor.org/rfc/rfc6455#section-7.4).`;
 
 const finished: ChatItem[] = [
-  user("Why does my phone stop getting updates after the laptop sleeps?"),
+  // Saved by pi (an entry ID): tapping it offers going back or a fork.
+  { ...user("Why does my phone stop getting updates after the laptop sleeps?", [picture]), entryId: "e1" } as ChatItem,
   { kind: "assistant", id: `i${i}`, turnId: "", at: at(), blocks: [{ kind: "thinking", text: "The close code 4409 means a duplicate connection. The client treats it as final. Check the relay's half-open handling." }], streaming: false, stop: "tool_use" },
   tool("grep", { pattern: "4409", path: "src/relay" }, "src/relay/socket.ts:88:  if (code === 4409) return;", false, undefined, { durationMs: 38 }),
   // As pi sends them: an empty message of its own before each call.
@@ -151,7 +156,7 @@ const working: ChatItem[] = [
   { kind: "branchSummary", id: `i${i}`, turnId: "", at: at(), summary: "The user explored a different conversation branch before returning here.\nSummary of that exploration:\n\nOption A was tried: a second region. It still left a 15 second gap." },
   // The turn under way, which the composer times from its first message.
   ...([
-    user("Go with B and add a test for it", [{ mimeType: "image/png" }]),
+    user("Go with B and add a test for it", [picture]),
     tool("edit", { path: "src/relay/socket.ts" }, "Successfully replaced 1 block(s) in src/relay/socket.ts.", false, undefined, { durationMs: 21, diff: patch }),
     tool("bash", { command: "psql -c 'select count(*) from users'" }, "psql: error: connection refused\n\nCommand exited with code 2", true, undefined, { durationMs: 1_840, exitCode: 2 }),
     { kind: "notification", id: `i${i}`, turnId: "", at: at(), level: "warning", text: "Auto mode blocked bash: psql -c 'drop table sessions'" },
@@ -327,6 +332,7 @@ function Gallery() {
   if (screen === "signin") return <SignIn />;
   if (screen === "pair") return <Pair done={() => {}} />;
   if (screen === "splash") return <Splash />;
+  if (screen === "unreachable") return <Splash unreachable />;
   const list = <Sessions key={scopePath(scope)} sessions={screen === "empty" ? [] : sessions} pendingHosts={pendingHosts} scope={scope} open={(id) => { setSettings(false); setOpen(id); }} go={setScope} selected={open} settings={() => setSettings(!settings)} inSettings={settings} />;
   const back = () => setOpen(undefined);
   let chat: React.ReactNode;

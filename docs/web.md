@@ -131,6 +131,9 @@ remote UIs, terminal and notebook UIs):
   request. The page reopens the stream when it becomes visible again
   (`visibilitychange`, `pageshow`), since mobile browsers drop connections
   in the background, sometimes without telling the page.
+- **Starting**: the page first asks whether it is signed in. While the
+  server is out of reach (no network, a deploy), the splash says so and
+  asks again every 3 seconds, and at once when the page is shown again.
 - **Ordering**: the page applies a command's result once the stream has
   reached its `id`.
 - What the server sends is shaped for the screen ("session X is working",

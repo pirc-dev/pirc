@@ -10,6 +10,9 @@ export interface State {
   // Whether the server has a sign-in for this browser; undefined while
   // finding out.
   signedIn: boolean | undefined;
+  // Finding out failed (no network, the server restarting), and is tried
+  // again.
+  unreachable: boolean;
   relay: RelayView;
   sessions: SessionView[];
   // Hosts asking to join, oldest first.
@@ -71,7 +74,7 @@ export function kept(was: ChatView, now: ChatView): ChatView {
 }
 
 export class Live {
-  state: State = { signedIn: undefined, relay: { state: "connecting" }, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed", older: { loading: false } };
+  state: State = { signedIn: undefined, unreachable: false, relay: { state: "connecting" }, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed", older: { loading: false } };
   private listeners = new Set<Listener>();
   private source: EventSource | undefined;
   // The last event applied.
@@ -88,6 +91,9 @@ export class Live {
   // The stream's position at the last change the page left out, to an item
   // it had not loaded (apply).
   private leftOut: string | undefined;
+  // Asking whether signed in at start, and asking again after a failure.
+  private starting = false;
+  private retry: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     // Hidden, the page lets its stream go: the server counts a chat as
@@ -116,8 +122,22 @@ export class Live {
   }
 
   async start(): Promise<void> {
-    const { signedIn } = await call<{ signedIn: boolean }>("/api/auth");
-    this.set({ signedIn });
+    if (this.starting) return;
+    this.starting = true;
+    clearTimeout(this.retry);
+    let signedIn: boolean;
+    try {
+      ({ signedIn } = await call<{ signedIn: boolean }>("/api/auth"));
+    } catch {
+      // Asked again in a while, or at once when the page is shown again
+      // (resume): never a splash for good.
+      this.set({ unreachable: true });
+      this.retry = setTimeout(() => void this.start(), 3000);
+      return;
+    } finally {
+      this.starting = false;
+    }
+    this.set({ signedIn, unreachable: false });
     if (signedIn) await this.load();
   }
 
@@ -200,6 +220,8 @@ export class Live {
 
   // The page is shown again: a stream may be dead without saying so.
   private resume(): void {
+    // Not yet known whether signed in: ask now rather than at the retry.
+    if (this.state.signedIn === undefined) return void this.start();
     // A load under way opens its own stream when its snapshot comes.
     if (!this.state.signedIn || this.inFlight) return;
     this.close();

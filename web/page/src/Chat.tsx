@@ -610,14 +610,20 @@ function User(p: { item: UserItem }) {
 }
 
 function Bubble(p: { faded?: boolean; refused?: boolean; offer?: () => void; children: React.ReactNode }) {
+  // React passes events up from a portal inside the bubble (an image open
+  // full screen) as if they happened in it: only the bubble's own count.
+  const own = (e: React.SyntheticEvent) => e.currentTarget.contains(e.target as Node);
   return (
     <div
       role={p.offer ? "button" : undefined}
       tabIndex={p.offer ? 0 : undefined}
       aria-haspopup={p.offer ? "dialog" : undefined}
       title={p.offer ? "Go back or fork from here" : undefined}
-      onClick={p.offer}
+      onClick={p.offer && ((e) => {
+        if (own(e)) p.offer!();
+      })}
       onKeyDown={p.offer && ((e) => {
+        if (!own(e)) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           p.offer!();

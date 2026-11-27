@@ -91,8 +91,8 @@ then open `http://127.0.0.1:5179/gallery.html?screen=<screen>`, where
 `<screen>` is `list` (the default), `empty`, `chat` (a finished reply),
 `working` (pi at work, every kind of item), `asks` (a question in the
 composer's place, `&ask=guard` (pi-automode's, the default), `select`,
-`confirm`, `input` or `editor`), `loading`, `ended`, `signin`, `pair` or
-`splash`; add `&banner=reconnecting`, `refused` or `connecting`
+`confirm`, `input` or `editor`), `loading`, `ended`, `signin`, `pair`,
+`splash` or `unreachable` (the splash with the server out of reach); add `&banner=reconnecting`, `refused` or `connecting`
 for the connection line, and `&look=quiet`, `triage`, `native` or
 `cockpit` for the look (kept, as the switch in Settings keeps it);
 `screen=settings` opens Settings, with made-up devices to rename and

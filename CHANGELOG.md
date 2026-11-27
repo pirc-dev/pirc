@@ -6,6 +6,15 @@ relay, the web app and the pi extension, built from one commit
 Upgrade the relay first, then the rest (Upgrading, in the guide). A
 release that needs its parts upgraded together says so here.
 
+## Unreleased
+
+- The web app no longer stays on its logo for good when the server is out
+  of reach as it opens (no network, a deploy): it says so, and tries again
+  every few seconds and as soon as it is shown again.
+- In the web app, closing an image opened full screen from a message no
+  longer offers going back or forking from that message; with Enter, the
+  image stayed open and the offer came over it.
+
 ## 0.3.13 (2026-11-21)
 
 - New agent works when pi runs in herdr. It failed every time with

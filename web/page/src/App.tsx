@@ -92,7 +92,7 @@ export function App() {
   }, [state.stream]);
 
   if (path === "/pair") return <Pair done={() => go("/")} />;
-  if (state.signedIn === undefined) return <Splash />;
+  if (state.signedIn === undefined) return <Splash unreachable={state.unreachable} />;
   if (!state.signedIn) return <SignIn />;
   const session = chatId ? state.sessions.find((s) => s.id === chatId) : undefined;
   return (
@@ -139,8 +139,17 @@ export function Layout(p: { wide: boolean; banner: React.ReactNode; list: React.
   );
 }
 
-export function Splash() {
-  return <div className="flex h-dvh items-center justify-center bg-paper"><Mark /></div>;
+// While finding out whether signed in; saying so when the server is out
+// of reach, as it is asked again.
+export function Splash(p: { unreachable?: boolean }) {
+  return (
+    <div className="flex h-dvh items-center justify-center bg-paper">
+      <div className="relative">
+        <Mark />
+        <p className="absolute top-full left-1/2 mt-6 w-72 -translate-x-1/2 text-center text-[15px] text-ink2" role="status">{p.unreachable && "Can't reach PiRC's server. Trying again…"}</p>
+      </div>
+    </div>
+  );
 }
 
 export function Banner(p: { relay: string; reason?: string; stream: string }) {

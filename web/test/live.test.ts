@@ -32,7 +32,10 @@ g.EventSource = FakeSource;
 // Snapshots answer when the test says; an answer with status is an error.
 const pending: ((body: unknown) => void)[] = [];
 const asked: string[] = [];
+// The server out of reach: asking whether signed in fails, as fetch does.
+let unreachable = false;
 g.fetch = async (url: string) => {
+  if (unreachable && url.startsWith("/api/auth")) throw new TypeError("Failed to fetch");
   if (!url.startsWith("/api/auth")) asked.push(url);
   const body = url.startsWith("/api/auth")
     ? { signedIn: true }
@@ -194,4 +197,27 @@ test("a reset to a chat's latest items keeps the earlier ones loaded when they l
   assert.equal(kept(was, other), other);
   const whole = { items: ids(3, 0).map(user), truncated: false, loading: false };
   assert.equal(kept(was, whole), whole);
+});
+
+test("a server out of reach at start is asked again, at once when the page is shown again, never left on the splash", async () => {
+  FakeSource.all = [];
+  for (const k of Object.keys(docListeners)) delete docListeners[k];
+  unreachable = true;
+  const live = new Live();
+  await live.start();
+  assert.equal(live.state.signedIn, undefined);
+  assert.equal(live.state.unreachable, true);
+  // Shown again twice while still out of reach: one question at a time.
+  resume();
+  resume();
+  await settle();
+  assert.equal(live.state.unreachable, true);
+  unreachable = false;
+  resume();
+  await settle();
+  assert.equal(live.state.signedIn, true);
+  assert.equal(live.state.unreachable, false);
+  pending.shift()!(snapshot("run.0"));
+  await settle();
+  assert.equal(open().length, 1);
 });
