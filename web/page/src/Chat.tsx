@@ -536,7 +536,7 @@ function Items(p: {
         <button
           onClick={toEnd}
           aria-label={more ? "New messages: go to the end" : "Go to the end"}
-          className="absolute right-4 bottom-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13.5px] font-semibold text-paper shadow-[0_6px_20px_rgb(0_0_0/0.18)]"
+          className="hit absolute right-4 bottom-3 inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13.5px] font-semibold text-paper shadow-[0_6px_20px_rgb(0_0_0/0.18)]"
         >
           <Icon name="down" />{more && "New messages"}
         </button>
@@ -700,7 +700,7 @@ function Unsent(p: { pending: Pending; asking: boolean; compacting: boolean; ret
     : x.state === "failed"
     ? ["", `Not sent: ${x.error || "no answer"}`]
     : ["", "Not sent: pi stopped first, and put it back in its own input box"];
-  const link = "min-h-9 px-2.5 text-sm font-semibold underline decoration-ink3 underline-offset-[3px]";
+  const link = "hit relative min-h-9 px-2.5 text-sm font-semibold underline decoration-ink3 underline-offset-[3px]";
   return (
     <div className="flex max-w-[84%] flex-col items-end gap-1.5 self-end">
       <Bubble faded={!trouble} refused={trouble}>
@@ -744,7 +744,7 @@ function Assistant(p: { item: AssistantItem }) {
         if (b.kind === "thinking") {
           return (
             <details key={i} className="group">
-              <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 font-read text-[15px] text-ink2 italic [&::-webkit-details-marker]:hidden cards:min-h-[30px] cards:rounded-full cards:bg-wash cards:px-3 cards:text-[13.5px] cards:text-ink3 cards:not-italic native:text-sm native:font-medium cockpit:font-mono cockpit:text-[12.5px] cockpit:text-ink3 cockpit:not-italic">
+              <summary className="hit relative inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 font-read text-[15px] text-ink2 italic [&::-webkit-details-marker]:hidden cards:min-h-[30px] cards:rounded-full cards:bg-wash cards:px-3 cards:text-[13.5px] cards:text-ink3 cards:not-italic native:text-sm native:font-medium cockpit:font-mono cockpit:text-[12.5px] cockpit:text-ink3 cockpit:not-italic">
                 Thinking<Icon name="chevron" className="size-3 transition-transform group-open:rotate-90" />
               </summary>
               <p className="mt-1 border-l border-rule pl-3.5 font-read text-[15px] leading-relaxed text-ink2 italic whitespace-pre-wrap cards:mt-2.5 cards:border-l-2 cards:border-wash2 cards:pl-3 cards:text-sm cockpit:border-l-2 cockpit:border-wash2 cockpit:pl-2.5 cockpit:text-sm">{b.text}</p>

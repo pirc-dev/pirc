@@ -209,7 +209,12 @@ class Thumbs extends StatelessWidget {
     final look = Look.of(context);
     return Wrap(spacing: 6, runSpacing: 6, children: [
       for (final (i, data) in images.indexed)
+        // With a remove button, room at its corner for the button's whole
+        // target, inside the Stack: taps outside a Stack do not reach it.
         Stack(clipBehavior: Clip.none, children: [
+          Padding(
+            padding: onRemove == null ? EdgeInsets.zero : const EdgeInsets.only(top: 18, right: 18),
+            child: Stack(clipBehavior: Clip.none, children: [
           if (data == null)
             Container(
               height: 64,
@@ -239,17 +244,20 @@ class Thumbs extends StatelessWidget {
                 ),
               ),
             ),
+          ])),
           if (onRemove != null)
+            // Drawn where it was, 4 points in from the thumbnail's corner;
+            // its target 44 points around that.
             Positioned(
-              top: -8,
-              right: -8,
+              top: 0,
+              right: 0,
               child: Semantics(
                 container: true,
                 button: true,
                 label: 'Remove image',
                 excludeSemantics: true,
                 onTap: () => onRemove!(i),
-                child: GestureDetector(
+                child: Reach(
                   onTap: () => onRemove!(i),
                   child: Container(
                     width: 24,

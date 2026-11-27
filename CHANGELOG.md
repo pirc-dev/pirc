@@ -45,6 +45,10 @@ release that needs its parts upgraded together says so here.
 - A message that could not be sent says which it was, "not connected to the
   relay" or "too large to send", in the web app and the phone apps; it said
   "one or the other".
+- Small controls are a whole 44 points to tap, drawn as before, in the web
+  app and the phone apps: Steer and Queue, Stop, Send, adding and removing
+  an image, Copy, Thinking, a table's Full screen, going to the end, and
+  Retry, Edit and Dismiss on a message not sent.
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 

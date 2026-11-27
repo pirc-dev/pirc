@@ -458,7 +458,7 @@ class _ToEnd extends StatelessWidget {
       label: more ? 'New messages: go to the end' : 'Go to the end',
       excludeSemantics: true,
       onTap: onTap,
-      child: GestureDetector(
+      child: Reach(
         onTap: onTap,
         child: Container(
           height: 36,
@@ -783,7 +783,7 @@ class _Unsent extends StatelessWidget {
     };
     Widget link(String label, VoidCallback f, {bool quiet = false}) => CupertinoButton(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          minimumSize: const Size(0, 36),
+          minimumSize: const Size(0, 44),
           onPressed: f,
           child: Text(label, style: look.text(size: 14, weight: quiet ? FontWeight.w400 : FontWeight.w600, color: quiet ? look.ink2 : look.ink).copyWith(decoration: TextDecoration.underline, decorationColor: look.ink3)),
         );
@@ -861,7 +861,7 @@ class _ThinkingState extends State<_Thinking> {
   Widget build(BuildContext context) {
     final look = Look.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      GestureDetector(
+      Reach(
         onTap: () {
           const _Unfolding().dispatch(context);
           setState(() => _open = !_open);
@@ -1207,7 +1207,7 @@ class _FoldedState extends State<_Folded> {
           setState(() => _open = !_open);
         },
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 30),
+          constraints: const BoxConstraints(minHeight: 44),
           child: Row(children: [
             const _Mark('done'),
             const SizedBox(width: 6),
@@ -1482,7 +1482,9 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                       _compact(Row(mainAxisSize: MainAxisSize.min, children: [
                         _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
                         const SizedBox(width: 6),
-                        CupertinoButton(
+                        Reach(
+                          onTap: () => widget.model.stop(s.id),
+                          child: CupertinoButton(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           minimumSize: const Size(0, 36),
                           color: look.blockWash,
@@ -1493,7 +1495,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                             const SizedBox(width: 8),
                             Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
                           ]),
-                        ),
+                        )),
                       ])),
                     ],
                   ),
@@ -1521,7 +1523,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                     onTap: canAdd ? _add : null,
                     child: CupertinoButton(
                       padding: EdgeInsets.zero,
-                      minimumSize: const Size(38, 38),
+                      minimumSize: const Size(44, 44),
                       onPressed: canAdd ? _add : null,
                       child: Icon(widget.model.client.takes(s.id, takesFiles) ? CupertinoIcons.paperclip : CupertinoIcons.photo, size: 24, color: canAdd ? look.ink2 : look.ink3),
                     ),
@@ -1559,7 +1561,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                     button: true,
                     label: busy ? (_steer ? 'Steer' : 'Queue') : 'Send',
                     enabled: !empty,
-                    child: GestureDetector(
+                    child: Reach(
                       onTap: empty ? null : send,
                       child: Container(
                         height: 38,
@@ -1610,21 +1612,26 @@ class _Switch extends StatelessWidget {
           hint: hint,
           excludeSemantics: true,
           onTap: () => set(value),
+          // Each side's target the switch's whole 44 points of height.
           child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () => set(value),
-            child: Container(
+            child: SizedBox(height: 44, child: Center(child: Container(
               height: 28,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               alignment: Alignment.center,
               decoration: steer == value ? BoxDecoration(color: look.sheetCard, borderRadius: BorderRadius.circular(7), boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 2, offset: Offset(0, 1))]) : null,
               child: Text(label, style: look.text(size: 12.5, weight: steer == value ? FontWeight.w600 : FontWeight.w400, color: steer == value ? look.ink : look.ink2, spacing: 0)),
-            ),
+            ))),
           ),
         );
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(9)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [side('Steer', 'pi reads it after the step it is on', true), side('Queue', 'pi reads it when the whole task is done', false)]),
-    );
+    // Drawn 32 high, its well behind the sides.
+    return Stack(children: [
+      Positioned.fill(top: 6, bottom: 6, child: DecoratedBox(decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(9)))),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [side('Steer', 'pi reads it after the step it is on', true), side('Queue', 'pi reads it when the whole task is done', false)]),
+      ),
+    ]);
   }
 }

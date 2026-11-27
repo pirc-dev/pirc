@@ -21,6 +21,21 @@
    under 16px as it takes focus, and leaves it zoomed: on touch screens a
    field is 16px or more, "touch:text-base!" where a look makes it less. */
 @custom-variant touch (@media (pointer: coarse));
+/* A control drawn smaller than a finger: its target a whole 44 by 44
+   pixels, centred on it, as an overlay that moves nothing. The control must
+   be positioned ("relative" unless it is already). Not for rows stacked
+   closer than that, whose targets would overlap. */
+@utility hit {
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
 
 :root {
   --paper: #fbfbf9;

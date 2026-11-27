@@ -19,7 +19,7 @@ export function CopyButton(p: { text: () => string; label: string; className?: s
   };
   return (
     <button
-      className={`min-h-8 flex-none px-1.5 font-ui text-[12.5px] font-medium text-ink3 hover:text-ink ${state === "failed" ? "text-block" : ""} ${p.className ?? ""}`}
+      className={`hit relative min-h-8 flex-none px-1.5 font-ui text-[12.5px] font-medium text-ink3 hover:text-ink ${state === "failed" ? "text-block" : ""} ${p.className ?? ""}`}
       aria-label={p.label}
       onClick={() => void copy()}
     >

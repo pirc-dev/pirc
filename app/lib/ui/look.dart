@@ -342,3 +342,18 @@ InlineSpan markedSpan(Look look, String text, int offset, Set<int> positions, Te
   }
   return TextSpan(children: runs);
 }
+
+// A control drawn smaller than a finger: its target a whole 44 points, the
+// drawing centred in it, the taps around the drawing its own.
+class Reach extends StatelessWidget {
+  const Reach({super.key, required this.onTap, required this.child});
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ConstrainedBox(constraints: const BoxConstraints(minWidth: 44, minHeight: 44), child: Center(widthFactor: 1, heightFactor: 1, child: child)),
+      );
+}

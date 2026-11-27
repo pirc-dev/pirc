@@ -720,6 +720,22 @@ void main() {
     expect(seen, [1, 0.5, 0, 0.5, 1]);
   }, skip: !drawsGoldens);
 
+  testWidgets("the message box's small controls: each a whole 44 points to tap", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    await tester.pump();
+    Size reach(Finder f) => tester.getSize(find.ancestor(of: f, matching: find.byType(Reach)).first);
+    for (final f in [find.text('Stop'), find.byKey(const ValueKey('send')).first]) {
+      final size = f.evaluate().first.widget is Text ? reach(f) : tester.getSize(f);
+      expect(size.width >= 44 && size.height >= 44, isTrue, reason: '$f: $size');
+    }
+    for (final side in ['Steer', 'Queue']) {
+      expect(tester.getSize(find.bySemanticsLabel(side).first).height, greaterThanOrEqualTo(44), reason: side);
+    }
+    expect(tester.getSize(find.bySemanticsLabel(RegExp('^Add an image'))).height, greaterThanOrEqualTo(44));
+  });
+
   testWidgets('a count tapped shows only its sessions, unfolded; tapped again, every one as it was', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
@@ -1107,6 +1123,8 @@ void main() {
     expect(find.textContaining('with a summary of what came after'), findsOneWidget);
     expect(box(), 'update the docs for 0.2');
     // Forked, refused: the box as it was.
+    await tester.ensureVisible(find.text('update the docs for 0.2').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('update the docs for 0.2').first);
     await tester.pumpAndSettle();
     sent.clear();
@@ -1369,7 +1387,11 @@ void main() {
     await tester.runAsync(() => precacheImage(MemoryImage(picture), tester.element(find.byType(ChatScreen))));
     await tester.pump();
     await expectLater(find.byType(ChatScreen), matchesGoldenFile('goldens/attached_light.png'));
-    await tester.tap(find.bySemanticsLabel('Remove image').first);
+    // Its target a whole 44 points: tapped 18 points beside its drawn
+    // circle, out past the thumbnail's corner, it still removes.
+    final remove = find.bySemanticsLabel('Remove image').first;
+    expect(tester.getSize(remove), const Size(44, 44));
+    await tester.tapAt(tester.getCenter(remove).translate(18, -18));
     await tester.pump();
     expect(find.bySemanticsLabel('Remove image'), findsOneWidget);
     sent.clear();

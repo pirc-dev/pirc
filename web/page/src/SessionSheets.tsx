@@ -175,7 +175,7 @@ export function Actions(p: {
                 key={l}
                 aria-pressed={s.thinking === l}
                 aria-label={l}
-                className="min-h-9 rounded-full text-[14px] text-ink2 aria-pressed:bg-ink aria-pressed:font-semibold aria-pressed:text-paper cards:rounded-[7px] cards:text-[12.5px] cards:aria-pressed:bg-accent cards:aria-pressed:text-on-accent cockpit:rounded-[5px] cockpit:font-mono cockpit:text-xs cockpit:ring-1 cockpit:ring-rule cockpit:ring-inset cockpit:aria-pressed:bg-accent cockpit:aria-pressed:font-bold cockpit:aria-pressed:text-on-accent cockpit:aria-pressed:ring-accent"
+                className="hit relative min-h-9 rounded-full text-[14px] text-ink2 aria-pressed:bg-ink aria-pressed:font-semibold aria-pressed:text-paper cards:rounded-[7px] cards:text-[12.5px] cards:aria-pressed:bg-accent cards:aria-pressed:text-on-accent cockpit:rounded-[5px] cockpit:font-mono cockpit:text-xs cockpit:ring-1 cockpit:ring-rule cockpit:ring-inset cockpit:aria-pressed:bg-accent cockpit:aria-pressed:font-bold cockpit:aria-pressed:text-on-accent cockpit:aria-pressed:ring-accent"
                 onClick={() => (s.thinking === l ? p.close() : void act("thinking", { level: l }))}
               >
                 {SHORT[l] ?? l}
@@ -260,7 +260,7 @@ function Resume(p: { session: SessionView; close: () => void; go: (x: PastSessio
   const scope = (value: boolean, label: string) => (
     <button
       aria-pressed={all === value}
-      className="min-h-9 flex-1 rounded-full text-[14px] text-ink2 aria-pressed:bg-ink aria-pressed:font-semibold aria-pressed:text-paper cards:rounded-[7px] cards:text-[13px] cards:aria-pressed:bg-accent cards:aria-pressed:text-on-accent"
+      className="hit relative min-h-9 flex-1 rounded-full text-[14px] text-ink2 aria-pressed:bg-ink aria-pressed:font-semibold aria-pressed:text-paper cards:rounded-[7px] cards:text-[13px] cards:aria-pressed:bg-accent cards:aria-pressed:text-on-accent"
       onClick={() => setAll(value)}
     >
       {label}

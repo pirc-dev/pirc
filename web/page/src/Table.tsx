@@ -45,7 +45,7 @@ export function Table({ node: _, children }: Props<"table">) {
         <table>{children}</table>
       </div>
       {wide && (
-        <button ref={opener} className="mt-1.5 inline-flex min-h-8 items-center gap-1.5 font-ui text-[13px] text-ink2 underline decoration-ink3 underline-offset-[3px] cards:text-[13.5px] cards:font-medium cards:text-accent cards:no-underline" onClick={open}>
+        <button ref={opener} className="hit relative mt-1.5 inline-flex min-h-8 items-center gap-1.5 font-ui text-[13px] text-ink2 underline decoration-ink3 underline-offset-[3px] cards:text-[13.5px] cards:font-medium cards:text-accent cards:no-underline" onClick={open}>
           <Icon name="expand" />Full screen
         </button>
       )}

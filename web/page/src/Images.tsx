@@ -23,7 +23,7 @@ export function Thumbs(p: { images: (ImageView & { url?: string })[]; onRemove?:
               setOpen(u);
             }} />
             {p.onRemove && (
-              <button className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-ink text-[13px] text-paper ring-2 ring-paper" aria-label="Remove image" onClick={() => p.onRemove!(i)}>
+              <button className="hit absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-ink text-[13px] text-paper ring-2 ring-paper" aria-label="Remove image" onClick={() => p.onRemove!(i)}>
                 <Icon name="close" />
               </button>
             )}

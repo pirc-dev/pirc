@@ -175,7 +175,7 @@ function LookChoice() {
             <button
               key={l}
               aria-pressed={look === l}
-              className="min-h-9 rounded-full px-1 text-[14px] text-ink2 capitalize aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:shadow-[0_1px_3px_rgb(0_0_0/0.12)] cards:rounded-[10px] cards:aria-pressed:bg-card cockpit:rounded-[7px] cockpit:font-mono cockpit:text-[13px] cockpit:normal-case"
+              className="hit relative min-h-9 rounded-full px-1 text-[14px] text-ink2 capitalize aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:shadow-[0_1px_3px_rgb(0_0_0/0.12)] cards:rounded-[10px] cards:aria-pressed:bg-card cockpit:rounded-[7px] cockpit:font-mono cockpit:text-[13px] cockpit:normal-case"
               onClick={() => setLook(l)}
             >
               {l}

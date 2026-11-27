@@ -181,7 +181,7 @@ export function Composer(p: {
       {([["steer", "Steer", "pi reads it after the step it is on"], ["followUp", "Queue", "pi reads it when the whole task is done"]] as const).map(([m, label, title]) => (
         <button
           key={m}
-          className="h-7 rounded-full px-2.5 text-ink2 aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:ring-1 aria-pressed:ring-ink3 cards:rounded-[7px] cards:aria-pressed:bg-card cards:aria-pressed:shadow-card cards:aria-pressed:ring-wash2 native:aria-pressed:bg-sheet-card cockpit:rounded-md cockpit:aria-pressed:ring-accent"
+          className="hit relative h-7 rounded-full px-2.5 text-ink2 aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:ring-1 aria-pressed:ring-ink3 cards:rounded-[7px] cards:aria-pressed:bg-card cards:aria-pressed:shadow-card cards:aria-pressed:ring-wash2 native:aria-pressed:bg-sheet-card cockpit:rounded-md cockpit:aria-pressed:ring-accent"
           onClick={() => setMode(m)}
           aria-pressed={mode === m}
           title={title}
@@ -212,7 +212,7 @@ export function Composer(p: {
             <span className="w-4 text-center font-mono font-semibold text-work" aria-hidden="true">◐</span>
             <Status since={p.since} compacting={Boolean(p.session.compacting)} />
             {switcher}
-            <button className="ml-1.5 inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => p.run("abort", {})}>
+            <button className="hit relative ml-1.5 inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => p.run("abort", {})}>
               <span className="size-[9px] rounded-[1.5px] bg-current" aria-hidden="true" />Stop{keys && <Key>esc</Key>}
             </button>
           </div>
@@ -235,12 +235,12 @@ export function Composer(p: {
           }} />
           {takesFiles
             ? (
-              <button className="-mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink cards:h-[46px] native:h-[38px]" aria-label="Attach an image or file" title="Attach an image or file" onClick={() => picker.current?.click()}>
+              <button className="hit relative -mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink cards:h-[46px] native:h-[38px]" aria-label="Attach an image or file" title="Attach an image or file" onClick={() => picker.current?.click()}>
                 <Icon name="clip" />
               </button>
             )
             : (
-              <button className="-mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink disabled:opacity-40 cards:h-[46px] native:h-[38px]" aria-label="Add an image" disabled={p.images.length >= IMAGES_MAX} onClick={() => picker.current?.click()}>
+              <button className="hit relative -mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink disabled:opacity-40 cards:h-[46px] native:h-[38px]" aria-label="Add an image" disabled={p.images.length >= IMAGES_MAX} onClick={() => picker.current?.click()}>
                 <Icon name="image" />
               </button>
             )}
@@ -284,7 +284,7 @@ export function Composer(p: {
           />
           {/* Native's idle send is a round arrow, as a messaging app's. */}
           <button
-            className={`h-11 flex-none rounded-full bg-ink px-4.5 text-[15px] font-semibold text-paper disabled:bg-wash2 disabled:text-ink3 cards:h-[46px] cards:bg-accent cards:text-on-accent cards:disabled:bg-accent cards:disabled:text-on-accent cards:disabled:opacity-40 native:h-[38px] native:disabled:bg-wash2 native:disabled:text-ink3 native:disabled:opacity-100 cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent ${busy ? "native:rounded-xl" : "native:w-[38px] native:px-0 native:text-xl"}`}
+            className={`hit relative h-11 flex-none rounded-full bg-ink px-4.5 text-[15px] font-semibold text-paper disabled:bg-wash2 disabled:text-ink3 cards:h-[46px] cards:bg-accent cards:text-on-accent cards:disabled:bg-accent cards:disabled:text-on-accent cards:disabled:opacity-40 native:h-[38px] native:disabled:bg-wash2 native:disabled:text-ink3 native:disabled:opacity-100 cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent ${busy ? "native:rounded-xl" : "native:w-[38px] native:px-0 native:text-xl"}`}
             disabled={empty}
             onClick={send}
             aria-label={busy ? undefined : "Send"}
