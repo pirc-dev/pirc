@@ -10,7 +10,9 @@ type Of<K extends Result["kind"]> = Extract<Result, { kind: K }>;
 
 export interface Commands {
   // images: base64, IMAGE_TYPES only, within the IMAGE limits below.
-  prompt: { body: { text: string; images?: { mimeType: string; data: string }[]; delivery?: "steer" | "followUp" }; result: Of<"accepted"> };
+  // files: any others, base64, within the FILE limits below; only to a
+  // session whose requests include "attachment_chunk".
+  prompt: { body: { text: string; images?: { mimeType: string; data: string }[]; files?: FileBody[]; delivery?: "steer" | "followUp" }; result: Of<"accepted"> };
   abort: { body: object; result: Of<"accepted"> };
   model: { body: { provider: string; id: string }; result: Of<"accepted"> };
   thinking: { body: { level: ThinkingName }; result: Of<"accepted"> };
@@ -50,6 +52,24 @@ export const IMAGES_MAX = 4;
 export const IMAGE_SIDE = 2000;
 export const IMAGE_BYTES_MAX = 2 << 20;
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+// Files in a prompt (session.proto, Attachment): the server sends each
+// one's bytes to the session in FILE_CHUNK pieces before the prompt. The
+// extension takes FILES_BYTES_MAX at most on their way from one client to
+// a session; the server refuses more, and more than FILES_MAX files.
+export const FILES_MAX = 20;
+export const FILES_BYTES_MAX = 10 << 20;
+export const FILE_CHUNK = 512 << 10;
+// The request that lists a session as taking files.
+export const FILES_REQUEST = "attachment_chunk";
+
+// A file as the page sends it: its name without a directory, its media
+// type (application/octet-stream when unknown) and its bytes in base64.
+export interface FileBody {
+  name: string;
+  mimeType: string;
+  data: string;
+}
 
 // requestId, when the page gives one, names the request end to end: the
 // page makes it once per message and sends it again with a retry, so a

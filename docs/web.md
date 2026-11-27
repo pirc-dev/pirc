@@ -78,7 +78,7 @@ key, which every browser shares.
   ending its sessions. Removing the server's key on the relay cuts off
   every browser at once.
 - **Limits**: request bodies of 64 KiB while signing in and 1 MiB after,
-  but for a prompt, which may carry its images (about 12 MiB); 20
+  but for a prompt, which may carry its images and files (about 25 MiB); 20
   pairing or sign-in attempts a minute per address, behind a proxy the
   client's as the proxy gives it, from a proxy listed in
   `PIRC_WEB_TRUSTED_PROXIES` only (`server/proxy.ts`); HSTS on HTTPS.
@@ -564,7 +564,7 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
 - **Drafts**: what is being written in a chat is kept in the browser, per
   device as read marks are, for a week and for the hundred chats written
   in most recently; sending clears it.
-- **Images in prompts** (below).
+- **Images and files in prompts** (below).
 
 **Code in replies**: highlighted by highlight.js's
 grammars through `rehype-highlight`, beside react-markdown, only where the
@@ -604,3 +604,27 @@ sessions, the least recently shown going first; one gone, or left out of
 a message for size, shows as a placeholder. Reason: what was sent is part
 of the conversation, and the images reach the server anyway. When the
 session's model is known not to take images, the composer says so.
+
+**Files in prompts**: any other file, for a session whose requests include
+`attachment_chunk` (design.md, "A client's files"); for any other session
+the button beside the box takes images only, and a file dropped or pasted
+is refused with why. A message's files come to 10 MiB at most, the
+extension's cap, and 20 files; the composer shows each as a chip with its
+name and size, removable, and says why a file that would pass the cap was
+not added. An image stays an image, shrunk as above; one the browser
+cannot draw goes as a file. A message may be files alone. The page sends
+them to the server in the prompt's JSON, base64, as images go, within the
+prompt's body limit; the server sends each file's bytes to the session
+first, in `AttachmentChunk`s of 512 KiB from offset 0, then the prompt
+naming them, each file's id the request's ID and its place, so a retry
+restarts the same ids. A retry of a prompt the session accepted sends no
+pieces again, since the session answers it from what it kept. Reason:
+base64 in JSON costs a third more on the wire, at most about 13 MiB, and
+keeps one request per message, retried whole, with nothing kept on the
+server between requests; an upload of its own would need storage, ids and
+expiry here for no gain at this size.
+
+A message's files show as chips in its bubble, sent or still pending, by
+name and size, from History (`UserMessage.attachments`); they do not
+open, since only their names come back. The session list names a message
+of files alone by its file, or as "N files"; images come first.

@@ -6,11 +6,12 @@ import { useNow } from "./time.ts";
 import { type Run } from "./chat.ts";
 import { Ask } from "./Ask.tsx";
 import { Icon } from "./icons.tsx";
-import { type Attachment, shrink } from "./attach.ts";
+import { type Attachment, type PickedFile, readFile, shrink } from "./attach.ts";
 import { Thumbs } from "./Images.tsx";
+import { FileChips, size } from "./Files.tsx";
 import { useKeyboard, useKeys } from "./keys.ts";
 import { live } from "./live.ts";
-import { IMAGES_MAX } from "../../core/api.ts";
+import { FILES_BYTES_MAX, FILES_MAX, FILES_REQUEST, IMAGES_MAX } from "../../core/api.ts";
 
 // How long the turn has run, by the host's clock.
 // What pi is doing and for how long. On a phone's width "Working" goes,
@@ -55,7 +56,8 @@ function useBlind(s: SessionView, attached: boolean): boolean {
 // the step it is on (Steer, the default, as Enter in pi) or once the whole
 // task is done (Queue, as Alt+Enter in pi); and one send button that says
 // which. Neither interrupts pi: only Stop does. Images come with the button beside
-// the box, or pasted or dropped anywhere on the page. Cmd/Ctrl+Enter sends
+// the box, or pasted or dropped anywhere on the page; so do other files,
+// for a session that takes them, up to FILES_BYTES_MAX together. Cmd/Ctrl+Enter sends
 // as the button would; so does Enter where there is a mouse or trackpad, taken as a sign
 // of a hardware keyboard (keys.ts), Shift+Enter there making a new line, and
 // Alt+Enter queues. On a touch
@@ -68,6 +70,8 @@ export function Composer(p: {
   setText: (t: string) => void;
   images: Attachment[];
   setImages: (f: (was: Attachment[]) => Attachment[]) => void;
+  files: PickedFile[];
+  setFiles: (f: (was: PickedFile[]) => PickedFile[]) => void;
   ready: boolean;
   since: number | undefined;
   turn: string | undefined;
@@ -79,7 +83,14 @@ export function Composer(p: {
   const keyboard = useKeyboard();
   const keys = useKeys();
   const busy = p.session.working || p.session.compacting;
-  const send = () => p.send(busy ? mode : undefined);
+  const [problem, setProblem] = useState<string>();
+  // What was refused is not said again once the message goes.
+  const sendAs = (delivery?: "steer" | "followUp") => {
+    if (empty) return;
+    setProblem(undefined);
+    p.send(delivery);
+  };
+  const send = () => sendAs(busy ? mode : undefined);
   // Each turn starts on Steer: a Queue chosen for the last one is not kept,
   // also when a queued message starts the next without pi going idle.
   useEffect(() => {
@@ -92,13 +103,41 @@ export function Composer(p: {
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
     // Also when it comes back, after a question.
   }, [text, Boolean(p.session.questions?.length)]);
-  const empty = (!text.trim() && p.images.length === 0) || !p.ready;
+  const empty = (!text.trim() && p.images.length === 0 && p.files.length === 0) || !p.ready;
   const picker = useRef<HTMLInputElement>(null);
-  const [problem, setProblem] = useState<string>();
+  // Whether the session's extension takes files (session.proto, Prompt).
+  const takesFiles = p.session.requests?.includes(FILES_REQUEST) ?? false;
+  // The files being read, counted with those attached against the limits.
+  const reading = useRef({ count: 0, bytes: 0 });
+  const attached = useRef(p.files);
+  attached.current = p.files;
+  // A file within the limits, read and attached; otherwise why not.
+  const addFile = async (f: File) => {
+    const count = attached.current.length + reading.current.count;
+    const bytes = attached.current.reduce((n, x) => n + x.size, 0) + reading.current.bytes;
+    if (count >= FILES_MAX) return setProblem(`At most ${FILES_MAX} files in a message.`);
+    if (bytes + f.size > FILES_BYTES_MAX) {
+      return setProblem(`${f.name} (${size(f.size)}) was not added: a message's files come to ${size(FILES_BYTES_MAX)} at most${bytes ? `, and ${size(bytes)} are attached` : ""}.`);
+    }
+    reading.current = { count: reading.current.count + 1, bytes: reading.current.bytes + f.size };
+    try {
+      const picked = await readFile(f);
+      attached.current = [...attached.current, picked];
+      p.setFiles((all) => [...all, picked]);
+    } catch (e) {
+      setProblem((e as Error).message);
+    } finally {
+      reading.current = { count: reading.current.count - 1, bytes: reading.current.bytes - f.size };
+    }
+  };
   const add = async (files: File[]) => {
     const images = files.filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) return;
+    const others = files.filter((f) => !f.type.startsWith("image/"));
+    if (files.length === 0) return;
     setProblem(undefined);
+    if (others.length > 0 && !takesFiles) {
+      setProblem(`This session's extension (${p.session.extensionVersion}) takes images only; update it to send other files.`);
+    }
     const room = IMAGES_MAX - p.images.length;
     if (images.length > room) setProblem(`At most ${IMAGES_MAX} images in a message.`);
     for (const f of images.slice(0, Math.max(0, room))) {
@@ -106,9 +145,12 @@ export function Composer(p: {
         const a = await shrink(f);
         p.setImages((was) => (was.length < IMAGES_MAX ? [...was, a] : was));
       } catch (e) {
-        setProblem((e as Error).message);
+        // One the browser cannot draw still goes as it is, as a file.
+        if (takesFiles) await addFile(f);
+        else setProblem((e as Error).message);
       }
     }
+    if (takesFiles) for (const f of others) await addFile(f);
   };
   const adding = useRef(add);
   adding.current = add;
@@ -180,24 +222,37 @@ export function Composer(p: {
             <Thumbs images={p.images} onRemove={(i) => p.setImages((was) => was.filter((_, j) => j !== i))} />
           </div>
         )}
+        {p.files.length > 0 && (
+          <div className={p.images.length > 0 ? "" : "pt-2"}>
+            <FileChips files={p.files} onRemove={(i) => p.setFiles((was) => was.filter((_, j) => j !== i))} />
+          </div>
+        )}
         {(problem || blind) && <p className="text-[13.5px] text-block" role="alert">{problem ?? "The current model does not take images; pi will leave them out or the model will refuse them."}</p>}
         <div className="flex items-end gap-2.5 cards:gap-2">
-          <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => {
+          <input ref={picker} type="file" accept={takesFiles ? undefined : "image/*"} multiple hidden onChange={(e) => {
             void add([...(e.target.files ?? [])]);
             e.target.value = "";
           }} />
-          <button className="-mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink disabled:opacity-40 cards:h-[46px] native:h-[38px]" aria-label="Add an image" disabled={p.images.length >= IMAGES_MAX} onClick={() => picker.current?.click()}>
-            <Icon name="image" />
-          </button>
+          {takesFiles
+            ? (
+              <button className="-mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink cards:h-[46px] native:h-[38px]" aria-label="Attach an image or file" title="Attach an image or file" onClick={() => picker.current?.click()}>
+                <Icon name="clip" />
+              </button>
+            )
+            : (
+              <button className="-mr-1.5 grid size-11 flex-none place-items-center text-[22px] text-ink2 hover:text-ink disabled:opacity-40 cards:h-[46px] native:h-[38px]" aria-label="Add an image" disabled={p.images.length >= IMAGES_MAX} onClick={() => picker.current?.click()}>
+                <Icon name="image" />
+              </button>
+            )}
           <textarea
             ref={area}
             rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onPaste={(e) => {
-              const files = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+              const files = [...e.clipboardData.files].filter((f) => takesFiles || f.type.startsWith("image/"));
               if (files.length === 0) return;
-              // An image alone is attached; text with it still pastes.
+              // A file alone is attached; text with it still pastes.
               if (!e.clipboardData.getData("text/plain")) e.preventDefault();
               void add(files);
             }}
@@ -214,7 +269,7 @@ export function Composer(p: {
                 // Queued, as in pi, whatever the switch says; never a new
                 // line, which Option+Enter would otherwise make.
                 e.preventDefault();
-                if (!empty) p.send(busy ? "followUp" : undefined);
+                sendAs(busy ? "followUp" : undefined);
                 return;
               }
               if (e.metaKey || e.ctrlKey || keyboard) {

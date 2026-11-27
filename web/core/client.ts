@@ -33,7 +33,7 @@ import {
   thinkingName,
 } from "@pirc/protocol";
 
-import type { RelayAnswer } from "./api.ts";
+import { FILE_CHUNK, FILES_REQUEST, type RelayAnswer } from "./api.ts";
 import { ImageStore, type StoredImage } from "./images.ts";
 import { applyToChat, lastOf, type ChatItem, type ChatView, type DeviceView, type ModelView, type NoticeView, type PendingHostView, type PlaceView, type QuestionView, type RelayView, type SessionView, type Snapshot, type ViewEvent } from "./view.ts";
 
@@ -73,6 +73,18 @@ export interface ClientOptions {
 
 // A request's answer: the session's reply, or an error made here.
 export type Reply = SessionMessage;
+
+// A file's bytes for a prompt, by the id its Attachment names.
+export interface FileBytes {
+  id: string;
+  data: Uint8Array;
+}
+
+// The prompts with files a session accepted, by request ID, remembered so
+// that a retry of one does not send its files again: the session answers
+// it from what it kept, and pieces sent anyway would wait there unclaimed,
+// counted against the client's cap.
+const ACCEPTED_KEPT = 256;
 
 // A request to a session, as SessionMessage's body.
 export type RequestBody = MessageInitShape<typeof SessionMessageSchema>["body"];
@@ -229,6 +241,7 @@ const emptyChat = (loading: boolean): ChatView => ({ items: [], truncated: false
 export class Client {
   private sessions = new Map<string, Live>();
   private pending = new Map<string, Pending>();
+  private accepted = new Set<string>();
   // Requests to the relay itself: decisions on waiting hosts, changes to
   // keys, tokens.
   private deciding = new Map<string, { resolve(d: RelayAnswer | Issued): void; timer: unknown }>();
@@ -628,6 +641,7 @@ export class Client {
           kind: "user", id: it.entryId ? `e-${it.entryId}` : b.value.requestId ? `r-${b.value.requestId}` : `u-${s.unsaved++}`,
           ...base, text: b.value.text,
           images: b.value.images.map((i) => ({ mimeType: i.mimeType, ...(i.data.length > 0 ? { key: this.images.put(i.mimeType, i.data) } : {}) })),
+          ...(b.value.attachments.length > 0 ? { attachments: b.value.attachments.map((a) => ({ name: a.name, mimeType: a.mimeType, size: Number(a.size) })) } : {}),
           ...(b.value.requestId ? { requestId: b.value.requestId } : {}),
         };
         break;
@@ -705,8 +719,9 @@ export class Client {
   // --- Requests ----------------------------------------------------------------
 
   // Sends a request to a session and resolves with its answer, or an error
-  // made here (SESSION_GONE, BUSY, TIMEOUT). It never rejects.
-  ask(id: string, body: RequestBody, extend?: () => boolean): Promise<Reply> {
+  // made here (SESSION_GONE, BUSY, TIMEOUT). It never rejects. files are a
+  // prompt's, the bytes of its attachments, sent first.
+  ask(id: string, body: RequestBody, extend?: () => boolean, files: FileBytes[] = []): Promise<Reply> {
     const s = this.sessions.get(id);
     const requestId = requestIdOf(body);
     if (!s || s.endTimer !== undefined) return Promise.resolve(errorReply(requestId, ErrorCode.SESSION_GONE, "the session has ended"));
@@ -716,7 +731,38 @@ export class Client {
     if (takes && !takes.includes(name)) {
       return Promise.resolve(errorReply(requestId, ErrorCode.INVALID, `this session's extension (${s.view.extensionVersion}) does not take ${name}; update it`));
     }
-    return this.request(s.ref, body, requestId, extend);
+    // A session that does not list it would drop the pieces unread.
+    if (files.length > 0 && !takes?.includes(FILES_REQUEST)) {
+      return Promise.resolve(errorReply(requestId, ErrorCode.INVALID, `this session's extension (${s.view.extensionVersion}) does not take files; update it`));
+    }
+    if (files.length === 0) return this.request(s.ref, body, requestId, extend);
+    const again = this.pending.has(requestId) || this.accepted.has(requestId);
+    if (requestId && !again && !this.sendFiles(s.ref, files)) {
+      return Promise.resolve(errorReply(requestId, ErrorCode.BUSY, "not connected to the relay, or its files could not be sent"));
+    }
+    return this.request(s.ref, body, requestId, extend).then((r) => {
+      if (r.body.case === "accepted") {
+        this.accepted.delete(requestId);
+        this.accepted.add(requestId);
+        if (this.accepted.size > ACCEPTED_KEPT) this.accepted.delete(this.accepted.values().next().value!);
+      }
+      return r;
+    });
+  }
+
+  // Each file's bytes in pieces of FILE_CHUNK, in order from offset 0, one
+  // at least for an empty file. Unanswered: the prompt that follows
+  // carries the outcome. A piece at offset 0 starts its file afresh, so a
+  // retry sends them all again.
+  private sendFiles(to: SessionRef, files: FileBytes[]): boolean {
+    for (const f of files) {
+      for (let offset = 0; offset === 0 || offset < f.data.length; offset += FILE_CHUNK) {
+        const data = f.data.subarray(offset, offset + FILE_CHUNK);
+        const payload = toBinary(SessionMessageSchema, create(SessionMessageSchema, { body: { case: "attachmentChunk", value: { id: f.id, offset: BigInt(offset), data } } }));
+        if (!this.send({ case: "routed", value: { session: to, payload } })) return false;
+      }
+    }
+    return true;
   }
 
   // A fresh request ID.

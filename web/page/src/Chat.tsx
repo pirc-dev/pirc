@@ -3,7 +3,7 @@ import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, us
 import Markdown from "react-markdown";
 import type { AssistantItem, ChatItem, ChatView, SessionView, UserItem } from "../../core/view.ts";
 import { live } from "./live.ts";
-import { IMAGES_MAX } from "../../core/api.ts";
+import { FILES_MAX, IMAGES_MAX } from "../../core/api.ts";
 import { Icon } from "./icons.tsx";
 import { free, useKey, useKeys } from "./keys.ts";
 import { useLayer } from "./layer.ts";
@@ -19,11 +19,12 @@ import { Folded, Tool, Waiting } from "./Tool.tsx";
 import { Composer } from "./Composer.tsx";
 import { CopyButton } from "./Copy.tsx";
 import { loadDraft, saveDraft } from "./drafts.ts";
-import type { Attachment } from "./attach.ts";
+import type { Attachment, PickedFile } from "./attach.ts";
 import { Thumbs } from "./Images.tsx";
+import { FileChips } from "./Files.tsx";
 import { Actions, type FromMessage, MessageSheet } from "./SessionSheets.tsx";
 
-type Pending = SentPending<Attachment>;
+type Pending = SentPending<Attachment, PickedFile>;
 
 // Offers to go back or fork from a user message; undefined where pi cannot
 // (a message pi has not saved yet, a session that has ended).
@@ -56,8 +57,9 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   // What is being written, kept when the chat is left (drafts.ts).
   const [text, setText] = useState(() => loadDraft(p.id));
   useEffect(() => saveDraft(p.id, text), [p.id, text]);
-  // Images to send with it; not kept with the draft.
+  // Images and files to send with it; not kept with the draft.
   const [images, setImages] = useState<Attachment[]>([]);
+  const [files, setFiles] = useState<PickedFile[]>([]);
   // The message going back or a fork is being offered from.
   const [from, setFrom] = useState<UserItem>();
   const fromLayer = useLayer(from !== undefined, () => setFrom(undefined));
@@ -135,15 +137,16 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   }, [idle, queued]);
   const pendingNow = useRef(pending);
   pendingNow.current = pending;
-  const send = async (body: string, images: Attachment[], delivery?: "steer" | "followUp", key = nextKey.current++) => {
+  const send = async (body: string, images: Attachment[], files: PickedFile[], delivery?: "steer" | "followUp", key = nextKey.current++) => {
     // A retry is the same request: if pi has it already, it is not run again.
     const requestId = pendingNow.current.find((x) => x.key === key)?.requestId ?? crypto.randomUUID();
-    const sent: Pending = { key, requestId, text: body, ...(images.length ? { images } : {}), delivery, state: "sending", before: userIds(itemsNow.current) };
+    const sent: Pending = { key, requestId, text: body, ...(images.length ? { images } : {}), ...(files.length ? { files } : {}), delivery, state: "sending", before: userIds(itemsNow.current) };
     setPending((ps) => [...ps.filter((x) => x.key !== key), sent]);
     try {
       const r = await live.command(p.id, "prompt", {
         requestId, text: body,
         ...(images.length ? { images: images.map(({ mimeType, data }) => ({ mimeType, data })) } : {}),
+        ...(files.length ? { files: files.map(({ name, mimeType, data }) => ({ name, mimeType, data })) } : {}),
         ...(delivery ? { delivery } : {}),
       });
       change(key, (x) => answered(x, r.ok, r.ok ? undefined : r.message));
@@ -256,11 +259,12 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
             compacting={Boolean(s?.compacting)}
             asking={Boolean(s?.questions?.length)}
             pending={pending}
-            retry={(x) => void send(x.text, x.images ?? [], x.delivery, x.key)}
+            retry={(x) => void send(x.text, x.images ?? [], x.files ?? [], x.delivery, x.key)}
             edit={(x) => {
               setPending((ps) => ps.filter((y) => y.key !== x.key));
               setText(text.trim() ? `${x.text}\n\n${text}` : x.text);
               if (x.images) setImages((was) => [...x.images!, ...was].slice(0, IMAGES_MAX));
+              if (x.files) setFiles((was) => [...x.files!, ...was].slice(0, FILES_MAX));
             }}
             dismiss={(x) => setPending((ps) => ps.filter((y) => y.key !== x.key))}
             top={p.wide ? 0 : overHeight}
@@ -276,14 +280,17 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
           setText={setText}
           images={images}
           setImages={setImages}
+          files={files}
+          setFiles={setFiles}
           ready={ready}
           since={since}
           turn={last?.turnId}
           send={(delivery) => {
-            if ((!text.trim() && images.length === 0) || !ready) return;
-            void send(text, images, delivery);
+            if ((!text.trim() && images.length === 0 && files.length === 0) || !ready) return;
+            void send(text, images, files, delivery);
             setText("");
             setImages([]);
+            setFiles([]);
           }}
         />
       )}
@@ -603,7 +610,8 @@ function User(p: { item: UserItem }) {
     : undefined;
   return (
     <Bubble offer={offer}>
-      {it.images.length > 0 && <div className={it.text ? "pb-1.5" : ""}><Thumbs images={it.images} /></div>}
+      {it.images.length > 0 && <div className={it.text || it.attachments ? "pb-1.5" : ""}><Thumbs images={it.images} /></div>}
+      {it.attachments && <div className={it.text ? "pb-1.5" : ""}><FileChips files={it.attachments} /></div>}
       {it.text}
     </Bubble>
   );
@@ -667,7 +675,8 @@ function Unsent(p: { pending: Pending; asking: boolean; compacting: boolean; ret
   return (
     <div className="flex max-w-[84%] flex-col items-end gap-1.5 self-end">
       <Bubble faded={!trouble} refused={trouble}>
-        {x.images && <div className={x.text ? "pb-1.5" : ""}><Thumbs images={x.images} /></div>}
+        {x.images && <div className={x.text || x.files ? "pb-1.5" : ""}><Thumbs images={x.images} /></div>}
+        {x.files && <div className={x.text ? "pb-1.5" : ""}><FileChips files={x.files} /></div>}
         {x.text}
       </Bubble>
       {trouble

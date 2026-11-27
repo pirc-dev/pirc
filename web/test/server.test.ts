@@ -294,9 +294,9 @@ test("request bodies are limited, before signing in and after", async () => {
   const big = (n: number) => ({ token: "x".repeat(n) });
   assert.equal((await t.req("/api/pair/options", { method: "POST", body: big(100 << 10) })).status, 413);
   await t.pair(new SoftAuthenticator());
-  // A prompt may carry its images; nothing else that much.
+  // A prompt may carry its images and files; nothing else that much.
   assert.equal((await t.req(`/api/sessions/${VID}/prompt`, { method: "POST", body: { text: "x".repeat(2 << 20) } })).status, 200);
-  assert.equal((await t.req(`/api/sessions/${VID}/prompt`, { method: "POST", body: { text: "x".repeat(13 << 20) } })).status, 413);
+  assert.equal((await t.req(`/api/sessions/${VID}/prompt`, { method: "POST", body: { text: "x".repeat(30 << 20) } })).status, 413);
   assert.equal((await t.req(`/api/sessions/${VID}/rename`, { method: "POST", body: { name: "x".repeat(2 << 20) } })).status, 413);
 });
 

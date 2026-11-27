@@ -1,15 +1,17 @@
 // Messages sent from this client that pi has not yet shown in the chat: one
 // appears the moment it is sent, and goes when pi's own copy of it does.
-// Its images are the client's own kind (I), kept to send it again.
+// Its images and files are the client's own kinds (I, F), kept to send it
+// again.
 import type { ChatItem } from "./view.ts";
 
-export interface Pending<I = unknown> {
+export interface Pending<I = unknown, F = unknown> {
   key: number;
   // Made when it is first sent and sent again with a retry, so that pi
   // runs it once (core/api.ts); pi's copy of it carries it.
   requestId: string;
   text: string;
   images?: I[];
+  files?: F[];
   delivery?: "steer" | "followUp";
   // sending: not yet answered. sent: pi took it, to run now. queued: pi
   // took it, to send to the model later. failed: refused, or not

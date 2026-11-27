@@ -1,6 +1,7 @@
-// Images in prompts (docs/web.md, section 6): a picture chosen, pasted or
-// dropped is shrunk here to fit IMAGE_SIDE, pi's own limit, before it is
-// sent.
+// Images and files in prompts (docs/web.md, section 6): a picture chosen,
+// pasted or dropped is shrunk here to fit IMAGE_SIDE, pi's own limit,
+// before it is sent; any other file goes as it is, to a session that takes
+// files.
 import { IMAGE_BYTES_MAX, IMAGE_SIDE, IMAGE_TYPES } from "../../core/api.ts";
 
 // An image ready to send: its data in base64, and as a URL to show it.
@@ -69,4 +70,22 @@ export async function shrink(file: Blob): Promise<Attachment> {
     if (jpeg.size <= IMAGE_BYTES_MAX) return attachment(jpeg, "image/jpeg");
   }
   throw new Error("That image is too large to send, even made smaller.");
+}
+
+// A file ready to send: its bytes in base64.
+export interface PickedFile {
+  name: string;
+  mimeType: string;
+  size: number;
+  data: string;
+}
+
+export async function readFile(f: File): Promise<PickedFile> {
+  let data: string;
+  try {
+    data = (await read(f)).split(",")[1] ?? "";
+  } catch {
+    throw new Error(`${f.name} could not be read.`);
+  }
+  return { name: f.name, mimeType: f.type || "application/octet-stream", size: f.size, data };
 }

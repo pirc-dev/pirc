@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 
 import type { Answer, Body, CommandName } from "../../core/api.ts";
 import type { ModelChoice } from "../../core/results.ts";
-import type { ChatItem, ChatView, DeviceView, ImageView, PendingHostView, QuestionView, SessionView } from "../../core/view.ts";
+import type { AttachmentView, ChatItem, ChatView, DeviceView, ImageView, PendingHostView, QuestionView, SessionView } from "../../core/view.ts";
 import { Banner, Layout, Splash, useWide } from "./App.tsx";
 import { Chat } from "./Chat.tsx";
 import "./index.css";
@@ -58,7 +58,8 @@ const sessions: SessionView[] = [
   session("studio", "work", "api", { name: "Migrations for orgs", said: "All 42 tests pass. I left the migration unapplied.", ago: 12 }),
   session("studio", "work", "api", { first: "Why is the users endpoint slow on cold start?", said: "The pool warms on first request; I moved it to boot.", ago: 40 }),
   session("studio", "work", "web", { name: "Bundle diet", said: "The bundle is down to 182 kB. Open a PR?", ago: 3 }),
-  session("studio", "work", "relay", { name: "Reconnect after sleep", working: true, said: "Go with B and add a test for it", you: true, ago: 1 }),
+  // Its extension takes files as well as images.
+  session("studio", "work", "relay", { name: "Reconnect after sleep", working: true, said: "Go with B and add a test for it", you: true, ago: 1, requests: ["prompt", "attachment_chunk"] }),
   session("studio", "work", "relay", { first: "Review the relay's half-open handling", working: true, said: "Reading the passkey code next.", ago: 2 }),
   session("studio", "work", "docs", { first: "Tidy the README's install section", said: "thanks, that's all for today", you: true, ago: 180 }),
   session("studio", "work", "billing", { name: "Invoice template", said: "Updated the invoice template and its snapshot.", ago: 60 * 24 * 2 }),
@@ -93,7 +94,8 @@ const picture = { mimeType: "image/png", url: "/icon-192.png" } as ImageView;
 
 let i = 0;
 const at = () => now - 30 * min + i++ * 20_000;
-const user = (text: string, images: ImageView[] = []): ChatItem => ({ kind: "user", id: `i${i}`, turnId: "", at: at(), text, images });
+const user = (text: string, images: ImageView[] = [], attachments: AttachmentView[] = []): ChatItem =>
+  ({ kind: "user", id: `i${i}`, turnId: "", at: at(), text, images, ...(attachments.length ? { attachments } : {}) });
 const reply = (text: string, o: Partial<Extract<ChatItem, { kind: "assistant" }>> = {}): ChatItem =>
   ({ kind: "assistant", id: `i${i}`, turnId: "", at: at(), blocks: [{ kind: "text", text }], streaming: false, stop: "stop", ...o });
 type Facts = { durationMs?: number; exitCode?: number; diff?: string };
@@ -156,7 +158,7 @@ const working: ChatItem[] = [
   { kind: "branchSummary", id: `i${i}`, turnId: "", at: at(), summary: "The user explored a different conversation branch before returning here.\nSummary of that exploration:\n\nOption A was tried: a second region. It still left a 15 second gap." },
   // The turn under way, which the composer times from its first message.
   ...([
-    user("Go with B and add a test for it", [picture]),
+    user("Go with B and add a test for it", [picture], [{ name: "relay-close-codes.md", mimeType: "text/markdown", size: 4_812 }, { name: "socket-trace.har", mimeType: "application/json", size: 1_480_000 }]),
     tool("edit", { path: "src/relay/socket.ts" }, "Successfully replaced 1 block(s) in src/relay/socket.ts.", false, undefined, { durationMs: 21, diff: patch }),
     tool("bash", { command: "psql -c 'select count(*) from users'" }, "psql: error: connection refused\n\nCommand exited with code 2", true, undefined, { durationMs: 1_840, exitCode: 2 }),
     { kind: "notification", id: `i${i}`, turnId: "", at: at(), level: "warning", text: "Auto mode blocked bash: psql -c 'drop table sessions'" },

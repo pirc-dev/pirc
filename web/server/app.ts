@@ -12,8 +12,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
 import { Delivery, thinkingLevel } from "@pirc/protocol";
 
-import type { Client, RequestBody } from "../core/client.ts";
-import { IMAGE_BYTES_MAX, IMAGE_TYPES, IMAGES_MAX, PAGE_REQUEST_ID, type CommandName, type Commands } from "../core/api.ts";
+import type { Client, FileBytes, RequestBody } from "../core/client.ts";
+import { FILES_BYTES_MAX, FILES_MAX, IMAGE_BYTES_MAX, IMAGE_TYPES, IMAGES_MAX, PAGE_REQUEST_ID, type CommandName, type Commands } from "../core/api.ts";
 import { outcome, type Result } from "../core/results.ts";
 import { Auth, AuthError } from "./auth.ts";
 import type { Notifier } from "./notify.ts";
@@ -30,8 +30,11 @@ const ATTEMPTS_PER_MINUTE = 20;
 // longer. Larger ones are refused before they are read in full.
 const SIGN_IN_BODY = 64 << 10;
 const COMMAND_BODY = 1 << 20;
-// A prompt with its images, base64.
-const PROMPT_BODY = COMMAND_BODY + Math.ceil((IMAGES_MAX * IMAGE_BYTES_MAX * 4) / 3) + (64 << 10);
+// A prompt with its images and files, base64.
+const PROMPT_BODY = COMMAND_BODY + Math.ceil(((IMAGES_MAX * IMAGE_BYTES_MAX + FILES_BYTES_MAX) * 4) / 3) + (64 << 10);
+// A file's name as the page gives it; the extension shortens it further.
+const FILE_NAME_MAX = 1024;
+const MIME = /^[\w.+-]+\/[\w.+-]+$/;
 // Events queued for a page that does not read them (a phone gone off the
 // network without closing): past this, its stream ends, and the page
 // catches up when it is back.
@@ -105,10 +108,44 @@ function imagesOf(v: unknown): { mimeType: string; data: Uint8Array }[] | string
   return out;
 }
 
+// A prompt's files as the page sent them (core/api.ts), or why not: each
+// one's Attachment, and its bytes under the same id. The id is the
+// request's with the file's place, unique as the request ID is, and the
+// same again for a retry.
+function filesOf(v: unknown, requestId: string): { attachments: { id: string; name: string; mimeType: string; size: bigint }[]; files: FileBytes[] } | string {
+  if (v === undefined) return { attachments: [], files: [] };
+  if (!Array.isArray(v)) return "files are a list";
+  if (v.length > FILES_MAX) return `at most ${FILES_MAX} files`;
+  const attachments = [];
+  const files: FileBytes[] = [];
+  let total = 0;
+  for (const [i, f] of (v as { name?: unknown; mimeType?: unknown; data?: unknown }[]).entries()) {
+    const name = str(f?.name);
+    const mimeType = str(f?.mimeType) || "application/octet-stream";
+    const data = str(f?.data);
+    if (!name || name.length > FILE_NAME_MAX) return `a file has a name of 1 to ${FILE_NAME_MAX} characters`;
+    if (!MIME.test(mimeType)) return "a file's type is a media type";
+    if (data === undefined || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return "a file's data is base64";
+    const bytes = new Uint8Array(Buffer.from(data, "base64"));
+    total += bytes.length;
+    if (total > FILES_BYTES_MAX) return `a message's files are at most ${FILES_BYTES_MAX >> 20} MiB`;
+    const id = `${requestId}.${i}`;
+    attachments.push({ id, name, mimeType, size: BigInt(bytes.length) });
+    files.push({ id, data: bytes });
+  }
+  return { attachments, files };
+}
+
+// A request with the bytes of its files, sent first.
+interface WithFiles {
+  request: RequestBody;
+  files: FileBytes[];
+}
+
 // How the server builds each command's request from its body, or why it
 // cannot; and the kind of result it answers with.
 interface ServerCommand {
-  build(b: Record<string, unknown>, requestId: string): RequestBody | string;
+  build(b: Record<string, unknown>, requestId: string): RequestBody | WithFiles | string;
   result: Result["kind"];
   // Asked when the deadline passes: true extends it.
   extend?(client: Client, id: string): () => boolean;
@@ -137,9 +174,11 @@ const COMMANDS: { [K in CommandName]: ServerCommand & { result: Commands[K]["res
       const text = str(b.text) ?? "";
       const images = imagesOf(b.images);
       if (typeof images === "string") return images;
-      if (!text.trim() && images.length === 0) return "a prompt needs text or an image";
+      const files = filesOf(b.files, requestId);
+      if (typeof files === "string") return files;
+      if (!text.trim() && images.length === 0 && files.files.length === 0) return "a prompt needs text, an image or a file";
       const delivery = b.delivery === "steer" ? Delivery.STEER : b.delivery === "followUp" ? Delivery.FOLLOW_UP : Delivery.UNSPECIFIED;
-      return { case: "prompt", value: { requestId, text, images, delivery } };
+      return { request: { case: "prompt", value: { requestId, text, images, delivery, attachments: files.attachments } }, files: files.files };
     },
     result: "accepted",
     extend: whileHeldUp,
@@ -472,7 +511,8 @@ export function createApp(o: AppOptions): Hono {
       }
       const req = c.build(body, given ?? o.client.id());
       if (typeof req === "string") return ctx.json({ ok: false, code: "INVALID", message: req, id: at() }, 400);
-      const r = outcome(await o.client.ask(id, req, c.extend?.(o.client, id)));
+      const { request, files } = req && "request" in req ? req : { request: req, files: [] };
+      const r = outcome(await o.client.ask(id, request, c.extend?.(o.client, id), files));
       // A reply of another kind than the command's is the session's
       // mistake, not an answer.
       if (r.ok && r.result.kind !== c.result) return ctx.json({ ok: false, code: "PI_FAILED", message: `the session answered ${r.result.kind}, not ${c.result}`, id: at() });

@@ -145,6 +145,15 @@ export interface UserItem extends ItemBase {
   requestId?: string;
   // Images the message carried.
   images: ImageView[];
+  // Files sent with it, without their bytes; absent when there are none.
+  attachments?: AttachmentView[];
+}
+
+// A file sent with a user message, as history names it: size in bytes.
+export interface AttachmentView {
+  name: string;
+  mimeType: string;
+  size: number;
 }
 
 // An image in a user message: its key for /api/images/<key>, absent when
@@ -343,6 +352,12 @@ export function applyToChat(chat: ChatView, e: ViewEvent): ChatView {
 
 const LAST_CHARS = 160;
 
+// A message's files in a few words: one's name, or how many.
+function filesLine(files: AttachmentView[] | undefined): string | undefined {
+  if (!files?.length) return undefined;
+  return files.length > 1 ? `${files.length} files` : files[0].name;
+}
+
 // The latest message in a chat, the user's or a finished reply, as the
 // session list shows it: its first line with text in it, without markdown's
 // commonest marks, cut short.
@@ -350,8 +365,8 @@ export function lastOf(items: ChatItem[]): LastView | undefined {
   for (let i = items.length - 1; i >= 0; i--) {
     const x = items[i];
     let text: string | undefined;
-    // A message of images alone says so.
-    if (x.kind === "user") text = x.text.trim() || !x.images.length ? x.text : x.images.length > 1 ? `${x.images.length} images` : "An image";
+    // A message of images or files alone says so, images first.
+    if (x.kind === "user") text = x.text.trim() ? x.text : x.images.length ? (x.images.length > 1 ? `${x.images.length} images` : "An image") : filesLine(x.attachments) ?? x.text;
     else if (x.kind === "assistant" && !x.streaming) {
       text = x.blocks.filter((b) => b.kind === "text" && b.text.trim()).at(-1)?.text
         ?? (x.stop === "error" ? `⚠ ${x.error || "the model failed"}` : x.stop === "aborted" ? "Stopped." : undefined);
