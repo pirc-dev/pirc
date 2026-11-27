@@ -2760,8 +2760,12 @@ built; steps 14 and 15 are not finished.
        with stage 8's release.
     7. **A closed beta**: sign-ups by invite code only, on TestFlight
        (whose outside testers bring Beta App Review) and Play's internal
-       track; the extension on a prerelease channel (an npm dist-tag, which
-       the release scripts do not offer yet). It ends with a run start to
+       track; the extension on a prerelease channel: a beta is tagged
+       vX.Y.Z-beta.N, built by `sh/release.sh` as any release, published on
+       GitHub as a prerelease (`sh/publish-release.sh`, notes from
+       Unreleased) and to npm under the dist-tag beta, installed by
+       `pi install npm:pirc-extension@beta`; latest stays on the last
+       release, and the extension's own repository gets releases alone. It ends with a run start to
        finish, and what it finds is fixed before stage 8.
     8. **Open**: sign-ups opened, the apps' production releases, and the
        store listings and `pirc.dev` saying the hosted relay exists.
