@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- With a keyboard on an iPad or an Android tablet, Return sends a
+  message (Shift-Return makes a new line, Option- or Alt-Return queues
+  it), Esc stops pi, n opens the next session waiting, / searches and
+  ⌘, opens Settings, as in the web app. Settings lists them.
 - Tablets get the list beside the chat when upright too (from 700
   wide: an iPad mini, most Android tablets); the list's column can be
   hidden with a button at the start of the chat's header and made wider

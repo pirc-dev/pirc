@@ -50,6 +50,13 @@ void main() {
 
   PircModel model(WidgetTester tester) => tester.widget<SessionsScreen>(find.byType(SessionsScreen)).model;
 
+  // A phone's screen: the test's own window is as wide as a tablet's.
+  void phone(WidgetTester tester) {
+    tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+  }
+
   Future<void> changeTo(WidgetTester tester, String to) async {
     await tester.tap(find.bySemanticsLabel('Settings'));
     await tester.pumpAndSettle();
@@ -62,6 +69,7 @@ void main() {
   }
 
   testWidgets('the relay moved to another port: changed in Settings, the phone follows it there, keeping its keys', (tester) async {
+    phone(tester);
     final store = MemoryKeyStore();
     final old = relay.url;
     await tester.runAsync(() => join(JoinLink(old, relay.cmd('add-client', ['--label', 'phone'])), store, protect: false));
@@ -85,6 +93,7 @@ void main() {
   }, skip: !hasGo);
 
   testWidgets("another relay's address: it says why, and the phone stays on its own", (tester) async {
+    phone(tester);
     final store = MemoryKeyStore();
     final own = relay.url;
     await tester.runAsync(() => join(JoinLink(own, relay.cmd('add-client', ['--label', 'phone'])), store, protect: false));

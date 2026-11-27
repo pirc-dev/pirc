@@ -249,8 +249,9 @@ TextMagnifierConfiguration? get fieldMagnifier => onAndroid ? TextMagnifier.adap
 // A search field above a list: iOS's grey one; on Android the same field
 // as a pill, with Material's search and clear icons.
 class SearchField extends StatefulWidget {
-  const SearchField({super.key, required this.controller, required this.placeholder, this.autofocus = false, this.onSubmitted});
+  const SearchField({super.key, required this.controller, required this.placeholder, this.autofocus = false, this.onSubmitted, this.focusNode});
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String placeholder;
   final bool autofocus;
   final ValueChanged<String>? onSubmitted;
@@ -289,6 +290,7 @@ class _SearchFieldState extends State<SearchField> {
     if (!onAndroid) {
       return CupertinoSearchTextField(
         controller: widget.controller,
+        focusNode: widget.focusNode,
         autofocus: widget.autofocus,
         autocorrect: false,
         placeholder: widget.placeholder,
@@ -303,6 +305,7 @@ class _SearchFieldState extends State<SearchField> {
     }
     return CupertinoTextField(
       controller: widget.controller,
+      focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       autocorrect: false,
       placeholder: widget.placeholder,

@@ -9,12 +9,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/services.dart';
 
 import '../app/model.dart';
 import '../core/fuzzy.dart';
 import '../core/names.dart';
+import '../core/order.dart' show nextWaiting;
 import '../core/view.dart';
 import 'hosts.dart';
+import 'keys.dart';
 import 'launch.dart';
 import 'look.dart';
 import 'sheet.dart';
@@ -101,9 +104,37 @@ class SessionsScreen extends StatefulWidget {
   State<SessionsScreen> createState() => _SessionsScreenState();
 }
 
-class _SessionsScreenState extends State<SessionsScreen> {
+class _SessionsScreenState extends State<SessionsScreen> with ScreenKeys {
   late Set<String> _folded = {...widget.folded};
   final _query = TextEditingController();
+  final _search = FocusNode();
+
+  // A hardware keyboard's keys (keys.dart): n opens the next session
+  // waiting, / or ⌘F (Ctrl+F) goes to the search, and ⌘, (Ctrl+,) or ?
+  // opens Settings.
+  @override
+  bool onKey(KeyEvent e) {
+    final ch = e.character;
+    final key = e.logicalKey;
+    if ((command && key == LogicalKeyboardKey.keyF) || (!anyModifier && ch == '/')) {
+      if (_search.context == null) return false;
+      _search.requestFocus();
+      return true;
+    }
+    if ((command && key == LogicalKeyboardKey.comma) || (!anyModifier && ch == '?')) {
+      final settings = widget.settings;
+      if (settings == null) return false;
+      settings();
+      return true;
+    }
+    if (anyModifier || ch != 'n') return false;
+    final model = widget.model;
+    final all = [for (final s in model.sessions) if ((widget.host == null || _hostOf(s) == widget.host) && (widget.group == null || s.place?.group == widget.group)) s];
+    final at = {for (final (i, s) in all.indexed) s.id: i};
+    final next = nextWaiting(all, model.news, (a, b) => at[a.id]! - at[b.id]!, widget.selected?.value);
+    if (next != null) widget.open(next.id);
+    return true;
+  }
   // A count tapped shows only its sessions (asking, done or working), under
   // their hosts and groups, all unfolded; tapped again, or "in all", every
   // one, as the web page's. Gone when its count is down to none.
@@ -122,6 +153,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   @override
   void dispose() {
     _query.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -244,7 +276,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 ),
               SliverToBoxAdapter(child: JoinRequests(model: model, day: day)),
               if (all.isNotEmpty)
-                PinnedHeaderSliver(child: _SearchBar(look, _query, sessions.length, kind: switch (_filter) { Status.asking => ' asking', Status.done => ' done', Status.working => ' working', _ => '' }, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
+                PinnedHeaderSliver(child: _SearchBar(look, _query, _search, sessions.length, kind: switch (_filter) { Status.asking => ' asking', Status.done => ' done', Status.working => ' working', _ => '' }, where: group != null ? ' in $group' : host != null ? ' on $host' : '')),
               if (all.isEmpty && model.relay.state == 'ready')
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -606,9 +638,10 @@ class _Usage extends StatelessWidget {
 
 // The search, held under the bar as the list scrolls.
 class _SearchBar extends StatelessWidget {
-  const _SearchBar(this.look, this.query, this.count, {this.kind = '', this.where = ''});
+  const _SearchBar(this.look, this.query, this.focus, this.count, {this.kind = '', this.where = ''});
   final Look look;
   final TextEditingController query;
+  final FocusNode focus;
   final int count;
   // " asking", " done", " working" while a count shows, or nothing.
   final String kind;
@@ -619,7 +652,7 @@ class _SearchBar extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         color: look.page,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-        child: SearchField(controller: query, placeholder: 'Search $count$kind session${count == 1 ? '' : 's'}$where'),
+        child: SearchField(controller: query, focusNode: focus, placeholder: 'Search $count$kind session${count == 1 ? '' : 's'}$where'),
       );
 }
 

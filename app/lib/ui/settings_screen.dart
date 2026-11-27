@@ -16,6 +16,7 @@ import '../hosted/try_stores.dart';
 import '../join.dart';
 import '../push/push.dart';
 import 'side.dart';
+import 'keys.dart';
 import 'devices.dart';
 import 'hosted_account_screens.dart';
 import 'hosted_devices.dart';
@@ -124,6 +125,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
                 ),
                 if (s.permission == Permission.denied) _Link(label: "Open the phone's Settings", onTap: s.openPhoneSettings),
               ],
+              // Beside the list, a tablet's: what a keyboard's keys do.
+              if (widget.wide) _Row(label: 'Keys', sub: keysSaid(apple: !onAndroid)),
             ]),
             if (widget.hostedAccount case final a?)
               _Section(title: 'Account', sub: 'Its subscription covers every phone and browser on it.', rows: [HostedAccountRows(controls: a)])

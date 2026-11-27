@@ -8,10 +8,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/services.dart';
 
 import '../app/drafts.dart';
 import '../app/model.dart';
@@ -32,6 +32,7 @@ import 'question.dart';
 import 'selectable.dart';
 import 'sheet.dart';
 import 'side.dart';
+import 'keys.dart';
 import 'adaptive.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -50,7 +51,18 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
+  // Esc stops pi, as in its terminal; not while it asks a question, which
+  // has its own answers, nor from the box (Esc leaves it first).
+  @override
+  bool onKey(KeyEvent e) {
+    if (e.logicalKey != LogicalKeyboardKey.escape || anyModifier) return false;
+    final s = widget.model.session(widget.id);
+    if (s == null || !(s.working || s.compacting) || (s.questions ?? const []).isNotEmpty) return false;
+    widget.model.stop(s.id);
+    return true;
+  }
+
   // The composer's text, here so that Edit on an unsent message can put it
   // back.
   final _text = TextEditingController();
@@ -1309,7 +1321,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   // Whether the clipboard holds an image, for Paste in the box's menu: asked
   // as the box is focused, as the app comes back, and as the clipboard
   // changes, since the menu itself cannot wait for an answer.
-  final _focus = FocusNode();
+  late final _focus = FocusNode(onKeyEvent: _key);
   var _clipImages = false;
   StreamSubscription<void>? _clip;
 
@@ -1342,6 +1354,45 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _askClipboard();
+  }
+
+  // A hardware keyboard's keys in the box (keys.dart): Return sends, unless
+  // the screen's own keyboard is up, whose return key makes a new line, as
+  // Shift+Return does; ⌘ (Ctrl)+Return sends either way, and Option
+  // (Alt)+Return queues, as in pi. Esc leaves the box. Not while an input
+  // method is composing: its Return picks the word.
+  KeyEventResult _key(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.escape) {
+      _focus.unfocus();
+      return KeyEventResult.handled;
+    }
+    final composing = widget.text.value.composing;
+    if (!isReturn(e) || HardwareKeyboard.instance.isShiftPressed || (composing.isValid && !composing.isCollapsed)) return KeyEventResult.ignored;
+    if (HardwareKeyboard.instance.isAltPressed) {
+      _send(queue: true);
+      return KeyEventResult.handled;
+    }
+    if (command || !screenKeyboard(context)) {
+      _send();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  // Sends what is in the box: while pi works, as the switch says, or queued.
+  void _send({bool queue = false}) {
+    final s = widget.session;
+    final busy = s.working || s.compacting;
+    final images = widget.images.value;
+    final files = widget.files.value;
+    if (widget.text.text.trim().isEmpty && images.isEmpty && files.isEmpty) return;
+    final text = widget.text.text;
+    widget.text.clear();
+    widget.images.value = const [];
+    widget.files.value = const [];
+    setState(() => _problem = null);
+    widget.model.prompt(s.id, text, images: images, files: files, delivery: busy ? (_steer && !queue ? 'steer' : 'followUp') : null);
   }
 
   Future<void> _askClipboard() async {
@@ -1454,15 +1505,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     final empty = widget.text.text.trim().isEmpty && images.isEmpty && files.isEmpty;
     final canAdd = images.length < imagesMax || widget.model.client.takes(s.id, takesFiles);
     _askBlind(s);
-    void send() {
-      if (empty) return;
-      final text = widget.text.text;
-      widget.text.clear();
-      widget.images.value = const [];
-      widget.files.value = const [];
-      setState(() => _problem = null);
-      widget.model.prompt(s.id, text, images: images, files: files, delivery: busy ? (_steer ? 'steer' : 'followUp') : null);
-    }
+    void send() => _send();
 
     final questions = s.questions ?? const <QuestionView>[];
     return LayoutBuilder(

@@ -1824,6 +1824,16 @@ built; steps 14 and 15 are not finished.
         it, both kept on the device. Narrower (Split View, every phone,
         a phone on its side) it is as on a phone. Sheets there are at most
         512 wide, in the middle, as the web page's.
+      - **A hardware keyboard** (an iPad's, a tablet's), as the web page's
+        keys where they fit: in the message box Return sends, Shift-Return
+        makes a new line, Option (Alt)-Return queues and Esc leaves the
+        box; outside a field n opens the next session waiting, / or ⌘F the
+        search, ⌘, or ? Settings, and Esc stops pi; Settings lists them
+        beside the list. Return sends only while the screen's own keyboard
+        is down (over 100 points of it is up: its return key is a new
+        line), since some Android keyboards send their return as a key.
+        Rejected: Apple's ⌘-held list of shortcuts and Android's, which
+        Flutter cannot fill.
         The same rule holds by width on Android, for tablets and opened
         foldables. Crossing the width keeps what is open. The App Store
         submission therefore carries iPad screenshots, and Apple reviews it

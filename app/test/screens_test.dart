@@ -476,10 +476,12 @@ void main() {
     expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.byType(SessionsScreen), findsOneWidget, reason: 'beside it');
     expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsNothing, reason: 'no way back beside the list');
+    expect(find.text('Keys'), findsOneWidget, reason: "a tablet's keyboard's keys");
     // Narrowed (Split View, a window): Settings over the list, with a way back.
     tester.view.physicalSize = const Size(600 * 2, 1024 * 2);
     await tester.pumpAndSettle();
     expect(find.descendant(of: find.byType(SettingsScreen), matching: find.byType(BackLink)), findsOneWidget);
+    expect(find.text('Keys'), findsNothing);
     // Wide again: beside it once more.
     tester.view.physicalSize = const Size(1366 * 2, 1024 * 2);
     await tester.pumpAndSettle();
@@ -1819,6 +1821,106 @@ void main() {
     await tester.pump();
     expect(model.pending('0101010101010101-i1').single.delivery, 'steer');
     await tester.pump(const Duration(seconds: 46));
+  });
+
+  testWidgets("a hardware keyboard in the box: Return sends, Shift-Return does not, Option-Return queues, nor Return with the screen's keyboard up; Esc leaves the box, then stops pi", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    const id = '0101010101010101-i1';
+    Future<void> show({double keyboard = 0}) async {
+      await tester.pumpWidget(frame(ChatScreen(model: model, id: id), keyboard: keyboard));
+      await tester.pump();
+    }
+
+    await show();
+    await tester.enterText(find.byType(CupertinoTextField), 'one');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(model.pending(id), isEmpty, reason: 'Shift-Return: a new line');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(model.pending(id).single.delivery, 'steer', reason: 'Return sends, as the switch says');
+    await tester.enterText(find.byType(CupertinoTextField), 'two');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
+    expect(model.pending(id).last.delivery, 'followUp', reason: 'Option-Return queues');
+    // The screen's own keyboard up: its return key is a new line, and
+    // ⌘-Return still sends.
+    tester.view.viewInsets = FakeViewPadding(bottom: 300 * tester.view.devicePixelRatio);
+    await show(keyboard: 300);
+    await tester.enterText(find.byType(CupertinoTextField), 'three');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(model.pending(id), hasLength(2));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    expect(model.pending(id), hasLength(3));
+    // Esc leaves the box; a second stops pi.
+    tester.view.resetViewInsets();
+    await show();
+    await tester.showKeyboard(find.byType(CupertinoTextField));
+    sent.clear();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.context?.widget, isNot(isA<EditableText>()));
+    expect(sent.where((f) => f.hasRouted() && SessionMessage.fromBuffer(f.routed.payload).hasAbort()), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(sent.where((f) => f.hasRouted() && SessionMessage.fromBuffer(f.routed.payload).hasAbort()), hasLength(1));
+    await tester.pump(const Duration(seconds: 46));
+  });
+
+  testWidgets('a hardware keyboard in the list: n opens the next waiting, / searches, ? and ⌘, open Settings; not with a sheet over it', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    final opened = <String>[];
+    var settings = 0;
+    final selected = ValueNotifier<String?>(null);
+    await tester.pumpWidget(frame(SessionsScreen(model: model, open: (id) {
+      opened.add(id);
+      selected.value = id;
+    }, settings: () => settings++, selected: selected)));
+    await tester.pump();
+    final waiting = [for (final s in model.sessions) if ((s.questions ?? const []).isNotEmpty || model.news.contains(s.id)) s.id];
+    expect(waiting.length, greaterThanOrEqualTo(2));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    expect(opened.take(2).toSet(), waiting.take(2).toSet());
+    expect(opened.first, '0101010101010101-i2', reason: 'the one asking first');
+    expect(opened[2], opened[0], reason: 'round to the first');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.slash, character: '?');
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.comma);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    expect(settings, 2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.slash);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<SearchField>(), isNotNull, reason: 'in the search');
+    // Typed into the search, n is a letter.
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    expect(opened, hasLength(3));
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    // A sheet over the list: its keys wait.
+    showSheet<void>(tester.element(find.byType(SessionsScreen)), (_) => const Sheet(title: 'A sheet', children: []));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    expect(opened, hasLength(3));
+    // Esc closes it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('A sheet'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 31));
   });
 
   testWidgets('a message sent while pi works is queued, and shows until pi has it', (tester) async {
