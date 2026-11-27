@@ -58,9 +58,72 @@ class Markdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
-    final nodes = md.Document(extensionSet: md.ExtensionSet.gitHubFlavored, encodeHtml: false).parse(text);
-    return _Blocks(look, nodes, writing: writing);
+    if (!writing) return _Blocks(look, _parse(text));
+    // Being written: the blocks finished kept as drawn, only the last, still
+    // growing, parsed and drawn again with each word (blocksOf).
+    final parts = blocksOf(text);
+    if (parts.length < 2) return _Blocks(look, _parse(text), writing: true);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 10, children: [
+      for (final (i, t) in parts.indexed) i == parts.length - 1 ? _Blocks(look, _parse(t), writing: true) : _finished(look, t),
+    ]);
   }
+}
+
+// How many times Markdown was parsed, for the tests that check it is not
+// parsed again for nothing.
+@visibleForTesting
+int markdownParses = 0;
+
+List<md.Node> _parse(String text) {
+  markdownParses++;
+  return md.Document(extensionSet: md.ExtensionSet.gitHubFlavored, encodeHtml: false).parse(text);
+}
+
+// Finished blocks of replies being written, as drawn, for the same look: the
+// same widget again is not built again. Emptied when it grows large.
+final _drawn = <String, (Look, Widget)>{};
+
+Widget _finished(Look look, String text) {
+  final kept = _drawn[text];
+  if (kept != null && identical(kept.$1, look)) return kept.$2;
+  if (_drawn.length > 400) _drawn.clear();
+  final w = _Blocks(look, _parse(text));
+  _drawn[text] = (look, w);
+  return w;
+}
+
+// A reply being written, split where one top-level block ends and the next
+// begins: at a blank line outside a code fence, before a line that starts at
+// the margin and is not a list item, a table row or a quote's next line, as
+// the web page's (blocks.ts). A reply with reference links or footnotes,
+// which may be defined in another block, stays whole.
+List<String> blocksOf(String text) {
+  if (RegExp(r'^ {0,3}\[[^\]]+\]:', multiLine: true).hasMatch(text)) return [text];
+  final lines = text.split('\n');
+  final blocks = <String>[];
+  var start = 0;
+  String? fence;
+  final fenceLine = RegExp(r'^ {0,3}(`{3,}|~{3,})');
+  final item = RegExp(r'^([-*+]|\d+[.)])\s');
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final f = fenceLine.firstMatch(line);
+    if (f != null) {
+      if (fence == null) {
+        fence = f.group(1)![0] * f.group(1)!.length;
+      } else if (line.trim().startsWith(fence)) {
+        fence = null;
+      }
+      continue;
+    }
+    if (fence != null || line.trim().isNotEmpty || i + 1 >= lines.length) continue;
+    final next = lines[i + 1];
+    if (next.trim().isEmpty || RegExp(r'^\s').hasMatch(next) || item.hasMatch(next) || next.startsWith('|') || next.startsWith('>')) continue;
+    blocks.add(lines.sublist(start, i).join('\n'));
+    start = i + 1;
+  }
+  blocks.add(lines.sublist(start).join('\n'));
+  return blocks.where((b) => b.trim().isNotEmpty).toList();
 }
 
 // Blocks one under another, 0.6em apart, as Native's prose.

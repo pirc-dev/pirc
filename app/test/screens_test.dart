@@ -726,6 +726,22 @@ void main() {
   Future<void> delta(WidgetTester tester, PircModel model, String text, {String id = 'a9', String turn = 't'}) =>
       event(tester, model, SessionEvent(assistantDelta: AssistantDelta(messageId: id, turnId: turn, text: text)));
 
+  testWidgets("a reply as it streams parses nothing else: the chat's finished replies are kept, and the list is not told", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    var listTold = 0;
+    model.lists.addListener(() => listTold++);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    seq = 2;
+    await delta(tester, model, 'The checks pass.');
+    final before = markdownParses;
+    for (final w in [' Tagging', ' 0.2', ' now.']) {
+      await delta(tester, model, w);
+    }
+    expect(markdownParses - before, 3, reason: 'the growing reply alone, once a word');
+    expect(listTold, 0, reason: "a reply's words are its chat's alone");
+  });
+
   testWidgets('a reply as it streams: a cursor after its last word, or under its code', (tester) async {
     await phone(tester);
     final model = await fixture(tester);

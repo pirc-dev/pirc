@@ -109,7 +109,20 @@ class PircModel extends ChangeNotifier {
         _working.remove(id);
       default:
     }
+    _chatOnly = e is ChatReset || e is ChatItemChanged || e is ChatDelta || e is ToolProgressChanged;
     notifyListeners();
+    _chatOnly = false;
+  }
+
+  // What the session list shows changed: every change but a chat's own (a
+  // reply growing word by word), which only its chat shows.
+  final lists = _Lists();
+  bool _chatOnly = false;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    if (!_chatOnly) lists.notify();
   }
 
   final _working = <String, bool>{};
@@ -282,4 +295,8 @@ class PircModel extends ChangeNotifier {
     }
     return outcome(await client.ask(id, SessionMessage(answer: a)));
   }
+}
+
+class _Lists extends ChangeNotifier {
+  void notify() => notifyListeners();
 }

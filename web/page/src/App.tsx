@@ -2,7 +2,7 @@
 // on a screen as wide as a laptop's, the list and the chat side by side.
 // Routing is the address bar's path: /, /h/<host>, /h/<host>/<group>,
 // /s/<session ID>, /settings and /pair.
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { Chat } from "./Chat.tsx";
 import { live } from "./live.ts";
@@ -19,11 +19,12 @@ function usePath(): [string, (p: string) => void] {
     return () => window.removeEventListener("popstate", on);
   }, []);
   // The screen follows even when the address is there already (pairing
-  // replaces its own address before it is done).
-  const go = (p: string) => {
+  // replaces its own address before it is done). The same function each
+  // time, so that what is given it is kept (the session list).
+  const go = useCallback((p: string) => {
     if (p !== location.pathname) history.pushState(null, "", p);
     setPath(p);
-  };
+  }, []);
   return [path, go];
 }
 
@@ -63,7 +64,13 @@ export function App() {
   // Settings goes back to the chat or list it was opened from.
   const before = useRef("/");
   if (!settings) before.current = path;
-  const scope = scopeOf(list.current) ?? {};
+  // Kept from one render to the next unless the list changes, so that the
+  // session list is not drawn again for each word of a reply.
+  const scopeKey = list.current;
+  const scope = useMemo(() => scopeOf(scopeKey) ?? {}, [scopeKey]);
+  const openChat = useCallback((id: string) => go(`/s/${encodeURIComponent(id)}`), [go]);
+  const goScope = useCallback((s: Scope) => go(scopePath(s)), [go]);
+  const toggleSettings = useCallback(() => go(settings ? before.current : "/settings"), [go, settings]);
   const wide = useWide();
 
   useEffect(() => {
@@ -99,7 +106,7 @@ export function App() {
     <Layout
       wide={wide}
       banner={<Banner relay={state.relay.state} reason={state.relay.reason} stream={state.stream} />}
-      list={<Sessions key={list.current} sessions={state.sessions} pendingHosts={state.pendingHosts} scope={scope} open={(id) => go(`/s/${encodeURIComponent(id)}`)} go={(s) => go(scopePath(s))} selected={chatId} settings={() => go(settings ? before.current : "/settings")} inSettings={settings} />}
+      list={<Sessions key={list.current} sessions={state.sessions} pendingHosts={state.pendingHosts} scope={scope} open={openChat} go={goScope} selected={chatId} settings={toggleSettings} inSettings={settings} />}
       chat={settings ? <Settings back={() => go(before.current)} wide={wide} devices={state.devices} connected={state.relay.state === "ready"} /> : chatId ? <Chat key={chatId} id={chatId} session={session} chat={state.chat} back={() => go(list.current)} wide={wide} open={(id) => go(`/s/${encodeURIComponent(id)}`)} /> : undefined}
     />
   );

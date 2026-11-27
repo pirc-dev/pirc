@@ -4,7 +4,7 @@
 // session there that matches. Each shows pi's name for it, its window's
 // above it, when it last had a message, and whether it has news: finished
 // since it was last open here.
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { rank } from "../../core/fuzzy.ts";
 import type { PendingHostView, SessionUsageView, SessionView } from "../../core/view.ts";
 import { JoinRequests } from "./Hosts.tsx";
@@ -110,7 +110,9 @@ type Counted = "asking" | "working" | "done";
 // Native.
 const rows = "cards:mx-3 cards:divide-y cards:divide-rule cards:overflow-hidden cards:rounded-[14px] cards:border cards:border-rule cards:bg-card native:mx-4 native:border-0";
 
-export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHostView[]; scope: Scope; open: (id: string) => void; go: (scope: Scope) => void; selected?: string; settings?: () => void; inSettings?: boolean }) {
+// Drawn again only when what it is given changes: not for each word of a
+// reply in the chat beside it.
+export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHostView[]; scope: Scope; open: (id: string) => void; go: (scope: Scope) => void; selected?: string; settings?: () => void; inSettings?: boolean }) {
   const { host, group } = p.scope;
   const [query, setQuery] = useState("");
   useHold(query !== "");
@@ -374,7 +376,7 @@ export function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHos
       {beside && <LaunchSheet beside={beside} close={launching.close} open={p.open} />}
     </div>
   );
-}
+});
 
 // The bar's height: the search is held under it.
 const BAR = 44;

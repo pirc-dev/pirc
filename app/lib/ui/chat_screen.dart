@@ -413,6 +413,8 @@ class _ChatScreenState extends State<ChatScreen> {
     return identical(widget.model.chat(widget.id)?.items.whereType<ToolItem>().lastOrNull, t);
   }
 
+  final _replies = Expando<Widget>();
+
   // An image's data by its key; null for a placeholder, or one no longer kept.
   Uint8List? _image(String? key) => key == null ? null : widget.model.client.image(key)?.data;
 
@@ -425,7 +427,9 @@ class _ChatScreenState extends State<ChatScreen> {
             // Not where pi cannot: a message it has not saved, a session ended.
             offer: item.entryId == null || widget.model.session(widget.id) == null ? null : () => _from(item),
           ),
-        ItemPart(item: AssistantItem item) => _Reply(item),
+        // A reply is the same object until it changes: its widget too, so
+        // that it is not built again for each word of another.
+        ItemPart(item: AssistantItem item) => _replies[item] ??= _Reply(item),
         ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item), image: _image),
         ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary),
         ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary),

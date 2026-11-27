@@ -14,7 +14,7 @@ import { Status } from "./Status.tsx";
 import { useHold } from "./update.ts";
 import { type Run } from "./chat.ts";
 import { type Part, partKey, runs, signature } from "../../core/chat.ts";
-import { useMarkdown } from "./Markdown.tsx";
+import { Block, blocksOf, useMarkdown } from "./Markdown.tsx";
 import { Folded, Tool, Waiting } from "./Tool.tsx";
 import { Composer } from "./Composer.tsx";
 import { CopyButton } from "./Copy.tsx";
@@ -753,7 +753,11 @@ function Assistant(p: { item: AssistantItem }) {
         }
         // While it streams, a thin cursor follows the last word.
         const writing = it.streaming && i === it.blocks.length - 1;
-        return <div key={i} className={`prose-chat ${writing ? "writing" : ""}`}><Markdown {...markdown}>{b.text}</Markdown></div>;
+        return (
+          <div key={i} className={`prose-chat ${writing ? "writing" : ""}`}>
+            {writing ? blocksOf(b.text).map((t, j) => <Block key={j} text={t} options={markdown} />) : <Markdown {...markdown}>{b.text}</Markdown>}
+          </div>
+        );
       })}
       {it.streaming && <span className={`cursor ${it.blocks.at(-1)?.kind === "text" ? "after-text" : ""}`} />}
       {it.stop === "error" && <p className="text-sm text-block">⚠ The model failed: {it.error || "no reason given"}</p>}

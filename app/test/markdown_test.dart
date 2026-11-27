@@ -1,7 +1,7 @@
 // What a reply's Markdown may open, a code block's file from its fence
 // (lib/ui/markdown.dart, as web/page/src/fence.ts), and its highlighting
 // (lib/ui/highlight.dart).
-import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pirc/ui/highlight.dart';
@@ -62,5 +62,42 @@ void main() {
       expect(identical(highlight('const a = 1;', 'ts', look, base), done), isTrue, reason: 'piece $i');
       highlight('const b = ${'1' * i}', 'ts', look, base);
     }
+  });
+
+  group('a reply being written, in blocks (blocksOf), as the web page splits it', () {
+    test('paragraphs, headings and a closed fence split at their blank lines', () {
+      expect(blocksOf('## A\n\nOne.\n\n```ts\nx\n\ny\n```\n\nTwo.'), ['## A', 'One.', '```ts\nx\n\ny\n```', 'Two.']);
+    });
+    test('a fence still open keeps the rest whole, its blank lines included', () {
+      expect(blocksOf('One.\n\n```sh\nls\n\npwd'), ['One.', '```sh\nls\n\npwd']);
+    });
+    test('a loose list stays one block, and ends where a paragraph follows it', () {
+      expect(blocksOf('- a\n\n- b\n\n  more of b\n\n1. c\n\nAfter.'), ['- a\n\n- b\n\n  more of b\n\n1. c', 'After.']);
+    });
+    test('a table and a quote are not split from their next lines', () {
+      expect(blocksOf('| a |\n| - |\n\n| b |\n\n> q\n\n> r\n\nEnd.'), ['| a |\n| - |\n\n| b |\n\n> q\n\n> r', 'End.']);
+    });
+    test('reference links or footnotes keep the reply whole', () {
+      const text = 'See [the RFC][1].\n\nMore.\n\n[1]: https://example.com';
+      expect(blocksOf(text), [text]);
+    });
+  });
+
+  testWidgets('a reply being written: only its last block is parsed again with each word', (tester) async {
+    Widget reply(String text, {bool writing = true}) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: LookScope(look: Look.light, child: Markdown(text, writing: writing)),
+        );
+    const done = '## Part one\n\nThe relay holds each connection.\n\n```ts\nconst a = 1;\n```\n\n';
+    await tester.pumpWidget(reply('${done}The phone'));
+    final before = markdownParses;
+    for (final more in [' sleeps', ' and wakes', ' again.']) {
+      await tester.pumpWidget(reply('${done}The phone sleeps and wakes again.'.substring(0, '${done}The phone'.length) + more));
+    }
+    expect(markdownParses - before, 3, reason: 'the growing paragraph alone, once a word');
+    // Written: drawn whole, once.
+    final whole = markdownParses;
+    await tester.pumpWidget(reply('${done}The phone sleeps.', writing: false));
+    expect(markdownParses - whole, 1);
   });
 }

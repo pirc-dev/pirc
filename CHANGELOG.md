@@ -49,6 +49,12 @@ release that needs its parts upgraded together says so here.
   app and the phone apps: Steer and Queue, Stop, Send, adding and removing
   an image, Copy, Thinking, a table's Full screen, going to the end, and
   Retry, Edit and Dismiss on a message not sent.
+- A reply streaming in costs much less, in the web app and the phone apps:
+  the session list is no longer drawn again with each word, nor the chat's
+  finished replies, and the reply being written parses only its last block
+  again rather than all of it. On a long reply the web page's main thread
+  went from about half its time busy to a sixth, measured at a phone's
+  speed.
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 

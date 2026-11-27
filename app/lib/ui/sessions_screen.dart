@@ -156,7 +156,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final look = Look.of(context);
     final model = widget.model;
     return ListenableBuilder(
-      listenable: Listenable.merge([model, _query, ?widget.selected]),
+      // Not the model itself, which changes with each word of a reply: the
+      // list is drawn again only when what it shows changes.
+      listenable: Listenable.merge([model.lists, _query, ?widget.selected]),
       builder: (context, _) {
         final host = widget.host, group = widget.group;
         final all = [for (final s in model.sessions) if ((host == null || _hostOf(s) == host) && (group == null || s.place?.group == group)) s];

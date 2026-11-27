@@ -54,6 +54,7 @@ on the words in the last message, checked in this order:
 | `table` | a five-column table, to check narrow screens |
 | `tool` | a bash tool call, then text once its result comes back |
 | `medium` | text streamed over about a second |
+| `long reply` | a long Markdown reply (about 4,000 words, with code and tables) streamed fast: what streaming costs the page |
 | `slow` | text streamed over twenty seconds: time to queue, steer or stop |
 | `wait` | two seconds of nothing, then short text, as a slow model |
 | anything else | short text, streamed at once |

@@ -3,11 +3,12 @@
 // with its file when the reply names one (fence.ts), and Copy. The
 // highlighter is a third of the page's size again, so it is fetched when
 // the first code block shows, and blocks are highlighted once it has come.
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import type { Options } from "react-markdown";
+import { memo, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import Markdown, { type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "./Copy.tsx";
 import { remarkFence } from "./fence.ts";
+export { blocksOf } from "./blocks.ts";
 import { Table, Td, Th } from "./Table.tsx";
 
 let highlighting: NonNullable<Options["rehypePlugins"]> = [];
@@ -30,11 +31,18 @@ const subscribe = (l: () => void) => {
   return () => waiting.delete(l);
 };
 
-// The options for react-markdown, with the highlighter once it is here.
+// The options for react-markdown, with the highlighter once it is here;
+// the same object until it comes, so that what is drawn with them can be
+// kept.
 export function useMarkdown() {
   const rehypePlugins = useSyncExternalStore(subscribe, () => highlighting);
-  return { ...MARKDOWN, rehypePlugins };
+  return useMemo(() => ({ ...MARKDOWN, rehypePlugins }), [rehypePlugins]);
 }
+
+// One block of a reply, drawn again only when its text changes.
+export const Block = memo(function Block(p: { text: string; options: ReturnType<typeof useMarkdown> }) {
+  return <Markdown {...p.options}>{p.text}</Markdown>;
+});
 
 // Links in what a host sends open in a new tab, so that one cannot take
 // the app itself somewhere else. Tables scroll on a narrow screen.

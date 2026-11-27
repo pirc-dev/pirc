@@ -7,6 +7,8 @@
 //   "run failing"   a bash tool call that exits with 3
 //   "make an edit"  an edit tool call, changing "old line" in notes.txt
 //   "slow"   text streamed slowly, for aborting
+//   "long reply"  a long Markdown reply (prose, lists, code, a table) streamed
+//            fast, a few words at a time, for what streaming costs a page
 //   "medium" text streamed over about a second, for prompts sent mid-run
 //   "wait"   two seconds before the text, as a slow model takes
 //   "table"  a five-column markdown table, for narrow screens
@@ -138,6 +140,15 @@ export async function startFakeModel(): Promise<{ url: string; server: Server; r
       send({}, "stop");
       return end();
     }
+    if (said.includes("long reply")) {
+      const words = longReply().split(/(?<= )/);
+      for (let i = 0; i < words.length && !aborted; i += 4) {
+        send({ content: words.slice(i, i + 4).join("") });
+        await sleep(15);
+      }
+      send({}, "stop");
+      return end();
+    }
     if (said.includes("slow")) {
       for (let i = 0; i < 200 && !aborted; i++) {
         send({ content: `word${i} ` });
@@ -156,4 +167,18 @@ export async function startFakeModel(): Promise<{ url: string; server: Server; r
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, server, requests };
+}
+
+// About 4,000 words of the Markdown a coding agent writes: sections of
+// prose, a list, a code block, and a table now and then.
+function longReply(): string {
+  const parts: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    parts.push(`## Part ${i + 1}\n\nThe relay holds each connection while its peer answers pings, and a peer that stops answering is dropped after the next interval. Section ${i + 1} looks at what that means for a phone that sleeps, a laptop whose lid closes, and a server that restarts during a deploy.\n`);
+    parts.push(`- The first case keeps its key and logs in again.\n- The second waits for its socket to time out, then announces its sessions anew.\n- The third replays what it missed from the stream's buffer.\n`);
+    parts.push("```ts\n" + `function reconnect${i}(socket: WebSocket, backoff: Backoff): void {\n  socket.on("close", (code) => {\n    if (code === 4409) return;\n    setTimeout(() => open(backoff.next()), backoff.delay());\n  });\n}\n` + "```\n");
+    if (i % 4 === 3) parts.push(`| Case | Before | After |\n| --- | --- | --- |\n| sleep | 90 s | 1 s |\n| lid | 45 s | 2 s |\n| deploy | lost | replayed |\n`);
+    parts.push(`That settles part ${i + 1}: the **shorter** path wins in every case we measured, and the \`retry\` budget stays the same.\n`);
+  }
+  return parts.join("\n");
 }
