@@ -18,6 +18,7 @@ import '../gen/pirc/v1alpha2/relay.pb.dart' as v2 show Welcome;
 import '../gen/pirc/v1alpha2/relay.pbenum.dart' show SignUpMode;
 import '../hosted/attest.dart';
 import '../hosted/names.dart' show forgetNames;
+import '../ui/connection.dart';
 import '../ui/hosted_account_screens.dart';
 import '../hosted/setup.dart';
 import '../hosted/try_stores.dart' show hostedBuild;
@@ -196,6 +197,8 @@ class PircApp extends StatefulWidget {
 }
 
 class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
+  // What the connection's line listens to before there is a model.
+  final _noModel = ChangeNotifier();
   String? _relay;
   var _loaded = false;
   var _unfolded = <String>{};
@@ -493,6 +496,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _noModel.dispose();
     _conn?.stop();
     _hosted?.dispose();
     _notes?.dispose();
@@ -1204,6 +1208,9 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     final brightness = MediaQuery.platformBrightnessOf(context);
     final look = (brightness == Brightness.dark ? Look.dark : Look.light).withFont(widget.fontFamily, mono: widget.fontFamily);
     final Widget home;
+    // The model the main screens show, whose connection the line across
+    // the top tells (ui/connection.dart); none before them.
+    PircModel? shown;
     if (!_loaded) {
       home = CupertinoPageScaffold(backgroundColor: look.page, child: const SizedBox.shrink());
     } else if (_hostedOffered && _relay == null && !_ownRelay) {
@@ -1249,6 +1256,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
       );
     } else {
       final model = _model!;
+      shown = model;
       // As the web page's: at 1024 points or wider (a tablet, a foldable
       // opened, a wide window), the list in a column of 380 beside what is
       // open; narrower, one or the other.
@@ -1306,7 +1314,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         theme: CupertinoThemeData(brightness: brightness, primaryColor: look.accent, scaffoldBackgroundColor: look.page),
         // Material's too, for Flutter's page of the licences (Settings).
         localizationsDelegates: const [DefaultMaterialLocalizations.delegate, DefaultCupertinoLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
-        builder: (context, child) => LookScope(look: look, child: child!),
+        builder: (context, child) => LookScope(
+          look: look,
+          child: ConnectionBanner(listenable: shown ?? _noModel, relay: () => shown?.relay ?? const RelayView(state: 'ready'), child: child!),
+        ),
         home: home,
       ),
     );

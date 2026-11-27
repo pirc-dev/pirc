@@ -209,7 +209,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   ]),
                 ),
               ),
-              if (model.relay.state != 'ready') SliverToBoxAdapter(child: _Connection(model.relay)),
               if (sessions.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -583,30 +582,6 @@ class _SearchBar extends StatelessWidget {
       );
 }
 
-// Why the list may be stale: not connected to the relay.
-class _Connection extends StatelessWidget {
-  const _Connection(this.relay);
-  final RelayView relay;
-
-  @override
-  Widget build(BuildContext context) {
-    final look = Look.of(context);
-    final text = switch (relay.state) {
-      'connecting' => 'Connecting to the relay…',
-      'refused' => 'The relay refused this phone${relay.reason == null ? '' : ': ${relay.reason}'}',
-      _ => 'Not connected to the relay${relay.reason == null ? '' : ': ${relay.reason}'}',
-    };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-      child: Row(
-        children: [
-          if (relay.state == 'connecting') ...[const CupertinoActivityIndicator(radius: 7), const SizedBox(width: 8)],
-          Expanded(child: Text(text, style: look.text(size: 13, color: look.secondary))),
-        ],
-      ),
-    );
-  }
-}
 
 // New agent, among a host's or group's counts on its own page: their size,
 // in a wider target that moves nothing beside it, the row centring them.

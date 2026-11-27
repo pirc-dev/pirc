@@ -1676,6 +1676,13 @@ built; steps 14 and 15 are not finished.
       missed. The web app's default look is Native too, and it comes first
       in Settings' Look; a browser that chose another keeps it (`web.md`,
       section 5). What the app has, each as the web app's unless said:
+      - **The connection to the relay** is a line across the top of
+        every screen while it is not up, as the web app's banner: the
+        list, a chat, Settings and both columns of the wide layout, so a
+        chat left open does not look live when it is not. Connecting shows
+        only after 1.5 seconds, since coming back to the app reconnects;
+        offline and refused at once; once shown it stays until the
+        connection is up, through the retries.
       - **Code in replies** is highlighted by `re_highlight`, a Dart port
         of the same highlight.js, with the same common languages, and only
         a block that names its language.

@@ -25,6 +25,10 @@ release that needs its parts upgraded together says so here.
   screen reader reads it.
 - In the web app, scrolling up a little while a reply streams keeps your
   place; before, anything short of 80 pixels was pulled back to the end.
+- The phone apps say when the connection to the relay is down on every
+  screen, in a line across the top as the web app has: before, only the
+  session list said so, in small grey type, and a chat left open still
+  looked live.
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 

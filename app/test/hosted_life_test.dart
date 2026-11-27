@@ -220,7 +220,13 @@ void main() {
       await tester.pumpWidget(PircApp(store: keys, prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest, storefront: () async => null, subscription: _Store(Bought.bought), proof: () async => 'a proof'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sign up'));
-      await until(tester, () => find.byType(LockedAccountScreen).evaluate().isNotEmpty || (find.byType(SessionsScreen).evaluate().isNotEmpty && find.textContaining('Connecting').evaluate().isEmpty));
+      // Locked, or the list with its connection up (the line across the
+      // top says connecting only after a moment, so not by its words).
+      await until(tester, () {
+        if (find.byType(LockedAccountScreen).evaluate().isNotEmpty) return true;
+        final list = find.byType(SessionsScreen).evaluate();
+        return list.isNotEmpty && (list.first.widget as SessionsScreen).model.relay.state == 'ready';
+      });
       return (relay, keys, prefs);
     }
 
