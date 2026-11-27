@@ -700,7 +700,11 @@ Message groups:
   if any), ended, renamed; host and session online state; the per-session
   announcement the relay replays.
 - **Conversation**: history on attach, then streaming of assistant text,
-  thinking, tool calls and results; user prompts with images. A turn ID shared
+  thinking, tool calls and results, with a tool's images; user prompts with
+  images. A tool's images are shrunk by pi's own resizing to at most 2000 px
+  a side and 2 MiB, and to their share of a frame, the result waiting up to
+  five seconds for it; one not shrunk goes as a placeholder
+  (`toolimages.ts`). A turn ID shared
   by live streaming and replayed history, so a client can join the two; a
   per-session sequence number, so a reconnecting client detects gaps.
   History from an entry: a client that has a chat

@@ -45,7 +45,15 @@ type ConvertToPng = (data: string, mimeType: string) => Promise<Photo | null>;
 export interface PiParts {
   tui?: unknown;
   convertToPng?: unknown;
+  resizeImage?: unknown;
 }
+
+// pi's own shrinking of an image, as its read tool does: within the sizes
+// given, or null when it cannot get there.
+export type ResizeImage = (data: Uint8Array, mimeType: string, options: { maxWidth: number; maxHeight: number; maxBytes: number }) => Promise<{ data: string; mimeType: string } | null>;
+let resize: ResizeImage | undefined;
+// pi's shrinking, once loadPhotos has found it.
+export const resizer = (): ResizeImage | undefined => resize;
 
 const isTui = (m: unknown): m is Tui =>
   typeof (m as Tui)?.Image === "function" && typeof (m as Tui).getCapabilities === "function" && typeof (m as Tui).imageFallback === "function" && typeof (m as Tui).getImageDimensions === "function";
@@ -137,6 +145,20 @@ export function loadPhotos(given: PiParts = {}, pi = piPackageDir()): Promise<Lo
         from.push(named === got.module ? "conversion by name" : "conversion from pi's install");
       } else if (!problem) {
         problem = `pi's conversion to PNG did not load (${got.error ?? "no convertToPng"}), so in terminals that speak kitty's protocol a photo shows as a line of text`;
+      }
+    }
+    if (typeof given.resizeImage === "function") {
+      resize = given.resizeImage as ResizeImage;
+      from.push("resizing from pi's loader");
+    } else {
+      const named = (await byName("@earendil-works/pi-coding-agent")) as { resizeImage?: unknown } | undefined;
+      const got = typeof named?.resizeImage === "function" || !pi ? { module: named } : await byPath(join(pi, "dist", "utils", "image-resize.js"));
+      const fn = (got.module as { resizeImage?: unknown } | undefined)?.resizeImage;
+      if (typeof fn === "function") {
+        resize = fn as ResizeImage;
+        from.push(named === got.module ? "resizing by name" : "resizing from pi's install");
+      } else if (!problem) {
+        problem = `pi's image resizing did not load (${got.error ?? "no resizeImage"}), so a tool's large images reach the apps as placeholders`;
       }
     }
     return { problem, from: from.join(", ") || "nothing" };

@@ -21,6 +21,7 @@ import {
   type Usage,
 } from "@pirc/protocol";
 import { splitAttachments } from "./attachments.ts";
+import { toolImages } from "./toolimages.ts";
 
 export type AgentMessage = MessageEndEvent["message"];
 
@@ -192,7 +193,7 @@ export function messageItems(
       const text = textOf(m.content);
       return [create(ConversationItemSchema, {
         ...base,
-        body: { case: "toolResult", value: { toolCallId: m.toolCallId, isError: m.isError, text: clip(text), ...resultFacts(m, text) } },
+        body: { case: "toolResult", value: { toolCallId: m.toolCallId, isError: m.isError, text: clip(text), ...resultFacts(m, text), images: toolImages(m.content) } },
       })];
     }
     default:
@@ -361,7 +362,7 @@ export function fitItem(item: ConversationItem, budget: number): ConversationIte
   let size = toBinary(ConversationItemSchema, item).length;
   if (size <= budget) return item;
   const b = item.body;
-  if (b.case === "userMessage" && b.value.images.some((i) => i.data.length > 0)) {
+  if ((b.case === "userMessage" || b.case === "toolResult") && b.value.images.some((i) => i.data.length > 0)) {
     for (const i of b.value.images) i.data = new Uint8Array();
     size = toBinary(ConversationItemSchema, item).length;
   }

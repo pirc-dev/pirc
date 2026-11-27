@@ -69,6 +69,7 @@ import { nextNumber, questionNotice, turnNotice } from "./notice.ts";
 import { PHOTO_ENTRY, photosOf, preparePhotos, type PhotoData } from "./photos.ts";
 import { launchEnv, launchFolder, launchName, piCommand, type Launcher } from "./launch.ts";
 import { withAttachments, type Saved } from "./attachments.ts";
+import { imageBlocks, shareOf, SHRINK_WAIT_MS, shrinkImages, shrinkingDone, type ImageBlock } from "./toolimages.ts";
 
 export interface Sink {
   // To every client attached to the session.
@@ -351,6 +352,8 @@ interface Pending {
   since: number;
   // How long its tool ran, as timed here (a tool result's).
   took?: number;
+  // A tool result's images, being shrunk for clients (toolimages.ts).
+  shrinking?: ImageBlock[];
   requestId?: string;
   messageId?: string;
 }
@@ -637,6 +640,8 @@ export class Live {
       const p = this.pending[0];
       const entryId = this.findEntry(p.message);
       if (entryId === undefined && now - p.since < PERSIST_MS) break;
+      // Its images shrunk, or given up on.
+      if (p.shrinking && !shrinkingDone(p.shrinking) && now - p.since < SHRINK_WAIT_MS) break;
       this.pending.shift();
       if (p.message.role === "assistant") replied = true;
       if (p.message.role === "user" && entryId) this.turnId = entryId;
@@ -718,6 +723,11 @@ export class Live {
     if (m.role === "toolResult") {
       p.took = this.toolTook.get(m.toolCallId);
       this.toolTook.delete(m.toolCallId);
+      const blocks = imageBlocks(m.content);
+      if (blocks.length > 0) {
+        p.shrinking = blocks;
+        void shrinkImages(blocks, shareOf(this.sink.maxPayloadBytes() - 1024, blocks.length)).then(this.guard("tool images", () => this.resolvePending()));
+      }
     }
     if (m.role === "user") {
       p.requestId = this.matchPrompt(textOf(m.content), Array.isArray(m.content) && m.content.some((c) => c.type === "image"));
@@ -1263,6 +1273,13 @@ export class Live {
     this.flushDelta();
     this.resolvePending();
     const budget = this.sink.maxPayloadBytes() - 1024;
+    // A tool's images not shrunk here yet (a session from before this
+    // process) go as placeholders now, and shrunk to the next History.
+    for (const e of this.ctx.sessionManager.getBranch()) {
+      if (e.type !== "message" || e.message.role !== "toolResult") continue;
+      const blocks = imageBlocks(e.message.content);
+      if (blocks.length > 0 && !shrinkingDone(blocks)) void shrinkImages(blocks, shareOf(budget, blocks.length)).catch(() => {});
+    }
     // Each item fits on its own, so the newest always gets through.
     const all = withNotes(historyItems(this.ctx.sessionManager.getBranch()), this.notes).map((i) => fitItem(i, budget - 256));
     // Those after the client's last entry, when they are few enough and

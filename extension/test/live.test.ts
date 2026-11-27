@@ -1354,3 +1354,16 @@ test("a prompt's files reach pi as lines naming where they were saved, and histo
   host.unbind(papi, "new");
   assert.equal(existsSync(m[1]!), false, "the session's files go with it");
 });
+
+test("a tool's image reaches clients with its result, a placeholder where pi's resizing is missing", async () => {
+  const { pi, sink, live } = setup();
+  const r = { role: "toolResult", toolCallId: "t1", toolName: "screenshot", content: [{ type: "text", text: "shot" }, { type: "image", mimeType: "image/png", data: "AQ==" }], isError: false, timestamp: 0 } as unknown as AgentMessage;
+  live.onMessageEnd(r);
+  pi.persist(r);
+  await new Promise((done) => setTimeout(done, 30));
+  live.onWorking(false);
+  const [item] = sink.items();
+  assert.ok(item?.body.case === "toolResult", JSON.stringify(item?.body.case));
+  assert.deepEqual(item.body.value.images.map((i) => [i.mimeType, i.data.length]), [["image/png", 0]]);
+  live.dispose();
+});

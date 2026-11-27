@@ -751,7 +751,7 @@ message ToolCall {
 message ToolResult {
   string tool_call_id = 1;
   bool is_error = 2;
-  // The result as text; images in results are not carried in v1alpha1.
+  // The result's text.
   string text = 3;
   // How long the tool ran, as pi measured it; unset when pi did not say.
   optional uint32 duration_ms = 4;
@@ -762,6 +762,10 @@ message ToolResult {
   // A file edit's changes as a unified diff (pi's edit tool); empty for
   // other tools.
   string diff = 6;
+  // The result's images, shrunk to at most 2000 px a side and 2 MiB. An
+  // image's data is empty when it could not be sent (too big for the
+  // frame, or not shrunk); the client shows a placeholder.
+  repeated Image images = 7;
 }
 
 message ToolProgress {

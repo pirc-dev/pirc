@@ -28,7 +28,7 @@ async function tui(): Promise<Tui> {
   const t = (await import(pathToFileURL(join(realpathSync(join(pi, "..", "pi-tui")), "dist", "index.js")).href)) as Tui;
   const loaded = await loadPhotos({ tui: t }, pi);
   assert.equal(loaded.problem, undefined);
-  assert.match(loaded.from, /^pi-tui from pi's loader, conversion /);
+  assert.match(loaded.from, /^pi-tui from pi's loader, conversion .*, resizing /);
   return t;
 }
 
