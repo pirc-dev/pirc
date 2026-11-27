@@ -1683,6 +1683,9 @@ built; steps 14 and 15 are not finished.
         only after 1.5 seconds, since coming back to the app reconnects;
         offline and refused at once; once shown it stays until the
         connection is up, through the retries.
+        The app pings the relay every 10 seconds while it is open, so that
+        a connection gone silent (a phone out of signal) shows within 10 to
+        20 seconds; at the relay's 25 it took up to 50.
       - **Code in replies** is highlighted by `re_highlight`, a Dart port
         of the same highlight.js, with the same common languages, and only
         a block that names its language.

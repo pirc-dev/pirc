@@ -74,7 +74,10 @@ class HostedConnection {
     required this.onFrame,
     this.onState,
     this.listCounter,
-    this.pingInterval = const Duration(seconds: 25),
+    // While the app is open (it closes the connection in the background):
+    // a connection gone silent, a phone out of signal, shows within 10 to
+    // 20 seconds.
+    this.pingInterval = const Duration(seconds: 10),
     this.loginTimeout = const Duration(seconds: 15),
     this.minBackoff = const Duration(seconds: 1),
     this.maxBackoff = const Duration(seconds: 30),

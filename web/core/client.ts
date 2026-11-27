@@ -805,7 +805,8 @@ export class Client {
     // kind of request.
     const payload = toBinary(SessionMessageSchema, create(SessionMessageSchema, { requestId, body }));
     if (!this.send({ case: "routed", value: { session: to, payload } })) {
-      return Promise.resolve(errorReply(requestId, ErrorCode.BUSY, "not connected to the relay, or the request is too large"));
+      // Which of the two, as this client knows: what is said is acted on.
+      return Promise.resolve(errorReply(requestId, ErrorCode.BUSY, this.relay.state === "ready" ? "too large to send" : "not connected to the relay"));
     }
     return new Promise((resolve) => {
       const expire = () => {

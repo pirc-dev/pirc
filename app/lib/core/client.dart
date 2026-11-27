@@ -808,7 +808,8 @@ class Client {
     // kind of request.
     final message = request.deepCopy()..requestId = requestId;
     if (!_send(Frame(routed: Routed(session: to, payload: message.writeToBuffer())))) {
-      return Future.value(errorReply(requestId, ErrorCode.ERROR_CODE_BUSY, 'not connected to the relay, or the request is too large'));
+      // Which of the two, as this client knows: what is said is acted on.
+      return Future.value(errorReply(requestId, ErrorCode.ERROR_CODE_BUSY, _relay.state == 'ready' ? 'too large to send' : 'not connected to the relay'));
     }
     final c = Completer<SessionMessage>();
     final p = _Pending(to, c.complete, extend);

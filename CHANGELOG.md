@@ -40,6 +40,11 @@ release that needs its parts upgraded together says so here.
   the phone apps: tap "asking", "done" or "working" to see only those
   sessions, unfolded under their hosts and groups, and tap it again or
   "in all" to see every one.
+- The phone apps notice a connection gone silent (a phone out of signal)
+  within 10 to 20 seconds, where it took up to 50.
+- A message that could not be sent says which it was, "not connected to the
+  relay" or "too large to send", in the web app and the phone apps; it said
+  "one or the other".
 - On phones and tablets, the web app's text fields are at least 16 pixels in
   every look, so iOS no longer zooms the page in when one is tapped.
 
