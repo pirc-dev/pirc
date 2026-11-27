@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- While pi works, the message box has one Send, which steers as before;
+  hold it (or right-click it) to queue the message instead. The
+  Steer/Queue switch is gone. An empty Send now looks switched off in
+  every look.
 - Beside the list, on a computer or a tablet, the chat's title and its
   lines are in line with the messages under them.
 - On a phone on its side, the chat's header is one line and the

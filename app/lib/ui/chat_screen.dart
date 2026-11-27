@@ -3,7 +3,8 @@
 // where it runs; its items as runs (core/chat.dart), replies in Markdown,
 // tool calls as lines that open to their arguments and output, messages
 // sent and not yet shown; and the composer, with pi's question above it,
-// and while pi works how long, Steer or Queue, and Stop. One of the user's
+// and while pi works how long and Stop, Send steering and, held, offering
+// to queue instead. One of the user's
 // messages, once pi has saved it, offers going back or a fork from there.
 import 'dart:async';
 import 'dart:convert';
@@ -1339,8 +1340,6 @@ class _Composer extends StatefulWidget {
 
 class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
   // Each turn starts on Steer.
-  var _steer = true;
-  var _wasWorking = false;
   // Why an image could not be added.
   String? _problem;
   // Whether the session's model is known not to take images, asked of pi
@@ -1421,7 +1420,24 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     widget.images.value = const [];
     widget.files.value = const [];
     setState(() => _problem = null);
-    widget.model.prompt(s.id, text, images: images, files: files, delivery: busy ? (_steer && !queue ? 'steer' : 'followUp') : null);
+    widget.model.prompt(s.id, text, images: images, files: files, delivery: busy ? (queue ? 'followUp' : 'steer') : null);
+  }
+
+  // Send held while pi works: to steer, or to queue for when the whole task
+  // is done, as a messaging app offers other ways to send.
+  Future<void> _sendHow() async {
+    HapticFeedback.mediumImpact();
+    final queue = await showSheet<bool>(
+      context,
+      (context) => Sheet(title: 'Send', done: 'Cancel', children: [
+        SheetGroup(children: [
+          SheetRow(label: 'Send now', sub: 'pi reads it after the step it is on', onTap: () => Navigator.of(context).pop(false)),
+          SheetRow(label: 'Queue', sub: 'pi reads it when the whole task is done', onTap: () => Navigator.of(context).pop(true)),
+        ]),
+      ]),
+    );
+    if (queue == null || !mounted) return;
+    _send(queue: queue);
   }
 
   Future<void> _askClipboard() async {
@@ -1525,10 +1541,6 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
     final look = Look.of(context);
     final s = widget.session;
     final busy = s.working || s.compacting;
-    if (busy != _wasWorking) {
-      _wasWorking = busy;
-      _steer = true;
-    }
     final images = widget.images.value;
     final files = widget.files.value;
     final empty = widget.text.text.trim().isEmpty && images.isEmpty && files.isEmpty;
@@ -1564,10 +1576,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                         const SizedBox(width: 10),
                         _TurnTime(model: widget.model, id: s.id, compacting: s.compacting),
                       ]),
-                      _compact(Row(mainAxisSize: MainAxisSize.min, children: [
-                        _Switch(steer: _steer, set: (v) => setState(() => _steer = v)),
-                        const SizedBox(width: 6),
-                        Reach(
+                      _compact(Reach(
                           onTap: () => widget.model.stop(s.id),
                           child: Press(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -1581,7 +1590,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                             Text('Stop', style: look.text(size: 14, weight: FontWeight.w600, color: look.block, spacing: 0)),
                           ]),
                         )),
-                      ])),
+                      ),
                     ],
                   ),
                 if (images.isNotEmpty)
@@ -1628,7 +1637,7 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                         },
                       ),
                       // The longest that fits on its one line, or none.
-                      placeholder: [if (busy) 'Steer, or queue a follow-up', 'Message'].where((p) => _fits(context, p, look.text(size: 16, spacing: 0), field.maxWidth - 32)).firstOrNull,
+                      placeholder: [if (busy) 'Steer, or hold to queue', 'Message'].where((p) => _fits(context, p, look.text(size: 16, spacing: 0), field.maxWidth - 32)).firstOrNull,
                       placeholderStyle: look.text(size: 16, color: look.ink3, spacing: 0),
                       style: look.text(size: 16, height: 1.35, spacing: 0),
                       minLines: 1,
@@ -1643,22 +1652,30 @@ class _ComposerState extends State<_Composer> with WidgetsBindingObserver {
                     )),
                   ),
                   const SizedBox(width: 10),
+                  // Send, idle or working, the same: working, it steers, and
+                  // held (or a secondary click) asks whether to queue.
                   _compact(Semantics(
                     key: const ValueKey('send'),
                     button: true,
-                    label: busy ? (_steer ? 'Steer' : 'Queue') : 'Send',
+                    label: 'Send',
+                    hint: busy && !empty ? 'pi reads it after the step it is on' : null,
+                    onLongPressHint: busy && !empty ? 'Queue it instead' : null,
                     enabled: !empty,
-                    child: Reach(
-                      onTap: empty ? null : send,
-                      child: Container(
-                        height: 38,
-                        width: busy ? null : 38,
-                        padding: busy ? const EdgeInsets.symmetric(horizontal: 18) : null,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(color: empty ? look.wash2 : look.accent, borderRadius: BorderRadius.circular(busy ? 12 : 19)),
-                        child: busy
-                            ? Text(_steer ? 'Steer' : 'Queue', style: look.text(size: 15, weight: FontWeight.w600, color: empty ? look.ink3 : look.onAccent, spacing: 0))
-                            : Icon(CupertinoIcons.arrow_up, size: 20, color: empty ? look.ink3 : look.onAccent),
+                    excludeSemantics: true,
+                    onTap: empty ? null : send,
+                    onLongPress: busy && !empty ? _sendHow : null,
+                    child: GestureDetector(
+                      onLongPress: busy && !empty ? _sendHow : null,
+                      onSecondaryTap: busy && !empty ? _sendHow : null,
+                      child: Reach(
+                        onTap: empty ? null : send,
+                        child: Container(
+                          height: 38,
+                          width: 38,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(color: empty ? look.wash2 : look.accent, borderRadius: BorderRadius.circular(19)),
+                          child: Icon(CupertinoIcons.arrow_up, size: 20, color: empty ? look.ink3 : look.onAccent),
+                        ),
                       ),
                     ),
                   )),
@@ -1678,47 +1695,8 @@ bool _fits(BuildContext context, String text, TextStyle style, double width) {
   return fits;
 }
 
-// The message box's small controls (the switch, Stop, Send): their words
+// The message box's small controls (Stop, Send): their words
 // grow with the text size only so far, as the system's own compact controls
 // do, so that they leave the message itself its room.
 Widget _compact(Widget child) => MediaQuery.withClampedTextScaling(maxScaleFactor: 1.3, child: child);
 
-// Steer or Queue: a small switch that sends nothing.
-class _Switch extends StatelessWidget {
-  const _Switch({required this.steer, required this.set});
-  final bool steer;
-  final void Function(bool) set;
-
-  @override
-  Widget build(BuildContext context) {
-    final look = Look.of(context);
-    Widget side(String label, String hint, bool value) => Semantics(
-          button: true,
-          selected: steer == value,
-          label: label,
-          hint: hint,
-          excludeSemantics: true,
-          onTap: () => set(value),
-          // Each side's target the switch's whole 44 points of height.
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => set(value),
-            child: SizedBox(height: 44, child: Center(child: Container(
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              alignment: Alignment.center,
-              decoration: steer == value ? BoxDecoration(color: look.sheetCard, borderRadius: BorderRadius.circular(7), boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 2, offset: Offset(0, 1))]) : null,
-              child: Text(label, style: look.text(size: 12.5, weight: steer == value ? FontWeight.w600 : FontWeight.w400, color: steer == value ? look.ink : look.ink2, spacing: 0)),
-            ))),
-          ),
-        );
-    // Drawn 32 high, its well behind the sides.
-    return Stack(children: [
-      Positioned.fill(top: 6, bottom: 6, child: DecoratedBox(decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(9)))),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [side('Steer', 'pi reads it after the step it is on', true), side('Queue', 'pi reads it when the whole task is done', false)]),
-      ),
-    ]);
-  }
-}

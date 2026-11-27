@@ -52,11 +52,11 @@ function useBlind(s: SessionView, attached: boolean): boolean {
 }
 
 // The composer. Idle, the message and Send. While pi works: Stop on its
-// own line, by how long the turn has run and away from the send button; a
-// small switch on that line choosing whether pi reads the message after
-// the step it is on (Steer, the default, as Enter in pi) or once the whole
-// task is done (Queue, as Alt+Enter in pi); and one send button that says
-// which. Neither interrupts pi: only Stop does. Images come with the button beside
+// own line, by how long the turn has run and away from the send button;
+// Send then steers, pi reading the message after the step it is on (as
+// Enter in pi), and held, or right-clicked, offers to queue it instead,
+// for when the whole task is done (as Alt+Enter in pi). Neither interrupts
+// pi: only Stop does. Images come with the button beside
 // the box, or pasted or dropped anywhere on the page; so do other files,
 // for a session that takes them, up to FILES_BYTES_MAX together. Cmd/Ctrl+Enter sends
 // as the button would; so does Enter where there is a mouse or trackpad, taken as a sign
@@ -75,12 +75,10 @@ export function Composer(p: {
   setFiles: (f: (was: PickedFile[]) => PickedFile[]) => void;
   ready: boolean;
   since: number | undefined;
-  turn: string | undefined;
   send: (delivery?: "steer" | "followUp") => void;
 }) {
   const { text, setText } = p;
   const area = useRef<HTMLTextAreaElement>(null);
-  const [mode, setMode] = useState<"followUp" | "steer">("steer");
   const keyboard = useKeyboard();
   const keys = useKeys();
   const short = useMedia(SHORT);
@@ -92,12 +90,7 @@ export function Composer(p: {
     setProblem(undefined);
     p.send(delivery);
   };
-  const send = () => sendAs(busy ? mode : undefined);
-  // Each turn starts on Steer: a Queue chosen for the last one is not kept,
-  // also when a queued message starts the next without pi going idle.
-  useEffect(() => {
-    setMode("steer");
-  }, [busy, p.turn]);
+  const send = () => sendAs(busy ? "steer" : undefined);
   useEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -177,23 +170,6 @@ export function Composer(p: {
     };
   }, []);
   const blind = useBlind(p.session, p.images.length > 0);
-  // Small, on the working line: a choice that sends nothing, so it may sit
-  // near Stop; its title says what each side does.
-  const switcher = (
-    <div className="ml-auto flex flex-none rounded-full bg-wash p-[2px] text-[12.5px] cards:rounded-[9px] cockpit:rounded-lg cockpit:bg-card cockpit:font-ui" role="group" aria-label="When pi gets the message">
-      {([["steer", "Steer", "pi reads it after the step it is on"], ["followUp", "Queue", "pi reads it when the whole task is done"]] as const).map(([m, label, title]) => (
-        <button
-          key={m}
-          className="hit relative h-7 rounded-full px-2.5 text-ink2 aria-pressed:bg-paper aria-pressed:font-semibold aria-pressed:text-ink aria-pressed:ring-1 aria-pressed:ring-ink3 cards:rounded-[7px] cards:aria-pressed:bg-card cards:aria-pressed:shadow-card cards:aria-pressed:ring-wash2 native:aria-pressed:bg-sheet-card cockpit:rounded-md cockpit:aria-pressed:ring-accent"
-          onClick={() => setMode(m)}
-          aria-pressed={mode === m}
-          title={title}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
   const shell = "flex-none border-t border-rule bg-paper px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] cards:bg-card cards:px-3 native:bg-paper cockpit:px-3";
   // While pi asks, the question is in the composer's place, "Dismiss and
   // stop" in Stop's; what was being written waits for it to go.
@@ -214,8 +190,7 @@ export function Composer(p: {
           <div className="flex items-center gap-2.5 text-[13.5px] text-ink2 cockpit:font-mono cockpit:text-xs">
             <span className="w-4 text-center font-mono font-semibold text-work" aria-hidden="true">◐</span>
             <Status since={p.since} compacting={Boolean(p.session.compacting)} />
-            {switcher}
-            <button className="hit relative ml-1.5 inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => p.run("abort", {})}>
+            <button className="hit relative ml-auto inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => p.run("abort", {})}>
               <span className="size-[9px] rounded-[1.5px] bg-current" aria-hidden="true" />Stop{keys && <Key>esc</Key>}
             </button>
           </div>
@@ -269,8 +244,8 @@ export function Composer(p: {
               }
               if (e.key !== "Enter" || e.shiftKey) return;
               if (e.altKey) {
-                // Queued, as in pi, whatever the switch says; never a new
-                // line, which Option+Enter would otherwise make.
+                // Queued, as in pi; never a new line, which Option+Enter
+                // would otherwise make.
                 e.preventDefault();
                 sendAs(busy ? "followUp" : undefined);
                 return;
@@ -281,22 +256,11 @@ export function Composer(p: {
               }
             }}
             enterKeyHint={keyboard ? "send" : "enter"}
-            placeholder={busy ? "Steer, or queue a follow-up" : "Message"}
+            placeholder={busy ? "Steer, or hold to queue" : "Message"}
             aria-label="Message"
             className="min-h-11 min-w-0 flex-1 resize-none rounded-[22px] bg-wash px-4 py-[11px] text-base leading-[1.35] outline-none placeholder:text-ink3 cards:min-h-[46px] cards:rounded-[23px] cards:py-3 cards:text-[15.5px] native:min-h-[38px] native:rounded-[19px] native:border native:border-rule native:bg-card native:py-2 native:text-base cockpit:rounded-[10px] cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:text-[15px] touch:text-base!"
           />
-          {/* Native's idle send is a round arrow, as a messaging app's. */}
-          <button
-            className={`hit relative h-11 flex-none rounded-full bg-ink px-4.5 text-[15px] font-semibold text-paper disabled:bg-wash2 disabled:text-ink3 cards:h-[46px] cards:bg-accent cards:text-on-accent cards:disabled:bg-accent cards:disabled:text-on-accent cards:disabled:opacity-40 native:h-[38px] native:disabled:bg-wash2 native:disabled:text-ink3 native:disabled:opacity-100 cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent ${busy ? "native:rounded-xl" : "native:w-[38px] native:px-0 native:text-xl"}`}
-            disabled={empty}
-            onClick={send}
-            aria-label={busy ? undefined : "Send"}
-          >
-            {busy
-              ? (mode === "steer" ? "Steer" : "Queue")
-              : <><span className="native:hidden">Send</span><span className="hidden native:inline" aria-hidden="true">↑</span></>}
-            {keys && <Key>⏎</Key>}
-          </button>
+          <Send busy={busy} empty={empty} keys={keys} send={sendAs} />
         </div>
       </div>
     </div>
@@ -306,4 +270,98 @@ export function Composer(p: {
 // A key's name on its button, printed in Cockpit only.
 function Key(p: { children: string }) {
   return <kbd className="ml-2 hidden rounded-[3px] border border-current/40 px-1 font-mono text-[11px] font-normal opacity-80 cockpit:inline" aria-hidden="true">{p.children}</kbd>;
+}
+
+// Send, idle or working, the same: working, it steers; held on a touch
+// screen, right-clicked, or with the menu key, it offers to queue instead,
+// as a messaging app offers other ways to send. Native's is a round arrow.
+function Send(p: { busy: boolean; empty: boolean; keys: boolean; send: (delivery?: "steer" | "followUp") => void }) {
+  const [menu, setMenu] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const hold = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // The click that ends a hold opens the menu, and does not send.
+  const held = useRef(false);
+  const offers = p.busy && !p.empty;
+  useEffect(() => {
+    if (!offers) setMenu(false);
+  }, [offers]);
+  useEffect(() => {
+    if (!menu) return;
+    box.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setMenu(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMenu(false);
+      button.current?.focus();
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key, true);
+    };
+  }, [menu]);
+  const open = () => setMenu(true);
+  const stopHold = () => clearTimeout(hold.current);
+  return (
+    <div ref={box} className="relative flex-none">
+      {menu && (
+        <div className="absolute right-0 bottom-full z-20 mb-2 w-64 overflow-hidden rounded-2xl bg-card text-left shadow-[0_8px_30px_rgb(0_0_0/0.18)] ring-1 ring-rule cards:rounded-[14px] cockpit:rounded-[10px]" role="menu" aria-label="Send">
+          {([["steer", "Send now", "pi reads it after the step it is on"], ["followUp", "Queue", "pi reads it when the whole task is done"]] as const).map(([d, label, sub]) => (
+            <button
+              key={d}
+              role="menuitem"
+              className="block w-full border-b border-rule px-4 py-2.5 text-left last:border-0 hover:bg-wash focus-visible:bg-wash focus-visible:outline-none"
+              onClick={() => {
+                setMenu(false);
+                p.send(d);
+              }}
+            >
+              <span className="block text-[15px] font-semibold text-ink">{label}</span>
+              <span className="block text-[12.5px] text-ink2">{sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        ref={button}
+        className="hit relative h-11 flex-none touch-manipulation rounded-full bg-ink px-4.5 text-[15px] font-semibold text-paper select-none [-webkit-touch-callout:none] disabled:bg-wash2 disabled:text-ink3 cards:h-[46px] cards:bg-accent cards:text-on-accent native:h-[38px] native:w-[38px] native:px-0 native:text-xl cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent disabled:cards:bg-wash2 disabled:cards:text-ink3 disabled:cockpit:bg-wash2 disabled:cockpit:text-ink3"
+        disabled={p.empty}
+        aria-label="Send"
+        aria-haspopup={offers ? "menu" : undefined}
+        aria-expanded={offers ? menu : undefined}
+        title={offers ? "pi reads it after the step it is on; hold, or right-click, to queue it for when the whole task is done" : undefined}
+        onClick={() => {
+          if (held.current) held.current = false;
+          else p.send(p.busy ? "steer" : undefined);
+        }}
+        onContextMenu={(e) => {
+          if (!offers) return;
+          e.preventDefault();
+          stopHold();
+          open();
+        }}
+        onPointerDown={(e) => {
+          held.current = false;
+          if (offers && e.pointerType !== "mouse") {
+            hold.current = setTimeout(() => {
+              held.current = true;
+              open();
+            }, 450);
+          }
+        }}
+        onPointerUp={stopHold}
+        onPointerLeave={stopHold}
+        onPointerCancel={stopHold}
+      >
+        <span className="native:hidden">Send</span><span className="hidden native:inline" aria-hidden="true">↑</span>
+        {p.keys && <Key>⏎</Key>}
+      </button>
+    </div>
+  );
 }

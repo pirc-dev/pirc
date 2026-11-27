@@ -293,7 +293,6 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
           setFiles={setFiles}
           ready={ready}
           since={since}
-          turn={last?.turnId}
           send={(delivery) => {
             if ((!text.trim() && images.length === 0 && files.length === 0) || !ready) return;
             void send(text, images, files, delivery);

@@ -307,22 +307,25 @@ not in `web/`, since they belong to neither client.
   neither. Reason: which sessions are filling up or dear is a reason to
   open one, and would otherwise show only inside it.
 - **The composer, while pi works** (from Triage): Stop on a line of its
-  own, by how long the turn has run, and away from the send button; a
-  small Steer/Queue switch on that line, what each does in its tooltip;
-  and one send button that says which. Steer is the default, and
-  Cmd/Ctrl+Enter sends as the button would, so it steers unless Queue is
-  chosen, while Alt+Enter queues, as in pi; the choice holds for the
-  turn, and each turn starts on Steer. Reasons: Stop
-  next to Steer would be one slip from the wrong one. Neither Steer nor
-  Queue cuts into pi's work: a steer is read after the step pi is on (the
-  reply and its tool calls), a queued message once the whole task is
-  done, and only Stop interrupts; so Steer, what Enter does in pi's own
-  terminal, is the default, and the tooltips say when each is read
-  ("after the step it is on", "when the whole task is done"). The switch
-  shares Stop's line, safe beside it since choosing sends nothing, as a
-  line of its own would take too much room; the price is a line of height
-  on a phone, and on a phone's width that line drops the word "Working",
-  its sign and the time saying as much.
+  own, by how long the turn has run, and away from the send button; and
+  Send, the same button as when pi is idle, which steers. Held on a touch
+  screen, right-clicked, or opened with the menu key, Send offers "Send
+  now" (pi reads it after the step it is on) or "Queue" (pi reads it when
+  the whole task is done); the box's hint says "Steer, or hold to queue".
+  Enter and Cmd/Ctrl+Enter steer, Alt+Enter queues, as in pi. The apps
+  are the same, a long press (or a secondary click) opening a sheet with
+  the two. Reasons: neither Steer nor Queue cuts into pi's work, only
+  Stop does, and Steer, what Enter does in pi's own terminal, is what is
+  usually meant, so it is what Send does; a Steer/Queue switch beside a
+  button that said which and Stop was three controls for one message,
+  and a choice to set before each send. Queueing behind a hold is how
+  messaging apps keep other ways to send (Telegram's, iMessage's), and
+  the message shows as "Queued" or "Steering" in the chat once sent, so
+  what was chosen is never hidden. Stop stays its own button, not Send
+  turned into Stop as in chat apps where one cannot write while a reply
+  comes: here one can, and Stop would vanish while writing. Stop next to
+  Send would be one slip from the wrong one. An empty Send is grey in
+  every look, as a disabled button.
 - **Enter sends on a computer** and Shift+Enter makes a new line; on a
   touch screen Enter is a new line and the button sends. Cmd/Ctrl+Enter
   sends everywhere. A computer is told by its mouse or trackpad (the

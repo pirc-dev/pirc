@@ -326,7 +326,8 @@ void main() {
       await tester.pump();
       expect(find.text('2 tools read, edit'), findsOneWidget, reason: 'two that finished well fold');
       expect(find.text('Stop'), findsOneWidget);
-      expect(find.text('Steer'), findsNWidgets(2), reason: 'the switch, and the send button saying it: Steer, the default');
+      expect(find.text('Steer'), findsNothing, reason: 'no switch: Send steers, and held offers to queue');
+      expect(find.text('Steer, or hold to queue'), findsOneWidget);
       await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('chat_${b.name}.png')));
     }, skip: !drawsGoldens, variant: both);
   }
@@ -859,9 +860,6 @@ void main() {
       final size = f.evaluate().first.widget is Text ? reach(f) : tester.getSize(f);
       expect(size.width >= 44 && size.height >= 44, isTrue, reason: '$f: $size');
     }
-    for (final side in ['Steer', 'Queue']) {
-      expect(tester.getSize(find.bySemanticsLabel(side).first).height, greaterThanOrEqualTo(44), reason: side);
-    }
     expect(tester.getSize(find.bySemanticsLabel(RegExp('^Add an image'))).height, greaterThanOrEqualTo(44));
   });
 
@@ -897,7 +895,7 @@ void main() {
     }
   });
 
-  testWidgets('larger text: Stop stays on the screen, the switch and Stop on a line of their own when the status leaves no room', (tester) async {
+  testWidgets('larger text: Stop stays on the screen, by the status while it fits, then on a line of its own', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
     // The largest of the standard sizes, then the accessibility ones.
@@ -908,8 +906,8 @@ void main() {
       final stop = tester.getRect(find.text('Stop'));
       final status = tester.getRect(find.textContaining('Working'));
       expect(stop.right, lessThanOrEqualTo(390), reason: 'Stop on the screen at $scale');
-      if (scale == 1) expect((stop.center.dy - status.center.dy).abs(), lessThan(4), reason: 'one line at $scale');
-      if (scale >= 2) expect(stop.top, greaterThan(status.bottom), reason: 'a line of their own at $scale');
+      if (scale <= 2) expect((stop.center.dy - status.center.dy).abs(), lessThan(4), reason: 'one line at $scale');
+      if (scale > 3) expect(stop.top, greaterThan(status.bottom), reason: 'a line of its own at $scale');
       // The header's way back is not cut: its words stop growing.
       expect(tester.getRect(find.byType(BackLink)).top, greaterThanOrEqualTo(47), reason: 'under the status bar at $scale');
     }
@@ -1750,7 +1748,7 @@ void main() {
         expect(find.text('Auto mode permission ask'), findsOneWidget);
         expect(find.textContaining('git push nowhere main'), findsWidgets);
         expect(find.text('Waiting for you'), findsOneWidget, reason: 'the check it is about');
-        expect(find.text('Steer, or queue a follow-up'), findsNothing, reason: 'no message box while pi asks');
+        expect(find.text('Steer, or hold to queue'), findsNothing, reason: 'no message box while pi asks');
         expect(find.text('Stop'), findsNothing);
         await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_${b.name}.png')));
         if (b == Brightness.dark) return;
@@ -1789,7 +1787,7 @@ void main() {
       await tester.pump();
       expect(find.text('PI ASKS'), findsNothing);
       expect(find.text('Waiting for you'), findsNothing);
-      expect(find.text('Steer, or queue a follow-up'), findsOneWidget);
+      expect(find.text('Steer, or hold to queue'), findsOneWidget);
       await tester.pump(const Duration(seconds: 46));
     });
 
@@ -1970,16 +1968,34 @@ void main() {
     await tester.pump(const Duration(minutes: 31));
   });
 
-  testWidgets('a message sent while pi works is queued, and shows until pi has it', (tester) async {
+  testWidgets('while pi works Send steers; held, it offers to queue instead, and the message shows until pi has it', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
     await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
     await tester.pump();
-    await tester.tap(find.text('Queue'));
-    await tester.enterText(find.byType(CupertinoTextField), 'and update the changelog');
+    expect(find.text('Steer, or hold to queue'), findsOneWidget);
+    // Tapped, it steers.
+    await tester.enterText(find.byType(CupertinoTextField), 'use the staging relay');
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('send')));
     await tester.pump();
+    expect(model.pending('0101010101010101-i1').single.delivery, 'steer');
+    model.dismiss('0101010101010101-i1', model.pending('0101010101010101-i1').single);
+    // Held, a sheet: Cancel sends nothing; Queue queues.
+    await tester.enterText(find.byType(CupertinoTextField), 'and update the changelog');
+    await tester.pump();
+    await tester.longPress(find.byKey(const ValueKey('send')));
+    await tester.pumpAndSettle();
+    expect(find.text('pi reads it when the whole task is done'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(model.pending('0101010101010101-i1'), isEmpty);
+    expect(find.text('and update the changelog'), findsOneWidget, reason: 'still in the box');
+    await tester.longPress(find.byKey(const ValueKey('send')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Queue'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(model.pending('0101010101010101-i1').single.delivery, 'followUp');
     expect(find.text('Sending'), findsOneWidget);
     await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('chat_sending_light.png')));
