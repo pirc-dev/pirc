@@ -5,7 +5,9 @@
 #
 #   sh/publish-release.sh <release-dir>
 #
-# <release-dir> is dist/pirc-X.Y.Z; snapshots are refused. Needs gh, signed
+# <release-dir> is dist/pirc-X.Y.Z, or dist/pirc-X.Y.Z-beta.N for a beta,
+# which is published as a prerelease with what is under Unreleased as its
+# notes; snapshots are refused. Needs gh, signed
 # in with write access to the repository (GH_TOKEN, or gh auth login).
 set -euo pipefail
 
@@ -19,7 +21,9 @@ release=$(cd "$1" && pwd)
 cd "$(dirname "$0")/.."
 version=$(basename "$release")
 version=${version#pirc-}
-[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "not a release (snapshots are not published): $release"
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]] || die "not a release (snapshots are not published): $release"
+beta=false
+[[ $version == *-beta.* ]] && beta=true
 command -v gh >/dev/null || die "needs gh on PATH"
 [ ! -e "$release/MACOS_UNSIGNED" ] || die "$release has macOS relays not signed with a Developer ID (PIRC_MACOS_UNSIGNED)"
 (cd "$release" && shasum -a 256 -c --quiet SHA256SUMS) || die "$release does not match its SHA256SUMS"
@@ -38,9 +42,17 @@ remote=$(gh api "repos/${repository}/commits/v${version}" --jq .sha) || die "no 
 [ "$remote" = "$commit" ] || die "v${version} on GitHub is ${remote}, here ${commit}"
 
 # What it changes, as CHANGELOG.md says at the tag, above how to install.
-changes=$(git show "v${version}:CHANGELOG.md" | sh/changelog.sh "$version" -) || die "CHANGELOG.md at v${version} has no section for it"
+if $beta; then
+  changes="A beta of the next release, for the closed beta's testers.
+
+$(git show "v${version}:CHANGELOG.md" | sh/changelog.sh --unreleased -)"
+else
+  changes=$(git show "v${version}:CHANGELOG.md" | sh/changelog.sh "$version" -) || die "CHANGELOG.md at v${version} has no section for it"
+fi
 notes="${changes}
 
 PiRC ${version}: the relay for Linux and macOS, the web app and the pi extension.
 Installing them: https://pirc.dev/self-hosting/. Check a download against SHA256SUMS with \`sha256sum -c --ignore-missing SHA256SUMS\` (on macOS, \`shasum -a 256 -c --ignore-missing SHA256SUMS\`)."
-gh release create "v${version}" --repo "$repository" --verify-tag --title "PiRC ${version}" --notes "$notes" "${files[@]}"
+prerelease=()
+$beta && prerelease=(--prerelease --latest=false)
+gh release create "v${version}" --repo "$repository" --verify-tag --title "PiRC ${version}" "${prerelease[@]}" --notes "$notes" "${files[@]}"

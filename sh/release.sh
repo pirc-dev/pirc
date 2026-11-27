@@ -6,7 +6,13 @@
 # extension to its own repository.
 #
 #   sh/release.sh              the release tagged vX.Y.Z at HEAD
+#   sh/release.sh              a beta, tagged vX.Y.Z-beta.N at HEAD
 #   sh/release.sh --snapshot   a test build of HEAD, versioned X.Y.Z-dev+<commit>
+#
+# A beta is a release for the closed beta's testers: published on GitHub as
+# a prerelease and to npm under the dist-tag beta (latest stays on the last
+# release), not to the extension's own repository. It needs no section in
+# CHANGELOG.md; its notes are what is under Unreleased.
 #
 # Before tagging, rename CHANGELOG.md's "## Unreleased" to "## X.Y.Z
 # (date)" in a commit of its own, leaving an empty Unreleased above it: what
@@ -78,12 +84,17 @@ version=$(sh/build.sh version)
 if [[ $version == *-dev+* ]] && ! $snapshot; then
   die "HEAD has no vX.Y.Z tag; tag it, or pass --snapshot for a test build"
 fi
-[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-dev\+[0-9a-f]+)?$ ]] || die "not a release version: $version"
+[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?(-dev\+[0-9a-f]+)?$ ]] || die "not a release version: $version"
+beta=false
+[[ $version == *-beta.* ]] && beta=true
 # A release says what it changes: its section of CHANGELOG.md, which
 # sh/publish-release.sh puts in its notes, is there before anything is built.
-if ! $snapshot; then
+# A beta's notes are what is under Unreleased.
+if ! $snapshot && ! $beta; then
   sh/changelog.sh "$version" >/dev/null || die "add a section for ${version} to CHANGELOG.md, at the tag"
   [ -z "$(sh/changelog.sh --unreleased)" ] || die "CHANGELOG.md still has lines under Unreleased: move them into ${version}'s section before tagging"
+fi
+if ! $snapshot; then
   tag="v${version}"
   [ "$(git cat-file -t "refs/tags/${tag}" 2>/dev/null)" = tag ] || die "${tag} is not a signed tag: make it with git tag -s"
   # git would check a GPG signature with GPG instead, whatever the file says.

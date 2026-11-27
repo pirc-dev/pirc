@@ -43,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=${TAG#v}
-          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $TAG"; exit 1; }
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]] || { echo "not a release tag: $TAG"; exit 1; }
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS \
             --pattern "pirc-extension-${version}.tar.gz"
           grep -E "  pirc-extension-${version}\.tar\.gz$" SHA256SUMS > checked
@@ -52,9 +52,13 @@ jobs:
           [ "$(tar -xzOf "pirc-extension-${version}.tar.gz" "pirc-extension-${version}/package.json" | jq -r '.name + " " + .version')" = "pirc-extension ${version}" ] \
             || { echo "the archive's package is not pirc-extension ${version}"; exit 1; }
           echo "VERSION=${version}" >> "$GITHUB_ENV"
-          # latest only for GitHub's latest release, not a fix to an older one,
-          # which gets release-X.Y: npm takes no tag that reads as a version.
-          if [ "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$TAG" ]; then
+          # A beta under beta, for the closed beta's testers
+          # (`pi install npm:pirc-extension@beta`); latest only for GitHub's
+          # latest release, not a fix to an older one, which gets release-X.Y:
+          # npm takes no tag that reads as a version.
+          if [[ $version == *-beta.* ]]; then
+            echo "DIST_TAG=beta" >> "$GITHUB_ENV"
+          elif [ "$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" = "$TAG" ]; then
             echo "DIST_TAG=latest" >> "$GITHUB_ENV"
           else
             echo "DIST_TAG=release-${version%.*}" >> "$GITHUB_ENV"
