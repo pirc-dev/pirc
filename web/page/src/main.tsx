@@ -4,10 +4,12 @@ import { createRoot } from "react-dom/client";
 import "./fonts.ts";
 import { App } from "./App.tsx";
 import "./index.css";
+import { announcer } from "./announce.ts";
 import { applyLook } from "./look.ts";
 import "./update.ts";
 
 applyLook();
+announcer();
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
 
 // Installable as an app, and its notifications (docs/web.md, section 6).

@@ -8,6 +8,13 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Screen readers: VoiceOver and TalkBack (and a screen reader on the
+  web) now say pi's reply when a turn ends, when it fails or asks
+  something, an extension's warning or error, and a message that was not
+  sent, without moving your place. In the apps, a tool, Thinking and a
+  run of tools are buttons that say whether they are open. On the web, a
+  sheet, the model picker, or an image or table full screen keeps the
+  focus while it is open.
 - Secondary and faint text is darker (lighter in dark mode) where it was
   hard to read, now at least 4.5:1 against its background in every look
   of the web app and in the apps; file chips in your own messages are

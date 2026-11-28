@@ -3,11 +3,12 @@
 // width, the first column stays put while the rest scroll under it, and
 // the edge that hides more is shaded. One wider than the screen can also
 // open full screen, where a phone turned sideways shows more of it.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Icon } from "./icons.tsx";
 import { useLayer } from "./layer.ts";
+import { useModal } from "./modal.ts";
 
 type Props<T extends keyof React.JSX.IntrinsicElements> = React.ComponentProps<T> & { node?: unknown };
 
@@ -27,14 +28,9 @@ export function Table({ node: _, children }: Props<"table">) {
   }, []);
   // Full screen is a layer (layer.ts): going back closes it.
   const layer = useLayer(full, () => setFull(false));
-  const opener = useRef<HTMLButtonElement>(null);
   const shut = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!full) return;
-    shut.current?.focus();
-    const back = opener.current;
-    return () => back?.focus();
-  }, [full]);
+  const screen = useRef<HTMLDivElement>(null);
+  useModal(screen, { open: full, first: shut });
   const open = () => {
     layer.show();
     setFull(true);
@@ -45,13 +41,13 @@ export function Table({ node: _, children }: Props<"table">) {
         <table>{children}</table>
       </div>
       {wide && (
-        <button ref={opener} className="hit relative mt-1.5 inline-flex min-h-8 items-center gap-1.5 font-ui text-[13px] text-ink2 underline decoration-ink3 underline-offset-[3px] cards:text-[13.5px] cards:font-medium cards:text-accent cards:no-underline" onClick={open}>
+        <button className="hit relative mt-1.5 inline-flex min-h-8 items-center gap-1.5 font-ui text-[13px] text-ink2 underline decoration-ink3 underline-offset-[3px] cards:text-[13.5px] cards:font-medium cards:text-accent cards:no-underline" onClick={open}>
           <Icon name="expand" />Full screen
         </button>
       )}
       {full &&
         createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col bg-paper text-ink" role="dialog" aria-modal="true" aria-label="Table">
+          <div ref={screen} className="fixed inset-0 z-50 flex flex-col bg-paper text-ink" role="dialog" aria-modal="true" aria-label="Table">
             <div className="flex min-h-13 items-center gap-2.5 border-b border-rule pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(1.25rem,env(safe-area-inset-left))]">
               <span className="hidden flex-1 items-center gap-2 text-[13px] text-ink2 portrait:flex">
                 <span className="h-[26px] w-[18px] flex-none -rotate-30 rounded border-[1.3px] border-current" />Turn the phone sideways to see more

@@ -21,12 +21,14 @@ import '../core/attachments.dart';
 import '../core/images.dart';
 import '../core/names.dart';
 import '../core/pending.dart';
+import '../core/said.dart';
 import '../core/protocol.dart';
 import '../core/results.dart';
 import '../core/view.dart';
 import 'actions.dart';
 import 'look.dart';
 import 'files.dart';
+import 'herald.dart';
 import 'images.dart';
 import 'markdown.dart';
 import 'question.dart';
@@ -103,6 +105,9 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
   // each reply, and when the model changes (Chat.tsx's useSpend).
   String? _spend;
   String? _spendFor;
+  // A screen reader hears what changes, as it changes (said.dart).
+  final _herald = GlobalKey<HeraldState>();
+  Heard? _heard;
 
   // What is written is kept a moment after it changes, and on leaving.
   Timer? _keepDraft;
@@ -172,12 +177,17 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
   // One of the session's actions, its failure said under the header.
   Future<Outcome> _run(SessionMessage Function(String requestId) request, {bool compacts = false}) async {
     final r = await widget.model.act(widget.id, request, compacts: compacts);
-    if (!r.ok && mounted) setState(() => _notice = (text: '${r.code}: ${r.message}', bad: true));
+    if (!r.ok && mounted) _tell((text: '${r.code}: ${r.message}', bad: true));
     return r;
   }
 
   void _say(String text) {
-    if (mounted) setState(() => _notice = (text: text, bad: false));
+    if (mounted) _tell((text: text, bad: false));
+  }
+
+  void _tell(({String text, bool bad}) notice) {
+    setState(() => _notice = notice);
+    _herald.currentState?.say(notice.text);
   }
 
   void _actions() => showSheet<void>(context, (_) => SessionActions(model: widget.model, id: widget.id, run: _run, say: _say, open: widget.open));
@@ -296,6 +306,13 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
         final items = chat?.items ?? const <ChatItem>[];
         final working = s != null && (s.working || s.compacting);
         _askSpend(s, items);
+        if (chat != null && !(chat.loading && items.isEmpty)) {
+          final r = said(_heard, s, items, model.pending(widget.id));
+          _heard = r.heard;
+          // Together: a live region keeps only its latest words.
+          final words = [for (final x in r.say) x.text].join('\n');
+          if (words.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _herald.currentState?.say(words));
+        }
         final last = signature(items.lastOrNull);
         if (_atEnd) {
           _lastSeen = last;
@@ -356,67 +373,70 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
         final room = MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom - MediaQuery.paddingOf(context).top;
         return CupertinoPageScaffold(
           backgroundColor: look.card,
-          child: Column(
-            children: [
-              _Header(session: s, news: model.news, spend: _spend, actions: s == null ? null : _actions, back: !widget.wide),
-              if (_notice != null) _Notice(_notice!, dismiss: () => setState(() => _notice = null)),
-              Expanded(
-                child: Stack(children: [
-                  LayoutBuilder(builder: (context, c) {
-                    // Read by row as the lists lay their rows out, after this.
-                    // Clear of a phone's notch, on its side.
-                    final pad = MediaQuery.paddingOf(context);
-                    side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14 + math.max(pad.left, pad.right);
-                    return NotificationListener<ScrollNotification>(
-                      // The screen's height changed (the keyboard, turning
-                      // the phone), or a scroll ended: placed again.
-                      onNotification: (n) {
-                        if (n is ScrollEndNotification) {
-                          _later();
-                          _fitted();
-                        }
-                        return false;
-                      },
-                      child: NotificationListener<ScrollMetricsNotification>(
-                        onNotification: (_) {
-                          _later();
-                          _fitted();
+          child: Herald(
+            key: _herald,
+            child: Column(
+              children: [
+                _Header(session: s, news: model.news, spend: _spend, actions: s == null ? null : _actions, back: !widget.wide),
+                if (_notice != null) _Notice(_notice!, dismiss: () => setState(() => _notice = null)),
+                Expanded(
+                  child: Stack(children: [
+                    LayoutBuilder(builder: (context, c) {
+                      // Read by row as the lists lay their rows out, after this.
+                      // Clear of a phone's notch, on its side.
+                      final pad = MediaQuery.paddingOf(context);
+                      side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14 + math.max(pad.left, pad.right);
+                      return NotificationListener<ScrollNotification>(
+                        // The screen's height changed (the keyboard, turning
+                        // the phone), or a scroll ended: placed again.
+                        onNotification: (n) {
+                          if (n is ScrollEndNotification) {
+                            _later();
+                            _fitted();
+                          }
                           return false;
                         },
-                        child: CustomScrollView(
-                          controller: _scroll,
-                          physics: _PinnedEnd(() => _atEnd),
-                          // Each split laid out anew: a row that changes list
-                          // would keep where it was in the other.
-                          center: ValueKey('newer $split'),
-                          anchor: _anchor,
-                          slivers: [
-                            SliverList(
-                              key: ValueKey('older $split'),
-                              delegate: SliverChildBuilderDelegate(
-                                (_, i) => row(split - 1 - i),
-                                childCount: split,
-                                findChildIndexCallback: (k) => switch (at(k, 0, split)) { final i? => split - 1 - i, null => null },
+                        child: NotificationListener<ScrollMetricsNotification>(
+                          onNotification: (_) {
+                            _later();
+                            _fitted();
+                            return false;
+                          },
+                          child: CustomScrollView(
+                            controller: _scroll,
+                            physics: _PinnedEnd(() => _atEnd),
+                            // Each split laid out anew: a row that changes list
+                            // would keep where it was in the other.
+                            center: ValueKey('newer $split'),
+                            anchor: _anchor,
+                            slivers: [
+                              SliverList(
+                                key: ValueKey('older $split'),
+                                delegate: SliverChildBuilderDelegate(
+                                  (_, i) => row(split - 1 - i),
+                                  childCount: split,
+                                  findChildIndexCallback: (k) => switch (at(k, 0, split)) { final i? => split - 1 - i, null => null },
+                                ),
                               ),
-                            ),
-                            SliverList(
-                              key: ValueKey('newer $split'),
-                              delegate: SliverChildBuilderDelegate(
-                                (_, i) => row(split + i),
-                                childCount: rows.length - split,
-                                findChildIndexCallback: (k) => switch (at(k, split, rows.length)) { final i? => i - split, null => null },
+                              SliverList(
+                                key: ValueKey('newer $split'),
+                                delegate: SliverChildBuilderDelegate(
+                                  (_, i) => row(split + i),
+                                  childCount: rows.length - split,
+                                  findChildIndexCallback: (k) => switch (at(k, split, rows.length)) { final i? => i - split, null => null },
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  }),
-                  if (!_atEnd) Positioned(right: 16 + MediaQuery.paddingOf(context).right, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
-                ]),
-              ),
-              if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
-            ],
+                      );
+                    }),
+                    if (!_atEnd) Positioned(right: 16 + MediaQuery.paddingOf(context).right, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
+                  ]),
+                ),
+                if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
+              ],
+            ),
           ),
         );
       },
@@ -637,23 +657,21 @@ class _Notice extends StatelessWidget {
   Widget build(BuildContext context) {
     final look = Look.of(context);
     final ink = notice.bad ? look.block : look.ink2;
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        decoration: BoxDecoration(color: notice.bad ? look.blockWash : look.wash, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
-        padding: EdgeInsets.fromLTRB(20 + MediaQuery.paddingOf(context).left, 6, 8 + MediaQuery.paddingOf(context).right, 6),
-        child: Row(children: [
-          Expanded(child: NoticeText(notice.text, color: ink)),
-          Semantics(
-            container: true,
-            button: true,
-            label: 'Dismiss',
-            excludeSemantics: true,
-            onTap: dismiss,
-            child: Press(padding: EdgeInsets.zero, minimumSize: const Size(44, 44), onPressed: dismiss, child: Icon(CupertinoIcons.xmark, size: 16, color: ink)),
-          ),
-        ]),
-      ),
+    // Said as it comes (the chat's herald).
+    return Container(
+      decoration: BoxDecoration(color: notice.bad ? look.blockWash : look.wash, border: Border(bottom: BorderSide(color: look.rule, width: 0.5))),
+      padding: EdgeInsets.fromLTRB(20 + MediaQuery.paddingOf(context).left, 6, 8 + MediaQuery.paddingOf(context).right, 6),
+      child: Row(children: [
+        Expanded(child: NoticeText(notice.text, color: ink)),
+        Semantics(
+          container: true,
+          button: true,
+          label: 'Dismiss',
+          excludeSemantics: true,
+          onTap: dismiss,
+          child: Press(padding: EdgeInsets.zero, minimumSize: const Size(44, 44), onPressed: dismiss, child: Icon(CupertinoIcons.xmark, size: 16, color: ink)),
+        ),
+      ]),
     );
   }
 }
@@ -899,6 +917,19 @@ class _Reply extends StatelessWidget {
 }
 
 // pi's thoughts, on a grey pill that opens to them.
+// A line that opens and closes what is under it: to a screen reader, a
+// button that is open or closed, its words its label. [onTap], where the
+// line's own gestures leave the screen reader none.
+class _Fold extends StatelessWidget {
+  const _Fold({required this.open, this.onTap, required this.child});
+  final bool open;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(container: true, button: true, expanded: open, onTap: onTap, child: child);
+}
+
 class _Thinking extends StatefulWidget {
   const _Thinking(this.text);
   final String text;
@@ -914,22 +945,25 @@ class _ThinkingState extends State<_Thinking> {
   Widget build(BuildContext context) {
     final look = Look.of(context);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Reach(
-        onTap: () {
-          const _Unfolding().dispatch(context);
-          setState(() => _open = !_open);
-        },
-        // The pill is a control, not text: the reply around it selects.
-        child: SelectionContainer.disabled(
-          child: Container(
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(15)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('Thinking', style: look.text(size: 14, weight: FontWeight.w500, color: look.ink3, spacing: 0)),
-              const SizedBox(width: 6),
-              AnimatedRotation(turns: _open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 12, color: look.ink3)),
-            ]),
+      _Fold(
+        open: _open,
+        child: Reach(
+          onTap: () {
+            const _Unfolding().dispatch(context);
+            setState(() => _open = !_open);
+          },
+          // The pill is a control, not text: the reply around it selects.
+          child: SelectionContainer.disabled(
+            child: Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(15)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('Thinking', style: look.text(size: 14, weight: FontWeight.w500, color: look.ink3, spacing: 0)),
+                const SizedBox(width: 6),
+                AnimatedRotation(turns: _open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 12, color: look.ink3)),
+              ]),
+            ),
           ),
         ),
       ),
@@ -965,7 +999,7 @@ class _Notified extends StatelessWidget {
       ),
       Expanded(child: Text(item.text, style: look.text(size: 13.5, color: color, spacing: 0))),
     ]);
-    return item.level == 'info' ? line : Semantics(liveRegion: true, child: line);
+    return line;
   }
 }
 
@@ -1017,13 +1051,18 @@ class _SummaryState extends State<_Summary> {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
+    void toggle() {
+      const _Unfolding().dispatch(context);
+      setState(() => _open = !_open);
+    }
+
+    // A tap anywhere on it, its text too, folds it; to a screen reader,
+    // its line is the button.
     return GestureDetector(
-      onTap: () {
-        const _Unfolding().dispatch(context);
-        setState(() => _open = !_open);
-      },
+      excludeFromSemantics: true,
+      onTap: toggle,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _Note(widget.label),
+        _Fold(open: _open, onTap: toggle, child: _Note(widget.label)),
         if (_open)
           Container(
             margin: const EdgeInsets.only(top: 8),
@@ -1174,25 +1213,28 @@ class _ToolState extends State<_Tool> {
       decoration: BoxDecoration(color: look.page, borderRadius: BorderRadius.circular(12), border: r?.isError == true ? Border.all(color: look.block) : null),
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            const _Unfolding().dispatch(context);
-            setState(() => _open = !open);
-          },
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(children: [
-              _Mark(r?.isError == true ? 'failed' : widget.waiting ? 'waiting' : running ? 'running' : 'done'),
-              const SizedBox(width: 8),
-              Text(t.name.isEmpty ? 'tool' : t.name, style: look.text(size: 14, weight: FontWeight.w600, spacing: 0)),
-              const SizedBox(width: 8),
-              Expanded(child: Text(toolSummary(t).split('\n').first, style: look.mono(size: 12.5, color: look.ink2), maxLines: 1, overflow: TextOverflow.ellipsis)),
-              if (r?.exitCode != null && r!.exitCode != 0) ...[const SizedBox(width: 8), Text('exit ${r.exitCode}', style: look.mono(size: 12.5, color: look.block, weight: FontWeight.w600))],
-              if (widget.waiting) ...[const SizedBox(width: 8), Text('Waiting for you', style: look.text(size: 12, weight: FontWeight.w600, color: look.accent, spacing: 0))]
-              else if (ms != null && ms >= _shownMs) ...[const SizedBox(width: 8), Text(took(ms), style: look.mono(size: 12.5, color: look.ink3))],
-            ]),
+        _Fold(
+          open: open,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              const _Unfolding().dispatch(context);
+              setState(() => _open = !open);
+            },
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(children: [
+                _Mark(r?.isError == true ? 'failed' : widget.waiting ? 'waiting' : running ? 'running' : 'done'),
+                const SizedBox(width: 8),
+                Text(t.name.isEmpty ? 'tool' : t.name, style: look.text(size: 14, weight: FontWeight.w600, spacing: 0)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(toolSummary(t).split('\n').first, style: look.mono(size: 12.5, color: look.ink2), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                if (r?.exitCode != null && r!.exitCode != 0) ...[const SizedBox(width: 8), Text('exit ${r.exitCode}', style: look.mono(size: 12.5, color: look.block, weight: FontWeight.w600))],
+                if (widget.waiting) ...[const SizedBox(width: 8), Text('Waiting for you', style: look.text(size: 12, weight: FontWeight.w600, color: look.accent, spacing: 0))]
+                else if (ms != null && ms >= _shownMs) ...[const SizedBox(width: 8), Text(took(ms), style: look.mono(size: 12.5, color: look.ink3))],
+              ]),
+            ),
           ),
         ),
         // Shown open or folded: the result's point, often.
@@ -1253,21 +1295,24 @@ class _FoldedState extends State<_Folded> {
     final look = Look.of(context);
     final style = look.text(size: 13, color: look.ink3, spacing: 0);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 6, children: [
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          const _Unfolding().dispatch(context);
-          setState(() => _open = !_open);
-        },
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
-          child: Row(children: [
-            const _Mark('done'),
-            const SizedBox(width: 6),
-            Flexible(child: Text('${widget.tools.length} tools ${widget.tools.map((t) => t.name.isEmpty ? 'tool' : t.name).join(', ')}', style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 6),
-            AnimatedRotation(turns: _open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 12, color: look.ink3)),
-          ]),
+      _Fold(
+        open: _open,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            const _Unfolding().dispatch(context);
+            setState(() => _open = !_open);
+          },
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Row(children: [
+              const _Mark('done'),
+              const SizedBox(width: 6),
+              Flexible(child: Text('${widget.tools.length} tools ${widget.tools.map((t) => t.name.isEmpty ? 'tool' : t.name).join(', ')}', style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 6),
+              AnimatedRotation(turns: _open ? 0.25 : 0, duration: const Duration(milliseconds: 150), child: Icon(CupertinoIcons.chevron_forward, size: 12, color: look.ink3)),
+            ]),
+          ),
         ),
       ),
       if (_open) for (final t in widget.tools) _Tool(t, now: widget.now, image: widget.image),

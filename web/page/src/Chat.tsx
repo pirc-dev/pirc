@@ -25,6 +25,8 @@ import { FileChips } from "./Files.tsx";
 import { Actions, type FromMessage, MessageSheet } from "./SessionSheets.tsx";
 import { SideToggle } from "./SideToggle.tsx";
 import { SHORT, useMedia } from "./media.ts";
+import { announce } from "./announce.ts";
+import { type Heard, said } from "./said.ts";
 
 type Pending = SentPending<Attachment, PickedFile>;
 
@@ -182,6 +184,17 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
     e.preventDefault();
     void run("abort", {});
   });
+  // A screen reader hears what changes, as it changes (said.ts).
+  const heard = useRef<Heard>(undefined);
+  useEffect(() => {
+    if (!ready) return;
+    const r = said(heard.current, s, items, pending);
+    heard.current = r.heard;
+    for (const x of r.say) announce(x.text, x.urgent);
+  }, [ready, s, items, pending]);
+  useEffect(() => {
+    if (notice) announce(notice.text, notice.bad);
+  }, [notice]);
   const spend = useSpend(s, items?.findLast((x) => x.kind === "assistant")?.id);
   const actions = s && (
     <button className="grid size-11 flex-none place-items-center text-xl" aria-label="Session actions" onClick={() => {
@@ -235,7 +248,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
           )}
         </header>
         {notice && (
-          <div className={`flex flex-none items-center gap-2 border-b border-rule py-1.5 pr-2 pl-5 text-[13.5px] ${notice.bad ? "text-block cards:bg-block-wash cockpit:bg-block-wash" : "text-ink2 cards:bg-wash cockpit:bg-card"} cockpit:font-mono cockpit:text-xs`} role="status">
+          <div className={`flex flex-none items-center gap-2 border-b border-rule py-1.5 pr-2 pl-5 text-[13.5px] ${notice.bad ? "text-block cards:bg-block-wash cockpit:bg-block-wash" : "text-ink2 cards:bg-wash cockpit:bg-card"} cockpit:font-mono cockpit:text-xs`}>
             <div className="notice min-w-0 flex-1"><Markdown {...markdown}>{notice.text}</Markdown></div>
             <button className="grid size-11 flex-none place-items-center" onClick={() => setNotice(undefined)} aria-label="Dismiss"><Icon name="close" /></button>
           </div>
@@ -616,7 +629,7 @@ const Item = memo(function Item(p: { item: ChatItem }) {
 function Notification(p: { level: "info" | "warning" | "error"; text: string }) {
   const [mark, tone] = p.level === "error" ? ["✕", "text-block"] : p.level === "warning" ? ["⚠", "text-work"] : ["·", "text-ink3"];
   return (
-    <p className={`flex gap-2 text-[13.5px] leading-snug ${p.level === "info" ? "text-ink3" : tone} cockpit:font-mono cockpit:text-xs`} role={p.level === "info" ? undefined : "status"}>
+    <p className={`flex gap-2 text-[13.5px] leading-snug ${p.level === "info" ? "text-ink3" : tone} cockpit:font-mono cockpit:text-xs`}>
       <span className={`w-3 flex-none text-center font-mono font-semibold ${tone}`} aria-hidden="true">{mark}</span>
       <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{p.text}</span>
     </p>

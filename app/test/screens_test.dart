@@ -2318,6 +2318,57 @@ void main() {
     return out;
   }
 
+  testWidgets("a screen reader hears pi's reply, its failure and an extension's error as they come, not what was there", (tester) async {
+    await phone(tester);
+    final semantics = tester.ensureSemantics();
+    final said = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<dynamic>(SystemChannels.accessibility, (m) async {
+      final data = (m as Map)['data'] as Map;
+      if (m['type'] == 'announce') said.add(data['message'] as String);
+      return null;
+    });
+    // On Android, a live region's words; on iOS, announcements.
+    List<String> heard() => onAndroid ? [for (final n in find.semantics.byPredicate((n) => n.getSemanticsData().flagsCollection.isLiveRegion && n.label.isNotEmpty).evaluate()) n.label] : said;
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i3')));
+    await tester.pump();
+    expect(heard(), isEmpty, reason: 'what the chat showed when it opened');
+    SessionEntry docs(Notice n) => entry('i3', 'laptop', SessionAnnouncement(name: 'docs', cwd: '/home/me/src/site', hostname: 'laptop.local', notice: n));
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: docs(Notice(number: Int64(now + 1), kind: NoticeKind.NOTICE_KIND_FINISHED, text: 'The docs say 0.2.')))));
+    await tester.pump();
+    await tester.pump();
+    expect(heard().last, 'pi: The docs say 0.2.');
+    model.client.onFrame(Frame(sessionUpdated: SessionUpdated(entry: docs(Notice(number: Int64(now + 2), kind: NoticeKind.NOTICE_KIND_FAILED, text: 'rate limited')))));
+    await tester.pump();
+    await tester.pump();
+    expect(heard().last, 'pi failed: rate limited');
+    model.client.onFrame(Frame(routed: Routed(
+      session: SessionRef(hostKey: hostKey, sessionId: 's-i3', instanceId: 'i3'),
+      payload: SessionMessage(event: SessionEvent(seq: Int64(2), at: ts(now), item: ConversationItem(turnId: 't', at: ts(now), notification: pb.Notification(id: 'n5', level: NotificationLevel.NOTIFICATION_LEVEL_ERROR, text: 'lint broke')))).writeToBuffer(),
+    )));
+    await tester.pump();
+    await tester.pump();
+    expect(heard().last, 'Error: lint broke');
+    semantics.dispose();
+  }, variant: both);
+
+  testWidgets('a tool, the thinking and a run of tools are buttons to a screen reader, open or closed', (tester) async {
+    await phone(tester);
+    final semantics = tester.ensureSemantics();
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    await tester.pump();
+    for (final label in ['Thinking', 'bash']) {
+      final row = find.semantics.byPredicate((n) => n.label.startsWith(label) && n.getSemanticsData().flagsCollection.isButton);
+      expect(row, findsOne, reason: label);
+      final open = row.evaluate().single.getSemanticsData().flagsCollection.isExpanded;
+      tester.semantics.tap(row);
+      await tester.pumpAndSettle();
+      expect(find.semantics.byPredicate((n) => n.label.startsWith(label) && n.getSemanticsData().flagsCollection.isButton).evaluate().single.getSemanticsData().flagsCollection.isExpanded, open == ui.Tristate.isTrue ? ui.Tristate.isFalse : ui.Tristate.isTrue, reason: label);
+    }
+    semantics.dispose();
+  });
+
   testWidgets('every button answers a screen reader', (tester) async {
     await phone(tester);
     final semantics = tester.ensureSemantics();

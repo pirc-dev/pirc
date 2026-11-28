@@ -7,6 +7,7 @@ import { rank } from "../../core/fuzzy.ts";
 import type { ModelChoice } from "../../core/results.ts";
 import type { ModelView } from "../../core/view.ts";
 import { Icon } from "./icons.tsx";
+import { useModal } from "./modal.ts";
 import { Marked } from "./Marked.tsx";
 import { useHold } from "./update.ts";
 
@@ -49,7 +50,8 @@ export function ModelPicker(p: {
     const i = results.findIndex((r) => key(r.item.model) === current);
     setActive(Math.max(i, 0));
   }, [results, current, query]);
-  useEffect(() => input.current?.focus(), []);
+  const dialog = useRef<HTMLDivElement>(null);
+  useModal(dialog, { first: input });
   useLayoutEffect(() => {
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active, results]);
@@ -70,6 +72,7 @@ export function ModelPicker(p: {
   return (
     <div className="fixed inset-0 z-50 flex justify-center bg-scrim sm:items-start sm:pt-[10vh]" onClick={p.close}>
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Choose a model"

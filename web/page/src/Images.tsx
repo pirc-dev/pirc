@@ -1,11 +1,12 @@
 // A message's images (docs/web.md, section 6): thumbnails that open full
 // screen.
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { ImageView } from "../../core/view.ts";
 import { Icon } from "./icons.tsx";
 import { useLayer } from "./layer.ts";
+import { useModal } from "./modal.ts";
 
 // A message's images in a row; each opens full screen. One the server no
 // longer keeps, or that was never sent in full, is a placeholder.
@@ -58,13 +59,10 @@ function Thumb(p: { url: string | undefined; open: (url: string) => void }) {
 
 function Viewer(p: { url: string; close: () => void }) {
   const shut = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const back = document.activeElement as HTMLElement | null;
-    shut.current?.focus();
-    return () => back?.focus();
-  }, []);
+  const self = useRef<HTMLDivElement>(null);
+  useModal(self, { first: shut });
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label="Image" onClick={p.close}>
+    <div ref={self} className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true" aria-label="Image" onClick={p.close}>
       <div className="flex justify-end pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))]">
         <button ref={shut} className="grid size-11 place-items-center text-xl text-white" onClick={p.close} aria-label="Close">
           <Icon name="close" />

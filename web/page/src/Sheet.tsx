@@ -7,17 +7,15 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { SheetDrag } from "./drag.ts";
+import { useModal } from "./modal.ts";
 import { useHold } from "./update.ts";
 
 export function Sheet(p: { title: string; sub?: string; done?: string; top?: boolean; close: () => void; children: React.ReactNode }) {
+  const holder = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   useHold(true);
-  // Focus moves into the sheet, and back to where it was after.
-  useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>("input, button:not(:disabled)")?.focus({ preventScroll: true });
-    return () => before?.focus({ preventScroll: true });
-  }, []);
+  // It holds the focus, the scrim with it (modal.ts).
+  useModal(holder, { within: panel });
   // Dragged down by a finger: it follows, then closes or goes back. Touch
   // events rather than pointer ones, so that a drag of the sheet can stop the
   // rows from scrolling, and theirs need not.
@@ -65,14 +63,15 @@ export function Sheet(p: { title: string; sub?: string; done?: string; top?: boo
     };
   }, [p.top]);
   return createPortal(
-    <div className="fixed inset-0 z-40">
+    <div ref={holder} className="fixed inset-0 z-40">
       <button className="absolute inset-0 bg-scrim" aria-label="Close" tabIndex={-1} onClick={p.close} />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={p.title}
-        className={`absolute inset-x-0 mx-auto max-w-lg bg-sheet shadow-[0_-10px_40px_rgb(0_0_0/0.14)] native:shadow-[0_-8px_30px_rgb(0_0_0/0.15)] cockpit:border-wash2 ${p.top ? "native:rounded-b-[14px] cockpit:rounded-b-[18px] cockpit:border-b" : "native:rounded-t-[14px] cockpit:rounded-t-[18px] cockpit:border-t"} ${
+        tabIndex={-1}
+        className={`absolute inset-x-0 mx-auto max-w-lg outline-none bg-sheet shadow-[0_-10px_40px_rgb(0_0_0/0.14)] native:shadow-[0_-8px_30px_rgb(0_0_0/0.15)] cockpit:border-wash2 ${p.top ? "native:rounded-b-[14px] cockpit:rounded-b-[18px] cockpit:border-b" : "native:rounded-t-[14px] cockpit:rounded-t-[18px] cockpit:border-t"} ${
           p.top
             ? "top-0 rounded-b-[22px] pt-[max(0.75rem,env(safe-area-inset-top))] pb-5"
             : "bottom-0 max-h-[85dvh] overflow-y-auto overscroll-none rounded-t-[22px] pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))]"

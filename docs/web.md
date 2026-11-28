@@ -315,6 +315,21 @@ not in `web/`, since they belong to neither client.
   outlined, as grey on the accent's blue could not be read. Reason: the
   Quiet and Native looks' tertiary grey was about 3:1, as iOS's own
   tertiary label is; the step down stays, at a darker shade.
+- **Screen readers**: what changes in an open chat is said without the
+  reader's place moving (page/src/said.ts, the app's core/said.dart):
+  pi's reply when a turn ends, that it failed or what it asks (by the
+  session's notice, as a notification would say it), an extension's
+  warning or error, a message not sent, and what an action answered
+  under the header; nothing the chat showed when it opened. On the web,
+  through two regions kept in the page from the start (announce.ts), one
+  polite and one that interrupts for errors; in the apps, an
+  announcement on iOS and a live region on Android, where announcements
+  are deprecated and VoiceOver would move to a live region. Something
+  over the page (a sheet, the model picker, an image or table full
+  screen) makes the rest inert while it is open, as a native modal
+  dialog does (modal.ts), and gives the focus back after. Folds are
+  `<details>`, which say whether they are open; the apps' tool rows,
+  Thinking and runs of tools are buttons that say so too.
 - **The composer, while pi works** (from Triage): Stop on a line of its
   own, by how long the turn has run, and away from the send button; and
   Send, the same button as when pi is idle, which steers. Held on a touch
