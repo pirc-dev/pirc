@@ -936,6 +936,32 @@ void main() {
     }
   });
 
+  testWidgets("larger text: the list's pills hold their words, not cut at their edges", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    for (final scale in [1.0, 2.0, 3.1]) {
+      // The list's own counts, and a host's page, which has New agent.
+      for (final screen in [SessionsScreen(model: model, open: (_) {}, settings: () {}), SessionsScreen(model: model, open: (_) {}, host: 'laptop')]) {
+        await tester.pumpWidget(frame(screen, text: scale));
+        await tester.pump();
+        // Each pill's coloured box, and the words in it.
+        final pills = [
+          for (final e in find.byType(Pill).evaluate()) find.byWidget(e.widget),
+          if (find.text('New agent').evaluate().isNotEmpty) find.ancestor(of: find.text('New agent'), matching: find.byType(Container)).first,
+        ];
+        expect(pills.length, greaterThan(1));
+        for (final pill in pills) {
+          // A paragraph given less height than its lines need is cut, and
+          // still sits within the pill: the height it needs is what tells.
+          for (final t in find.descendant(of: pill, matching: find.byType(RichText)).evaluate()) {
+            final r = t.renderObject! as RenderBox;
+            expect(r.getMinIntrinsicHeight(double.infinity), lessThanOrEqualTo(r.size.height + 0.01), reason: 'its words (${(t.widget as RichText).text.toPlainText()}) not cut at $scale');
+          }
+        }
+      }
+    }
+  });
+
   testWidgets('larger text: Stop stays on the screen, by the status while it fits, then on a line of its own', (tester) async {
     await phone(tester);
     final model = await fixture(tester);

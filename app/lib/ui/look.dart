@@ -308,10 +308,11 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final look = Look.of(context);
+    // 26 high at least, and as high as larger text needs.
     return Container(
-      height: big ? 26 : null,
-      padding: big ? const EdgeInsets.symmetric(horizontal: 10) : const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: wash, borderRadius: BorderRadius.circular(13), border: ring ? Border.all(color: color, width: 1.5) : null),
+      constraints: big ? const BoxConstraints(minHeight: 26) : null,
+      padding: big ? const EdgeInsets.symmetric(horizontal: 10, vertical: 3) : const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(color: wash, borderRadius: BorderRadius.circular(999), border: ring ? Border.all(color: color, width: 1.5) : null),
       child: Align(widthFactor: 1, child: Text.rich(
         TextSpan(children: [
           TextSpan(text: '$count', style: big ? look.mono(size: 13, color: color, weight: FontWeight.w600) : look.text(size: 12, color: color, weight: FontWeight.w600, spacing: 0)),

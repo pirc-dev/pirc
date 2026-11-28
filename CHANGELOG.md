@@ -8,6 +8,13 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Web: pulling down past the top of the list or a chat no longer reloads
+  the page (Chrome on Android), which lost your place and what you were
+  writing. A host's name stays under the search while its sessions
+  scroll by. In Cockpit, and the other looks that drew them grey, pi's
+  answer buttons are tinted with the accent instead of looking disabled.
+- Apps: the list's count pills and New agent grow with larger text
+  instead of cutting their words off.
 - An ended session no longer leaves you stuck: where the box to write in
   was, it says where it ran and offers New agent here, a new pi in its
   folder in which Resume picks up the conversation (or, with no pi there

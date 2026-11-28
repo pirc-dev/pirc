@@ -237,6 +237,20 @@ export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; lis
     seen.observe(h);
     return () => seen.disconnect();
   }, []);
+  // A host's name is held under the search while its sessions scroll by,
+  // until the next host's pushes it away: where the search ends, as each
+  // look draws it, kept as --held.
+  const search = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = box.current;
+    const el = search.current;
+    if (!root || !el) return;
+    const measure = () => root.style.setProperty("--held", `${BAR + el.offsetHeight}px`);
+    measure();
+    const sized = new ResizeObserver(measure);
+    sized.observe(el);
+    return () => sized.disconnect();
+  }, [shown.length > 0]);
   // j and k move through the rows shown, Enter opening one as a click
   // would; n opens the next session waiting. Not while the list is hidden
   // behind a chat.
@@ -308,7 +322,7 @@ export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; lis
       </header>
       <JoinRequests hosts={p.pendingHosts ?? []} />
       {shown.length > 0 && (
-        <div className="sticky top-11 z-10 bg-paper px-5 pt-3 pb-1 cards:px-3 cards:pt-2 cards:pb-1.5 native:px-4 cockpit:px-3.5 cockpit:pt-2.5 cockpit:pb-1.5">
+        <div ref={search} className="sticky top-11 z-10 bg-paper px-5 pt-3 pb-1 cards:px-3 cards:pt-2 cards:pb-1.5 native:px-4 cockpit:px-3.5 cockpit:pt-2.5 cockpit:pb-1.5">
           <label className="flex h-11 items-center gap-2.5 border-b border-rule text-ink3 focus-within:border-ink focus-within:text-ink cards:h-[46px] cards:gap-2 cards:rounded-full cards:border cards:bg-card cards:px-4 cards:focus-within:border-accent cards:focus-within:text-ink3 cards:focus-within:ring-3 cards:focus-within:ring-accent-soft native:h-[38px] native:rounded-[11px] native:border-0 native:bg-wash native:px-2.5 native:focus-within:ring-0 cockpit:h-10 cockpit:gap-2 cockpit:rounded-lg cockpit:border cockpit:bg-card cockpit:px-3 cockpit:focus-within:border-accent">
             <Icon name="search" className="size-4" />
             <input
@@ -357,7 +371,7 @@ export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; lis
           const hostKey = `h:${h}`;
           return (
             <section key={h} className="pb-1">
-              <div className="flex items-baseline pr-5">
+              <div className="sticky top-(--held) z-[5] flex items-baseline bg-paper pr-5">
                 <button className="min-w-0 max-w-[60%] pt-4.5 pb-1 pl-5 text-left native:pl-8 cockpit:pl-3.5" onClick={() => p.go({ host: h })} aria-label={`Open ${h}`}>
                   <h2 className="truncate font-read text-[21px] font-medium italic underline-offset-4 hover:underline cards:text-[17px] cards:font-[650] cards:tracking-[-0.01em] cards:not-italic native:text-[13px] native:font-normal native:tracking-[0.03em] native:text-ink2 native:uppercase cockpit:font-mono cockpit:text-[13px] cockpit:font-bold cockpit:tracking-[0.06em] cockpit:not-italic cockpit:uppercase">{h}</h2>
                 </button>

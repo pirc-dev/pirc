@@ -402,7 +402,7 @@ class _Filter extends StatelessWidget {
         label: label,
         excludeSemantics: true,
         onTap: onTap,
-        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: SizedBox(height: 44, child: Center(widthFactor: 1, child: child))),
+        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: Center(widthFactor: 1, heightFactor: 1, child: child))),
       );
 }
 
@@ -681,10 +681,11 @@ class _NewAgentPill extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 7),
+          // A count pill's size (Pill), larger text included.
           child: Container(
-            height: 26,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(13)),
+            constraints: const BoxConstraints(minHeight: 26),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(color: look.wash, borderRadius: BorderRadius.circular(999)),
             child: Row(mainAxisSize: MainAxisSize.min, spacing: 3, children: [
               Icon(CupertinoIcons.plus, size: 13, color: look.accent),
               Text('New agent', style: look.text(size: 13, color: look.accent, spacing: 0)),

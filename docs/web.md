@@ -383,7 +383,10 @@ not in `web/`, since they belong to neither client.
   list the chat has no back button, and its actions sit by its title.
 - **Headers fold on scroll** (from the Quiet and Native mock-ups). The list's header scrolls away; once it has passed, a bar
   of one line holds the list's title and its counts at the top, with the
-  search held under it, and tapping the bar goes back to the top. The bar
+  search held under it, and tapping the bar goes back to the top. Under
+  the search, a host's name is held while its sessions scroll by, until
+  the next host's pushes it away, so that a row far down a long list
+  still says where it runs. The bar
   takes no room of its own, so nothing moves when it shows. On a phone
   the chat's header lies over the chat and folds to one line (back,
   status, title, context and cost, actions) while the reader is back in
@@ -611,7 +614,8 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
   terminal. The question takes the composer's place while it waits, under
   "pi asks", its text kept as written, indented and bracketed blocks as
   code and "Name: value" lines as a label and value; a yes or no and a
-  select's options go with an optional note for pi, "Dismiss and stop"
+  select's options (tinted with the accent: a grey fill is a button that
+  cannot be pressed) go with an optional note for pi, "Dismiss and stop"
   closes the question and stops pi's turn, an input's text is the
   answer, and one only pi's terminal can answer says so, with where pi
   runs and its folder, and Stop, which ends the turn but leaves the

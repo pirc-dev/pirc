@@ -293,7 +293,10 @@
 }
 
 @layer base {
-  html, body { background: var(--paper); color: var(--ink); font-family: var(--ui); -webkit-font-smoothing: antialiased; }
+  /* The page never scrolls itself (its lists and chat do), so a pull down
+     past their top would only reload it, as Chrome on Android does, losing
+     the place and what is being written. */
+  html, body { background: var(--paper); color: var(--ink); font-family: var(--ui); -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
   /* Code reads character by character: no "=>" or "===" drawn as one sign. */
   code, pre, kbd, .font-mono { font-variant-ligatures: none; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }

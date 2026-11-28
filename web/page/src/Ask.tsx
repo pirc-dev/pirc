@@ -15,7 +15,11 @@ import { parts, type Part } from "./asked.ts";
 import type { Run } from "./chat.ts";
 import { where } from "./names.ts";
 
-const choice = "min-h-12 w-full rounded-[13px] bg-wash2 px-4 text-[15.5px] font-semibold text-ink disabled:opacity-40 hover:bg-wash cards:bg-wash native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
+// An answer is tinted with the accent: a grey fill is what a button that
+// cannot be pressed has (Composer.tsx's Send), and an outline what the note
+// field has, so either would read as something else. In Cards, whose
+// buttons are tinted, its own light tint.
+const choice = "min-h-12 w-full rounded-[13px] bg-accent-soft px-4 text-[15.5px] font-semibold text-ink disabled:opacity-40 hover:bg-accent/25 cards:bg-wash cards:hover:bg-wash2 native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
 const primary = "min-h-12 w-full rounded-[13px] bg-accent px-4 text-[15.5px] font-semibold text-on-accent disabled:opacity-40 native:rounded-xl cockpit:rounded-[10px] cockpit:font-ui";
 const field = "w-full min-w-0 rounded-[14px] border border-rule bg-paper px-3 py-2.5 text-base text-ink outline-none placeholder:text-ink3 focus:border-accent cards:bg-card native:rounded-xl cockpit:rounded-[10px] cockpit:text-[15px] touch:text-base!";
 
