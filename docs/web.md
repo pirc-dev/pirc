@@ -42,7 +42,9 @@ token passes through the server to the page and is kept by neither; the
 server's log names only its role and label. It will not remove its own
 key, which every browser shares.
 
-**Signing in is a passkey**, asked for again after 30 minutes idle.
+**Signing in is a passkey**, asked for again after 30 minutes idle. The
+sign-in page says how to get one: `pirc-web pair` on the server's
+machine, and its link opened in the browser.
 
 - **Adding a passkey**: on the server's machine, `pirc-web pair` prints a
   one-time link, valid for 10 minutes, with its token after `#` so that no
@@ -599,7 +601,11 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
   workspace, or New agent in a session's actions, opens a pi beside it in
   a folder chosen or typed (a tap only chooses it), its window named
   after the folder unless a name is typed, once Start agent is pressed,
-  then its chat; Stop pi in the actions.
+  then its chat; Stop pi in the actions. A session that has ended says
+  so in the composer's place, with where it ran and New agent here: a pi
+  in its folder, beside one still running in its tmux session or herdr
+  workspace, or else on its machine, in which Resume picks up its
+  conversation; with none there, how to start pi again.
 - **pi's questions** (`design.md` section 8): a dialog an extension shows
   in pi's terminal shows in the app too, answered there or in the
   terminal. The question takes the composer's place while it waits, under
@@ -607,7 +613,9 @@ HTTPS). On iOS, push works only for an app added to the home screen (iOS
   code and "Name: value" lines as a label and value; a yes or no and a
   select's options go with an optional note for pi, "Dismiss and stop"
   closes the question and stops pi's turn, an input's text is the
-  answer, and one only pi's terminal can answer says so, with where pi runs and Stop; the tool call
+  answer, and one only pi's terminal can answer says so, with where pi
+  runs and its folder, and Stop, which ends the turn but leaves the
+  dialog open in the terminal; the tool call
   it holds up says "Waiting for you". `?` in the accent colour marks a
   session that asks, in the list and the chat, and the list's counts
   count each session once, asking before working before done, so that

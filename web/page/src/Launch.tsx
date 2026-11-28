@@ -8,20 +8,16 @@ import type { SessionView } from "../../core/view.ts";
 import { afterLayers } from "./layer.ts";
 import { live } from "./live.ts";
 import { Sheet, SheetGroup, SheetRow } from "./Sheet.tsx";
+import { hostOf } from "./beside.ts";
+
+export { besideEnded, launchable } from "./beside.ts";
 
 // How long a new pi has to connect before the sheet stops waiting for it.
 const CONNECT_MS = 45_000;
 
-const hostOf = (s: SessionView) => s.hostLabel || s.hostname;
-
 // Where a new pi beside s opens, as the sheet says it.
 export function besideWhere(s: SessionView): string {
   return s.place?.group ? `${s.place.group} on ${hostOf(s)}` : hostOf(s);
-}
-
-// The session a group's new pi opens beside: the most recent one that can.
-export function launchable(sessions: SessionView[]): SessionView | undefined {
-  return sessions.filter((s) => s.launcher).sort((a, b) => (b.last?.at ?? b.startedAt ?? 0) - (a.last?.at ?? a.startedAt ?? 0))[0];
 }
 
 // The window name a folder gives: its last part ("" for ~ or /, which
@@ -33,13 +29,15 @@ export function folderName(cwd: string): string {
 
 const field = "min-w-0 flex-1 border-b-[1.5px] border-ink bg-transparent py-2 text-[15px] text-ink outline-none placeholder:text-ink3 cards:min-h-11 cards:rounded-xl cards:border cards:border-rule cards:bg-card cards:px-3.5 cards:py-0 cards:focus:border-accent cockpit:min-h-11 cockpit:rounded-lg cockpit:border cockpit:border-rule cockpit:bg-card cockpit:px-3 cockpit:py-0 cockpit:focus:border-accent touch:text-base!";
 
-export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (id: string) => void }) {
+// [cwd]: an ended session's folder, chosen at first, for a new pi in its
+// place.
+export function LaunchSheet(p: { beside: SessionView; cwd?: string; close: () => void; open: (id: string) => void }) {
   const s = p.beside;
   const { sessions } = useSyncExternalStore(live.subscribe, live.getState);
   const [past, setPast] = useState<string[]>([]);
   const [typed, setTyped] = useState("");
   // The folder chosen from the list; one typed in wins while there is one.
-  const [chosen, setChosen] = useState(s.cwd);
+  const [chosen, setChosen] = useState(p.cwd ?? s.cwd);
   const [name, setName] = useState("");
   const [state, setState] = useState<{ kind: "choosing" } | { kind: "starting"; requestId: string; cwd: string } | { kind: "failed"; message: string }>({ kind: "choosing" });
   const opened = useRef(false);
@@ -55,7 +53,7 @@ export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (
     };
   }, [s.id]);
   const here = sessions.filter((x) => hostOf(x) === hostOf(s) && x.id !== s.id).map((x) => x.cwd);
-  const folders = [...new Set([s.cwd, ...here, ...past].filter(Boolean))];
+  const folders = [...new Set([p.cwd ?? s.cwd, s.cwd, ...here, ...past].filter(Boolean))];
 
   // The new pi, once it has connected.
   const started = state.kind === "starting" ? sessions.find((x) => x.launchId === state.requestId) : undefined;
@@ -92,12 +90,12 @@ export function LaunchSheet(p: { beside: SessionView; close: () => void; open: (
   const say = (text: string, bad = false) => <p className={`px-5 pb-3 text-[14.5px] cards:px-3.5 ${bad ? "text-block" : "text-ink2"}`} role={bad ? "alert" : undefined}>{text}</p>;
   const starting = state.kind === "starting";
   return (
-    <Sheet title="New agent" sub={`Beside this one, in ${besideWhere(s)}`} done="Cancel" close={p.close}>
+    <Sheet title="New agent" sub={p.cwd === undefined ? `Beside this one, in ${besideWhere(s)}` : `In ${besideWhere(s)}`} done="Cancel" close={p.close}>
       {starting && say(`Opening pi in ${state.cwd}…`)}
       {state.kind === "failed" && say(state.message, true)}
       <SheetGroup>
         <div role="radiogroup" aria-label="Folder">
-          {folders.map((f, i) => <SheetRow key={f} label={f} sub={i === 0 ? "This agent's folder" : undefined} disabled={starting} checked={!typed.trim() && f === chosen} onClick={() => {
+          {folders.map((f, i) => <SheetRow key={f} label={f} sub={i === 0 ? (p.cwd === undefined ? "This agent's folder" : "The ended session's folder") : undefined} disabled={starting} checked={!typed.trim() && f === chosen} onClick={() => {
             setChosen(f);
             setTyped("");
           }} />)}

@@ -6,7 +6,7 @@
 // &look=quiet, triage, native or cockpit chooses the look, as the switch
 // in Settings does; screen=settings opens Settings.
 import "./fonts.ts";
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type { Answer, Body, CommandName } from "../../core/api.ts";
@@ -348,7 +348,9 @@ function Gallery() {
   else if (screen === "loading") chat = <Chat id={relay.id} session={sessions[4]} chat={{ items: [], truncated: false, loading: true }} back={back} wide={wide} />;
   // A chat opened by its link, before the first snapshot.
   else if (screen === "cold") chat = <Chat id={relay.id} session={undefined} chat={undefined} loading back={back} wide={wide} />;
-  else if (screen === "ended") chat = <Chat id="gone" session={undefined} chat={chatOf(finished)} back={back} wide={wide} />;
+  // Seen running, then gone: on a machine where another pi can open one in
+  // its place, or (&alone) where none can.
+  else if (screen === "ended") chat = <Ended was={sessions[5]} alone={new URLSearchParams(location.search).has("alone")} chat={chatOf(finished)} back={back} wide={wide} open={setOpen} />;
   else if (screen === "chat" || screen === "working" || screen === "asks" || open !== undefined) {
     const picked = sessions.find((s) => s.id === open) ?? relay;
     const done = screen === "chat" || (open !== undefined && !picked.working);
@@ -365,3 +367,10 @@ function Gallery() {
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><Gallery /></StrictMode>);
+
+// A chat whose session was there as it opened, and ended.
+function Ended(p: { was: SessionView; alone: boolean; chat: ChatView; back: () => void; wide: boolean; open: (id: string) => void }) {
+  const [session, setSession] = useState<SessionView | undefined>(p.was);
+  useEffect(() => setSession(undefined), []);
+  return <Chat id={p.was.id} session={session} chat={p.chat} sessions={p.alone ? [] : sessions.filter((s) => s.id !== p.was.id)} back={p.back} wide={p.wide} open={p.open} />;
+}

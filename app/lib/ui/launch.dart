@@ -32,6 +32,14 @@ SessionView? launchable(List<SessionView> sessions) {
   return ([for (final s in sessions) if (s.launcher != null) s]..sort((a, b) => at(b) - at(a))).firstOrNull;
 }
 
+// The one a new pi in an ended session's folder opens beside: one in its
+// tmux session or herdr workspace, else one on its machine; none on
+// another machine, which has other folders.
+SessionView? besideEnded(SessionView was, List<SessionView> sessions) {
+  final host = [for (final x in sessions) if (x.id != was.id && _hostOf(x) == _hostOf(was)) x];
+  return launchable([for (final x in host) if ((x.place?.group ?? '') == (was.place?.group ?? '')) x]) ?? launchable(host);
+}
+
 // The window name a folder gives: its last part ("" for ~ or /, which
 // leaves it to the multiplexer).
 String folderName(String cwd) {
@@ -40,9 +48,11 @@ String folderName(String cwd) {
 }
 
 class LaunchSheet extends StatefulWidget {
-  const LaunchSheet({super.key, required this.model, required this.beside, required this.open});
+  const LaunchSheet({super.key, required this.model, required this.beside, required this.open, this.cwd});
   final PircModel model;
   final SessionView beside;
+  // An ended session's folder, chosen at first, for a new pi in its place.
+  final String? cwd;
   // Opens a session's chat: the new pi's, once it has connected.
   final void Function(String id) open;
 
@@ -55,7 +65,7 @@ class _LaunchSheetState extends State<LaunchSheet> {
   final _typed = TextEditingController();
   final _name = TextEditingController();
   // The folder chosen from the list; one typed in wins while there is one.
-  late var _chosen = widget.beside.cwd;
+  late var _chosen = widget.cwd ?? widget.beside.cwd;
   // Starting: the request and its folder; or why it failed.
   ({String requestId, String cwd})? _starting;
   String? _failed;
@@ -139,7 +149,7 @@ class _LaunchSheetState extends State<LaunchSheet> {
     final look = Look.of(context);
     final s = widget.beside;
     final here = [for (final x in widget.model.sessions) if (_hostOf(x) == _hostOf(s) && x.id != s.id) x.cwd];
-    final folders = {for (final f in [s.cwd, ...here, ..._past]) if (f.isNotEmpty) f}.toList();
+    final folders = {for (final f in [widget.cwd ?? s.cwd, s.cwd, ...here, ..._past]) if (f.isNotEmpty) f}.toList();
     final starting = _starting != null;
     Widget say(String text, {bool bad = false}) => Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -166,14 +176,14 @@ class _LaunchSheetState extends State<LaunchSheet> {
       if (can) _launch(cwd);
     }
 
-    return Sheet(title: 'New agent', sub: 'Beside this one, in ${besideWhere(s)}', done: 'Cancel', children: [
+    return Sheet(title: 'New agent', sub: widget.cwd == null ? 'Beside this one, in ${besideWhere(s)}' : 'In ${besideWhere(s)}', done: 'Cancel', children: [
       if (_starting != null) say('Opening pi in ${_starting!.cwd}…'),
       if (_failed != null) say(_failed!, bad: true),
       SheetGroup(children: [
         for (final (i, f) in folders.indexed)
           SheetRow(
             label: f,
-            sub: i == 0 ? "This agent's folder" : null,
+            sub: i == 0 ? (widget.cwd == null ? "This agent's folder" : "The ended session's folder") : null,
             disabled: starting,
             checked: _typed.text.trim().isEmpty && f == _chosen,
             onTap: () => setState(() {

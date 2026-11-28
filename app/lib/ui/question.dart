@@ -3,7 +3,8 @@
 // options, each with a note for pi that goes with the answer; an input's
 // text, which is the answer; "Dismiss and stop", which closes the question
 // and stops the turn. An editor or an extension's own dialog only pi's
-// terminal can answer: where pi runs, and Stop.
+// terminal can answer: where pi runs, and Stop, which ends the turn but
+// leaves the dialog open there.
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -186,8 +187,8 @@ class _QuestionDockState extends State<QuestionDock> {
         ),
         if (!answerable) ...[
           Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 4, children: [
-            Text("This needs pi's terminal to answer.", style: look.text(size: 14, color: look.ink2, spacing: 0)),
-            Text(where(widget.session), style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
+            Text("Only pi's terminal can answer this. Once it does, the box to write in comes back here.", style: look.text(size: 14, color: look.ink2, spacing: 0)),
+            Text([where(widget.session), widget.session.cwd].where((x) => x.isNotEmpty).join(' · '), style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
           ]),
           Align(
             alignment: Alignment.centerLeft,
@@ -205,6 +206,7 @@ class _QuestionDockState extends State<QuestionDock> {
               ),
             ),
           ),
+          Text("Stop ends pi's turn; the dialog stays in the terminal until it is answered there.", style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
         ],
         if (answerable && q.kind == 'select')
           Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 8, children: [

@@ -8,6 +8,13 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- An ended session no longer leaves you stuck: where the box to write in
+  was, it says where it ran and offers New agent here, a new pi in its
+  folder in which Resume picks up the conversation (or, with no pi there
+  that can open one, how to start pi again). A question only pi's
+  terminal can answer says that the box comes back once it is answered,
+  and that Stop leaves the dialog open there. Web: the sign-in page says
+  how to get a passkey, with `pirc-web pair`.
 - A tool's output, Thinking or a summary stays open or closed as you left
   it: on the web it no longer closes when the tool finishes, and in the
   apps no longer when you scroll away and back. A run of tools that folds

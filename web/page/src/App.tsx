@@ -118,7 +118,7 @@ export function App() {
       wide={wide}
       banner={(state.loaded || slow) && <Banner relay={state.relay.state} reason={state.relay.reason} stream={state.stream} />}
       list={<Sessions key={list.current} sessions={state.sessions} listing={listing} pendingHosts={state.pendingHosts} scope={scope} open={openChat} go={goScope} selected={chatId} settings={toggleSettings} inSettings={settings} />}
-      chat={settings ? <Settings back={() => go(before.current)} wide={wide} devices={state.devices} connected={state.relay.state === "ready"} /> : chatId ? <Chat key={chatId} id={chatId} session={session} chat={state.chat} loading={listing === "loading"} back={() => go(list.current)} wide={wide} open={(id) => go(`/s/${encodeURIComponent(id)}`)} /> : undefined}
+      chat={settings ? <Settings back={() => go(before.current)} wide={wide} devices={state.devices} connected={state.relay.state === "ready"} /> : chatId ? <Chat key={chatId} id={chatId} session={session} chat={state.chat} loading={listing === "loading"} sessions={state.sessions} back={() => go(list.current)} wide={wide} open={(id) => go(`/s/${encodeURIComponent(id)}`)} /> : undefined}
     />
   );
 }

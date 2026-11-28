@@ -7,7 +7,8 @@
 // answer. "Dismiss and stop" closes the question and stops the turn. The terminal can
 // still answer it; whichever answers first wins, and the composer comes
 // back once it is gone. An editor or a custom dialog can be answered only
-// in pi's terminal: it says so, with where pi runs and Stop.
+// in pi's terminal: it says so, with where pi runs, and Stop, which ends
+// the turn but leaves the dialog open there.
 import { useEffect, useRef, useState } from "react";
 import type { QuestionView, SessionView } from "../../core/view.ts";
 import { parts, type Part } from "./asked.ts";
@@ -75,12 +76,13 @@ export function Ask(p: { q: QuestionView; more: number; session: SessionView; ru
       {!q.answerable && (
         <>
           <div className="flex flex-col gap-0.5 text-[14px] text-ink2">
-            <p>This needs pi's terminal to answer.</p>
-            <p className="text-[12.5px] text-ink3">{where(p.session)}</p>
+            <p>Only pi's terminal can answer this. Once it does, the box to write in comes back here.</p>
+            <p className="text-[12.5px] text-ink3">{[where(p.session), p.session.cwd].filter(Boolean).join(" · ")}</p>
           </div>
           <button className="inline-flex h-9 items-center gap-2 self-start rounded-full px-3.5 text-sm font-semibold text-block ring-1 ring-block ring-inset cards:bg-block-wash cards:ring-0 native:rounded-xl cockpit:rounded-[10px] cockpit:bg-block-wash cockpit:font-ui" onClick={() => void p.run("abort", {})}>
             <span className="size-[9px] rounded-[1.5px] bg-current" aria-hidden="true" />Stop
           </button>
+          <p className="-mt-1 text-[12.5px] text-ink3">Stop ends pi's turn; the dialog stays in the terminal until it is answered there.</p>
         </>
       )}
       {q.answerable && q.kind === "confirm" && (

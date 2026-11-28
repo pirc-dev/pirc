@@ -82,6 +82,9 @@ export function SignIn() {
   return (
     <Screen title="Your pi sessions, wherever you are." error={error}>
       <button className={button} disabled={busy} onClick={go}>Sign in with a passkey</button>
+      <p className="text-center text-[13.5px] leading-snug text-ink3 text-balance cockpit:font-mono cockpit:text-xs">
+        No passkey here yet? On the computer that runs PiRC's web app, run <code className="font-mono text-ink2">pirc-web pair</code> and open the link it prints in this browser.
+      </p>
     </Screen>
   );
 }

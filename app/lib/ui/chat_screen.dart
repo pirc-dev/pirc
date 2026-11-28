@@ -36,6 +36,7 @@ import 'selectable.dart';
 import 'sheet.dart';
 import 'side.dart';
 import 'keys.dart';
+import 'launch.dart';
 import 'adaptive.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -99,6 +100,8 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
   // before the list came is still loading, not ended.
   ChatView? _kept;
   var _wasThere = false;
+  // The session as last seen, for where it ran once it has ended.
+  SessionView? _seen;
   // What an action answered, or why it failed, under the header.
   ({String text, bool bad})? _notice;
   // The header's cost and context, asked of pi when the chat opens, after
@@ -299,7 +302,10 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
       listenable: model,
       builder: (context, _) {
         final s = model.session(widget.id);
-        if (s != null) _wasThere = true;
+        if (s != null) {
+          _wasThere = true;
+          _seen = s;
+        }
         final ended = s == null && _wasThere;
         final live = model.chat(widget.id);
         if (live != null) _kept = live;
@@ -341,7 +347,7 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
               if (p.files != null) _files.value = fitTogether([...p.files!, ..._files.value]);
               _text.text = _text.text.trim().isEmpty ? p.text : '${p.text}\n\n${_text.text}';
             })),
-          if (ended) ('ended', _Note(items.isEmpty ? 'This session ended before its conversation came' : 'This session has ended')),
+          if (ended && items.isEmpty) ('ended', const _Note('This session ended before its conversation came')),
         ];
         _ids = [for (final r in rows) r.$1];
         // Each row's key and its index, kept for the rows still here: once
@@ -438,6 +444,7 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
                     ]),
                   ),
                   if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
+                  if (ended) _Ended(model: model, was: _seen, wide: widget.wide, open: widget.open),
                 ],
               ),
             ),
@@ -690,6 +697,56 @@ class _Back extends StatelessWidget {
 }
 
 // A line between messages.
+// In the composer's place once the session has ended (Chat.tsx's Ended):
+// where it ran, and a new pi in its folder, beside one still running
+// there, in which Resume picks up its conversation. Without one, how to
+// start pi there again.
+class _Ended extends StatelessWidget {
+  const _Ended({required this.model, required this.was, required this.wide, this.open});
+  final PircModel model;
+  final SessionView? was;
+  final bool wide;
+  final void Function(String id)? open;
+
+  @override
+  Widget build(BuildContext context) {
+    final look = Look.of(context);
+    final was = this.was;
+    final open = this.open;
+    final beside = was == null || open == null ? null : besideEnded(was, model.sessions);
+    final pad = MediaQuery.paddingOf(context);
+    final host = was == null ? '' : (was.hostLabel.isNotEmpty ? was.hostLabel : was.hostname);
+    return LayoutBuilder(
+      builder: (context, c) => Container(
+        decoration: BoxDecoration(color: look.page, border: Border(top: BorderSide(color: look.rule, width: 0.5))),
+        padding: EdgeInsets.fromLTRB(wide ? math.max(16, (c.maxWidth - 640) / 2) : 16 + pad.left, 12, wide ? math.max(16, (c.maxWidth - 640) / 2) : 16 + pad.right, 12 + pad.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 2, children: [
+            Semantics(header: true, child: Text('This session has ended', style: look.text(size: 15, weight: FontWeight.w600, spacing: 0))),
+            if (was != null)
+              Text([where(was), was.cwd].where((x) => x.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: look.text(size: 12.5, color: look.ink3, spacing: 0)),
+          ]),
+          if (beside != null) ...[
+            Press.filled(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              minimumSize: const Size(44, 44),
+              borderRadius: BorderRadius.circular(12),
+              color: look.accent,
+              onPressed: () => showSheet<void>(context, (_) => LaunchSheet(model: model, beside: beside, cwd: was!.cwd, open: open!)),
+              child: Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+                Icon(CupertinoIcons.add, size: 17, color: look.onAccent),
+                Text('New agent here', style: look.text(size: 15, weight: FontWeight.w600, color: look.onAccent, spacing: 0)),
+              ]),
+            ),
+            Text('In the new agent, Resume (in its actions) picks up this conversation.', style: look.text(size: 13, color: look.ink3, spacing: 0)),
+          ] else if (was != null)
+            Text('To go on, start pi again on $host${was.cwd.isNotEmpty ? ', in ${was.cwd}' : ''}, and use /resume.', style: look.text(size: 13.5, color: look.ink2, spacing: 0)),
+        ]),
+      ),
+    );
+  }
+}
+
 class _Note extends StatelessWidget {
   const _Note(this.text);
   final String text;

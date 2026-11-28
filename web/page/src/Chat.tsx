@@ -26,6 +26,8 @@ import { Actions, type FromMessage, MessageSheet } from "./SessionSheets.tsx";
 import { SideToggle } from "./SideToggle.tsx";
 import { SHORT, useMedia } from "./media.ts";
 import { announce } from "./announce.ts";
+import { besideEnded, LaunchSheet } from "./Launch.tsx";
+import { hostOf } from "./beside.ts";
 import { type Heard, said } from "./said.ts";
 
 type Pending = SentPending<Attachment, PickedFile>;
@@ -47,8 +49,9 @@ interface Notice {
 }
 
 // [loading]: the sessions are not known yet (listing.ts), so a session
-// missing from them has not ended, only not come.
-export function Chat(p: { id: string; session: SessionView | undefined; chat: ChatView | undefined; loading?: boolean; back: () => void; wide?: boolean; open?: (id: string) => void }) {
+// missing from them has not ended, only not come. [sessions]: those
+// running, one of which may open a new pi in an ended one's place.
+export function Chat(p: { id: string; session: SessionView | undefined; chat: ChatView | undefined; loading?: boolean; sessions?: SessionView[]; back: () => void; wide?: boolean; open?: (id: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const markdown = useMarkdown();
   const menu = useLayer(menuOpen, () => setMenuOpen(false));
@@ -111,6 +114,9 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
   // A reload for a new version would lose both.
   useHold(text !== "" || pending.length > 0);
   const s = p.session;
+  // The session as last seen, for where it ran once it has ended.
+  const seen = useRef(s);
+  if (s) seen.current = s;
   const items = p.chat?.items;
   // Sending needs the chat as it is, to tell pi's copy of a message from an
   // earlier one with the same text.
@@ -322,6 +328,41 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
           }}
         />
       )}
+      {!s && !p.loading && <Ended was={seen.current} sessions={p.sessions ?? []} open={p.open} />}
+    </div>
+  );
+}
+
+// In the composer's place once the session has ended: where it ran, and a
+// new pi in its folder, beside one still running there, in which Resume
+// picks up its conversation. Without one, how to start pi there again.
+function Ended(p: { was: SessionView | undefined; sessions: SessionView[]; open?: (id: string) => void }) {
+  const was = p.was;
+  const beside = was && p.open ? besideEnded(was, p.sessions) : undefined;
+  const [launching, setLaunching] = useState(false);
+  const layer = useLayer(launching, () => setLaunching(false));
+  return (
+    <div className="flex-none border-t border-rule bg-paper px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] cards:bg-card cards:px-3 native:bg-paper cockpit:px-3">
+      <div className="mx-auto flex max-w-[40rem] flex-col gap-2.5" role="group" aria-label="Session ended">
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[15px] font-semibold text-ink cockpit:font-mono cockpit:text-sm">This session has ended</p>
+          {was && <p className="truncate text-[12.5px] text-ink3 cockpit:font-mono" title={was.cwd}>{[where(was), was.cwd].filter(Boolean).join(" · ")}</p>}
+        </div>
+        {beside
+          ? (
+            <>
+              <button className="inline-flex h-10 items-center gap-1.5 self-start rounded-full bg-ink px-4 text-[14.5px] font-semibold text-paper cards:rounded-[12px] cards:bg-accent cards:text-on-accent native:rounded-xl cockpit:rounded-[10px] cockpit:bg-accent cockpit:text-on-accent cockpit:font-ui" onClick={() => {
+                layer.show();
+                setLaunching(true);
+              }}>
+                <Icon name="plus" className="size-4" />New agent here
+              </button>
+              <p className="text-[13px] text-ink3">In the new agent, Resume (in its actions) picks up this conversation.</p>
+            </>
+          )
+          : was && <p className="text-[13.5px] text-ink2">To go on, start pi again on {hostOf(was)}{was.cwd ? `, in ${was.cwd}` : ""}, and use /resume.</p>}
+      </div>
+      {launching && beside && was && <LaunchSheet beside={beside} cwd={was.cwd} close={layer.close} open={p.open!} />}
     </div>
   );
 }

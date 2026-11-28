@@ -386,10 +386,10 @@ void main() {
     expect(find.textContaining('Start pi with the PiRC extension'), findsNothing);
   });
 
-  testWidgets('an ended session keeps what was loaded, and says it ended', (tester) async {
+  testWidgets('an ended session keeps what was loaded, says it ended, and offers a new agent in its folder', (tester) async {
     await phone(tester);
     final model = await fixture(tester);
-    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2')));
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i2', open: (_) {})));
     await tester.pump();
     expect(find.text('fix the flaky tests'), findsWidgets);
     model.client.onFrame(Frame(sessionEnded: SessionEnded(session: SessionRef(hostKey: hostKey, sessionId: 's-i2', instanceId: 'i2'))));
@@ -398,6 +398,30 @@ void main() {
     expect(find.text('Session ended'), findsOneWidget);
     expect(find.text('fix the flaky tests'), findsWidgets);
     expect(find.text('This session has ended'), findsOneWidget);
+    expect(find.text('laptop · /home/me/src/api'), findsOneWidget);
+    // Beside release, the one on laptop that can open a pi.
+    await tester.tap(find.text('New agent here'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LaunchSheet), findsOneWidget);
+    expect(find.text("The ended session's folder"), findsOneWidget);
+    expect(find.descendant(of: find.byType(LaunchSheet), matching: find.text('/home/me/src/api')), findsOneWidget);
+    expect(find.descendant(of: find.byType(LaunchSheet), matching: find.text('/home/me/src/pirc')), findsOneWidget);
+    Navigator.of(tester.element(find.byType(LaunchSheet))).pop();
+    await tester.pumpAndSettle();
+    // The folders it asked of release, never answered here.
+    await tester.pump(const Duration(minutes: 1));
+  });
+
+  testWidgets('an ended session where no pi can open another says how to start one', (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0202020202020202-i4', open: (_) {})));
+    await tester.pump();
+    model.client.onFrame(Frame(sessionEnded: SessionEnded(session: SessionRef(hostKey: List.filled(32, 2), sessionId: 's-i4', instanceId: 'i4'))));
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(find.text('New agent here'), findsNothing);
+    expect(find.text('To go on, start pi again on server, in /srv/relay, and use /resume.'), findsOneWidget);
   });
 
   testWidgets('a session that ends before its conversation came stops loading', (tester) async {
@@ -1836,7 +1860,8 @@ void main() {
     testWidgets("only pi's terminal can answer: where pi runs, and Stop", (tester) async {
       await asked(tester, Question(id: 'q6', kind: QuestionKind.QUESTION_KIND_EDITOR, title: 'Commit message', answerable: false, askedAt: ts(now)));
       expect(find.text('PI ASKS IN ITS TERMINAL'), findsOneWidget);
-      expect(find.text("This needs pi's terminal to answer."), findsOneWidget);
+      expect(find.text("Only pi's terminal can answer this. Once it does, the box to write in comes back here."), findsOneWidget);
+      expect(find.text("Stop ends pi's turn; the dialog stays in the terminal until it is answered there."), findsOneWidget);
       expect(find.text('Dismiss and stop'), findsNothing);
       expect(find.text('Waiting for you'), findsNothing, reason: 'not for the app to answer');
       await expectLater(find.byType(ChatScreen), matchesGoldenFile(golden('question_terminal_light.png')));
