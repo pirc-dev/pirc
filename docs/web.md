@@ -361,8 +361,12 @@ not in `web/`, since they belong to neither client.
 - **Tool calls one after another read as one log**, and two or more in a
   row that finished well fold into one line ("✓ 3 tools grep, read,
   edit") that opens to them; one running is open, showing its output so
-  far, and one that failed stays in sight. Reason: an agent's turn is
-  mostly tool calls, and the reply is what is read.
+  far, and one that failed stays in sight. A fold the reader opened or
+  closed stays so while the chat is open (Tool.tsx's Opened, the app's
+  _Opened): through its tool finishing, its run folding into one line
+  (which comes open if one of them was opened), and in the app its row
+  scrolled away and back. Reason: an agent's turn is mostly tool calls,
+  and the reply is what is read.
 - **On a tablet or a laptop, the list and the chat side by side** (from
   700 px wide and 500 high: an iPad mini upright, but not a phone on its
   side), the open session marked in the list. The list's column is 380

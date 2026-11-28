@@ -2369,6 +2369,51 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets("a tool's fold stays as the reader left it: closed while it runs, open as its run folds, and after scrolling far away and back", (tester) async {
+    await phone(tester);
+    final model = await fixture(tester);
+    await tester.pumpWidget(frame(ChatScreen(model: model, id: '0101010101010101-i1')));
+    await tester.pump();
+    // The running check is open on its output; closed, it stays closed as
+    // more comes.
+    expect(find.textContaining('unit tests'), findsOneWidget);
+    await tester.tap(find.text('bash'));
+    await tester.pump();
+    expect(find.textContaining('unit tests'), findsNothing);
+    void event(int seq, SessionEvent e) => model.client.onFrame(Frame(routed: Routed(
+          session: SessionRef(hostKey: hostKey, sessionId: 's-i1', instanceId: 'i1'),
+          payload: SessionMessage(event: e..seq = Int64(seq)..at = ts(now)).writeToBuffer(),
+        )));
+    event(3, SessionEvent(toolProgress: ToolProgress(toolCallId: 'c3', text: 'go vet, test\nok  pirc.dev/relay  2.1s\nunit tests\nmore')));
+    await tester.pump();
+    expect(find.textContaining('unit tests'), findsNothing);
+    // The finished read, opened from the line the two before the check
+    // fold into, stays open when the check finishes and joins them.
+    await tester.tap(find.textContaining('2 tools'));
+    await tester.pump();
+    await tester.tap(find.text('read'));
+    await tester.pump();
+    expect(find.textContaining('package.json'), findsWidgets);
+    event(4, SessionEvent(item: result('c3', now, text: 'all checks pass')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('3 tools'), findsOneWidget, reason: 'the run folded, still open');
+    expect(find.text('read'), findsOneWidget);
+    expect(find.textContaining('path  package.json'), findsOneWidget, reason: 'the read still open');
+    expect(find.textContaining('all checks pass'), findsNothing, reason: 'the check still closed');
+    // Scrolled far away, the rows are made again when they come back:
+    // each as it was left.
+    for (var i = 5; i < 25; i++) {
+      event(i, SessionEvent(item: ConversationItem(turnId: 't', at: ts(now), notification: pb.Notification(id: 'n$i', level: NotificationLevel.NOTIFICATION_LEVEL_INFO, text: List.filled(12, 'A long note to fill the screen.').join(' ')))));
+    }
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('3 tools'), findsNothing, reason: 'scrolled out of reach');
+    await tester.scrollUntilVisible(find.textContaining('3 tools'), -300, scrollable: find.byType(Scrollable).first);
+    await tester.pump();
+    expect(find.textContaining('path  package.json'), findsOneWidget, reason: 'the read still open');
+  });
+
   testWidgets('every button answers a screen reader', (tester) async {
     await phone(tester);
     final semantics = tester.ensureSemantics();

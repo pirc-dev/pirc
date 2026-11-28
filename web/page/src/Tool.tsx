@@ -1,5 +1,5 @@
 // A tool call and its result, and tool calls folded into one line.
-import { createContext, memo, useContext } from "react";
+import { createContext, memo, useContext, useState } from "react";
 import type { ToolItem } from "../../core/view.ts";
 import { Icon } from "./icons.tsx";
 import { Thumbs } from "./Images.tsx";
@@ -19,6 +19,25 @@ function Running(p: { since: number }) {
 // The tool call a question of pi's holds up, by its item's ID: the last in
 // the chat, unfinished, while pi asks (Chat.tsx).
 export const Waiting = createContext<string | undefined>(undefined);
+
+// The folds the reader opened or closed in the chat, by key: kept by the
+// chat (Chat.tsx), so that a tool's fold stays as it was left when the
+// tool finishes, and when the run it is in folds into one line.
+export const Opened = createContext<Map<string, boolean>>(new Map());
+
+// A fold's open state and its toggle handler: as the reader left it, or
+// else [auto]. A toggle the page made (its open changed with [auto]) is
+// not the reader's.
+function useFold(key: string, auto: boolean): [boolean, (e: React.SyntheticEvent<HTMLDetailsElement>) => void] {
+  const opened = useContext(Opened);
+  const [, changed] = useState(0);
+  const open = opened.get(key) ?? auto;
+  return [open, (e) => {
+    if (e.currentTarget.open === open) return;
+    opened.set(key, e.currentTarget.open);
+    changed((n) => n + 1);
+  }];
+}
 
 const LINE = { add: "bg-done-wash text-done", del: "bg-block-wash text-block", hunk: "text-ink3", same: "text-ink2" } as const;
 
@@ -72,8 +91,11 @@ export function Tool(p: { item: ToolItem }) {
   const label = "font-ui text-[10.5px] font-semibold tracking-[0.14em] text-ink3 uppercase";
   const pre = "max-h-96 overflow-auto whitespace-pre leading-[1.55]";
   const images = r?.images ?? [];
+  // Open while it runs and shows output, unless the reader closed it; then
+  // as the reader left it.
+  const [open, toggled] = useFold(t.id, running && Boolean(t.progress));
   const tool = (
-    <details open={running && Boolean(t.progress)} className={`font-mono text-[12.5px] cards:overflow-hidden cards:rounded-xl cards:border cards:bg-card native:bg-paper cockpit:overflow-hidden cockpit:rounded-lg cockpit:border ${t.result?.isError ? "cards:border-block cockpit:border-block" : "cards:border-rule native:border-transparent cockpit:border-rule"}`}>
+    <details open={open} onToggle={toggled} className={`font-mono text-[12.5px] cards:overflow-hidden cards:rounded-xl cards:border cards:bg-card native:bg-paper cockpit:overflow-hidden cockpit:rounded-lg cockpit:border ${t.result?.isError ? "cards:border-block cockpit:border-block" : "cards:border-rule native:border-transparent cockpit:border-rule"}`}>
       <summary className="flex min-h-[30px] cursor-pointer list-none items-baseline gap-2.5 py-1 [&::-webkit-details-marker]:hidden cards:min-h-10 cards:items-center cards:gap-2 cards:px-3 cockpit:min-h-9 cockpit:items-center cockpit:gap-2 cockpit:px-2.5">
         <span className={`w-3 flex-none text-center font-semibold ${t.result?.isError ? "text-block" : waiting ? "text-accent" : running ? "animate-pulse text-work" : "text-done"}`}>{t.result?.isError ? "✕" : running ? "●" : "✓"}</span>
         <span className="flex-none font-semibold text-ink cards:font-ui cards:text-sm cockpit:font-bold">{t.name || "tool"}</span>
@@ -112,9 +134,12 @@ export function Tool(p: { item: ToolItem }) {
 
 // Tool calls one after another, all finished well: one line, "✓ 3 tools:
 // grep, read, edit", that opens to them.
+// Open when the reader opened one of them while it ran.
 export const Folded = memo(function Folded(p: { tools: ToolItem[] }) {
+  const opened = useContext(Opened);
+  const [open, toggled] = useFold(`tools ${p.tools[0].id}`, p.tools.some((t) => opened.get(t.id)));
   return (
-    <details className="group">
+    <details className="group" open={open} onToggle={toggled}>
       <summary className="flex min-h-[30px] cursor-pointer list-none items-baseline gap-2.5 py-1 font-mono text-[12.5px] text-ink2 [&::-webkit-details-marker]:hidden cards:items-center cards:gap-1.5 cards:font-ui cards:text-[13px] cards:text-ink3">
         <span className="w-3 flex-none text-center font-semibold text-done">✓</span>
         <span className="min-w-0 truncate"><span className="font-semibold text-ink cards:font-normal cards:text-ink3">{p.tools.length} tools</span> {p.tools.map((t) => t.name || "tool").join(", ")}</span>

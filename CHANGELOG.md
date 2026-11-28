@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- A tool's output, Thinking or a summary stays open or closed as you left
+  it: on the web it no longer closes when the tool finishes, and in the
+  apps no longer when you scroll away and back. A run of tools that folds
+  into one line comes open if you had opened one of them.
 - Web: opening the page, or a chat by its link, no longer shows "No pi
   sessions are running" or "Session ended" for a moment before the
   sessions come; grey rows stand in for them until they do, and the

@@ -107,6 +107,7 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
   String? _spendFor;
   // A screen reader hears what changes, as it changes (said.dart).
   final _herald = GlobalKey<HeraldState>();
+  final _folds = <String, bool>{};
   Heard? _heard;
 
   // What is written is kept a moment after it changes, and on leaving.
@@ -375,67 +376,70 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
           backgroundColor: look.card,
           child: Herald(
             key: _herald,
-            child: Column(
-              children: [
-                _Header(session: s, news: model.news, spend: _spend, actions: s == null ? null : _actions, back: !widget.wide),
-                if (_notice != null) _Notice(_notice!, dismiss: () => setState(() => _notice = null)),
-                Expanded(
-                  child: Stack(children: [
-                    LayoutBuilder(builder: (context, c) {
-                      // Read by row as the lists lay their rows out, after this.
-                      // Clear of a phone's notch, on its side.
-                      final pad = MediaQuery.paddingOf(context);
-                      side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14 + math.max(pad.left, pad.right);
-                      return NotificationListener<ScrollNotification>(
-                        // The screen's height changed (the keyboard, turning
-                        // the phone), or a scroll ended: placed again.
-                        onNotification: (n) {
-                          if (n is ScrollEndNotification) {
-                            _later();
-                            _fitted();
-                          }
-                          return false;
-                        },
-                        child: NotificationListener<ScrollMetricsNotification>(
-                          onNotification: (_) {
-                            _later();
-                            _fitted();
+            child: _Opened(
+              _folds,
+              child: Column(
+                children: [
+                  _Header(session: s, news: model.news, spend: _spend, actions: s == null ? null : _actions, back: !widget.wide),
+                  if (_notice != null) _Notice(_notice!, dismiss: () => setState(() => _notice = null)),
+                  Expanded(
+                    child: Stack(children: [
+                      LayoutBuilder(builder: (context, c) {
+                        // Read by row as the lists lay their rows out, after this.
+                        // Clear of a phone's notch, on its side.
+                        final pad = MediaQuery.paddingOf(context);
+                        side = widget.wide ? math.max(14, (c.maxWidth - 640) / 2) : 14 + math.max(pad.left, pad.right);
+                        return NotificationListener<ScrollNotification>(
+                          // The screen's height changed (the keyboard, turning
+                          // the phone), or a scroll ended: placed again.
+                          onNotification: (n) {
+                            if (n is ScrollEndNotification) {
+                              _later();
+                              _fitted();
+                            }
                             return false;
                           },
-                          child: CustomScrollView(
-                            controller: _scroll,
-                            physics: _PinnedEnd(() => _atEnd),
-                            // Each split laid out anew: a row that changes list
-                            // would keep where it was in the other.
-                            center: ValueKey('newer $split'),
-                            anchor: _anchor,
-                            slivers: [
-                              SliverList(
-                                key: ValueKey('older $split'),
-                                delegate: SliverChildBuilderDelegate(
-                                  (_, i) => row(split - 1 - i),
-                                  childCount: split,
-                                  findChildIndexCallback: (k) => switch (at(k, 0, split)) { final i? => split - 1 - i, null => null },
+                          child: NotificationListener<ScrollMetricsNotification>(
+                            onNotification: (_) {
+                              _later();
+                              _fitted();
+                              return false;
+                            },
+                            child: CustomScrollView(
+                              controller: _scroll,
+                              physics: _PinnedEnd(() => _atEnd),
+                              // Each split laid out anew: a row that changes list
+                              // would keep where it was in the other.
+                              center: ValueKey('newer $split'),
+                              anchor: _anchor,
+                              slivers: [
+                                SliverList(
+                                  key: ValueKey('older $split'),
+                                  delegate: SliverChildBuilderDelegate(
+                                    (_, i) => row(split - 1 - i),
+                                    childCount: split,
+                                    findChildIndexCallback: (k) => switch (at(k, 0, split)) { final i? => split - 1 - i, null => null },
+                                  ),
                                 ),
-                              ),
-                              SliverList(
-                                key: ValueKey('newer $split'),
-                                delegate: SliverChildBuilderDelegate(
-                                  (_, i) => row(split + i),
-                                  childCount: rows.length - split,
-                                  findChildIndexCallback: (k) => switch (at(k, split, rows.length)) { final i? => i - split, null => null },
+                                SliverList(
+                                  key: ValueKey('newer $split'),
+                                  delegate: SliverChildBuilderDelegate(
+                                    (_, i) => row(split + i),
+                                    childCount: rows.length - split,
+                                    findChildIndexCallback: (k) => switch (at(k, split, rows.length)) { final i? => i - split, null => null },
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }),
-                    if (!_atEnd) Positioned(right: 16 + MediaQuery.paddingOf(context).right, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
-                  ]),
-                ),
-                if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
-              ],
+                        );
+                      }),
+                      if (!_atEnd) Positioned(right: 16 + MediaQuery.paddingOf(context).right, bottom: 12, child: _ToEnd(more: _more, onTap: _toEnd)),
+                    ]),
+                  ),
+                  if (s != null) _Composer(model: model, session: s, text: _text, images: _images, files: _files, wide: widget.wide, room: room),
+                ],
+              ),
             ),
           ),
         );
@@ -468,8 +472,8 @@ class _ChatScreenState extends State<ChatScreen> with ScreenKeys {
         // that it is not built again for each word of another.
         ItemPart(item: AssistantItem item) => _replies[item] ??= _Reply(item),
         ItemPart(item: ToolItem item) => _Tool(item, now: widget.model.now, waiting: _waiting(item), image: _image),
-        ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary),
-        ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary),
+        ItemPart(item: CompactionItem item) => _Summary('Context compacted', item.summary, fold: item.id),
+        ItemPart(item: BranchSummaryItem item) => _Summary('Went back · what came after, summarised', item.summary, fold: item.id),
         ItemPart(item: NotificationItem item) => _Notified(item),
       };
 }
@@ -901,7 +905,7 @@ class _Reply extends StatelessWidget {
     final writing = item.streaming && last != null && last.kind == 'text' && last.text.trim().isNotEmpty;
     final parts = <Widget>[
       for (final b in item.blocks)
-        if (b.text.trim().isNotEmpty) b.kind == 'thinking' ? _Thinking(b.text.trim()) : Markdown(b.text, writing: writing && identical(b, last)),
+        if (b.text.trim().isNotEmpty) b.kind == 'thinking' ? _Thinking(b.text.trim(), fold: 'thinking ${item.id} ${item.blocks.indexOf(b)}') : Markdown(b.text, writing: writing && identical(b, last)),
       if (item.streaming && !writing) const Cursor(),
       if (item.stop == 'error') Text('⚠ The model failed: ${item.error ?? 'no reason given'}', style: look.text(size: 14, color: look.block)),
       if (item.stop == 'aborted') const _Note('Stopped'),
@@ -917,6 +921,30 @@ class _Reply extends StatelessWidget {
 }
 
 // pi's thoughts, on a grey pill that opens to them.
+// The folds the reader opened or closed, by key, for as long as the chat
+// is open: the chat's rows are made again as they scroll back into view,
+// and a run of tools folds into one line once they finish, and each fold
+// is as the reader left it.
+class _Opened extends InheritedWidget {
+  const _Opened(this.folds, {required super.child});
+  final Map<String, bool> folds;
+
+  static final _none = <String, bool>{};
+  static Map<String, bool> of(BuildContext context) => context.getInheritedWidgetOfExactType<_Opened>()?.folds ?? _none;
+
+  @override
+  bool updateShouldNotify(_Opened old) => old.folds != folds;
+}
+
+// A fold's open state, kept by the chat (_Opened) under [fold]: as the
+// reader left it, or else [auto].
+mixin _Remembered<T extends StatefulWidget> on State<T> {
+  String get fold;
+  bool get auto => false;
+  bool get _open => _Opened.of(context)[fold] ?? auto;
+  set _open(bool open) => _Opened.of(context)[fold] = open;
+}
+
 // A line that opens and closes what is under it: to a screen reader, a
 // button that is open or closed, its words its label. [onTap], where the
 // line's own gestures leave the screen reader none.
@@ -931,15 +959,18 @@ class _Fold extends StatelessWidget {
 }
 
 class _Thinking extends StatefulWidget {
-  const _Thinking(this.text);
+  const _Thinking(this.text, {required this.fold});
   final String text;
+  // Its reply's ID and its place in it (_Opened).
+  final String fold;
 
   @override
   State<_Thinking> createState() => _ThinkingState();
 }
 
-class _ThinkingState extends State<_Thinking> {
-  var _open = false;
+class _ThinkingState extends State<_Thinking> with _Remembered {
+  @override
+  String get fold => widget.fold;
 
   @override
   Widget build(BuildContext context) {
@@ -1037,16 +1068,18 @@ class _NotifiedMark extends CustomPainter {
 
 // A summary pi wrote, folded under a line.
 class _Summary extends StatefulWidget {
-  const _Summary(this.label, this.text);
+  const _Summary(this.label, this.text, {required this.fold});
   final String label;
   final String text;
+  final String fold;
 
   @override
   State<_Summary> createState() => _SummaryState();
 }
 
-class _SummaryState extends State<_Summary> {
-  var _open = false;
+class _SummaryState extends State<_Summary> with _Remembered {
+  @override
+  String get fold => widget.fold;
 
   @override
   Widget build(BuildContext context) {
@@ -1175,8 +1208,12 @@ class _Tool extends StatefulWidget {
   State<_Tool> createState() => _ToolState();
 }
 
-class _ToolState extends State<_Tool> {
-  bool? _open;
+class _ToolState extends State<_Tool> with _Remembered {
+  @override
+  String get fold => widget.t.id;
+  // Open while it runs and shows output, unless the reader closed it.
+  @override
+  bool get auto => widget.t.result == null && (widget.t.progress ?? '').isNotEmpty;
   Timer? _tick;
 
   @override
@@ -1197,7 +1234,7 @@ class _ToolState extends State<_Tool> {
       _tick?.cancel();
       _tick = null;
     }
-    final open = _open ?? (running && (t.progress ?? '').isNotEmpty);
+    final open = _open;
     final out = r?.text ?? t.progress ?? '';
     final diff = r?.diff != null && !r!.isError ? r.diff : null;
     final ms = running ? widget.now() - t.at : r.durationMs;
@@ -1287,8 +1324,12 @@ class _Folded extends StatefulWidget {
   State<_Folded> createState() => _FoldedState();
 }
 
-class _FoldedState extends State<_Folded> {
-  var _open = false;
+class _FoldedState extends State<_Folded> with _Remembered {
+  @override
+  String get fold => 'tools ${widget.tools.first.id}';
+  // Open when the reader opened one of them while it ran.
+  @override
+  bool get auto => widget.tools.any((t) => _Opened.of(context)[t.id] ?? false);
 
   @override
   Widget build(BuildContext context) {
