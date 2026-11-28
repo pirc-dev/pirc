@@ -20,6 +20,7 @@ import { useHold } from "./update.ts";
 import { ago, details, title, where, windowOf } from "./names.ts";
 import { useNow } from "./time.ts";
 import { counted, Status, tone } from "./Status.tsx";
+import type { Listing } from "./listing.ts";
 
 // Which hosts and groups are folded, kept in this browser only. Everything
 // starts open.
@@ -112,7 +113,7 @@ const rows = "cards:mx-3 cards:divide-y cards:divide-rule cards:overflow-hidden 
 
 // Drawn again only when what it is given changes: not for each word of a
 // reply in the chat beside it.
-export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; pendingHosts?: PendingHostView[]; scope: Scope; open: (id: string) => void; go: (scope: Scope) => void; selected?: string; settings?: () => void; inSettings?: boolean }) {
+export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; listing?: Listing; pendingHosts?: PendingHostView[]; scope: Scope; open: (id: string) => void; go: (scope: Scope) => void; selected?: string; settings?: () => void; inSettings?: boolean }) {
   const { host, group } = p.scope;
   const [query, setQuery] = useState("");
   useHold(query !== "");
@@ -330,7 +331,10 @@ export const Sessions = memo(function Sessions(p: { sessions: SessionView[]; pen
           </label>
         </div>
       )}
-      {shown.length === 0 && (
+      {/* None yet is not none: grey rows while the list comes, and
+          nothing while the relay is out of reach (the banner says why). */}
+      {shown.length === 0 && p.listing === "loading" && <Pending />}
+      {shown.length === 0 && (p.listing ?? "listed") === "listed" && (
         <div className="flex flex-col gap-2.5 px-8 py-20">
           <h2 className="font-read text-2xl">{host ? `No pi sessions ${group ? `in ${group}` : `on ${host}`} now.` : "No pi sessions are running."}</h2>
           {!host && <p className="max-w-[30ch] font-read leading-relaxed text-ink2">Start pi with the PiRC extension on any of your machines and it appears here.</p>}
@@ -466,6 +470,20 @@ function Usage(p: { usage: SessionUsageView }) {
 // message, with its cost and context use; alone in its window, the window's name above. A search result
 // also says where it runs, and marks what matched. One that finished since it was last open is set
 // heavier, its time in teal.
+// Grey rows where the sessions will be, while they come.
+function Pending() {
+  return (
+    <div className="flex flex-col" role="status" aria-label="Loading the sessions">
+      {[62, 48, 70].map((w) => (
+        <div key={w} className="flex flex-col gap-2 border-b border-rule px-5 py-3.5 cards:mx-3 cards:my-1 cards:rounded-[14px] cards:border-0 cards:bg-card native:mx-0 native:my-0 native:rounded-none">
+          <div className="h-3.5 rounded-[3px] bg-wash" style={{ width: `${w}%` }} />
+          <div className="h-2.5 w-[35%] rounded-[3px] bg-wash" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Row(p: { session: SessionView; window?: string; open: (id: string) => void; matched?: Set<number>; news: boolean; now: number; selected?: boolean }) {
   const s = p.session;
   const last = s.last;

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { Chat } from "./Chat.tsx";
 import { live } from "./live.ts";
+import { whatListed } from "./listing.ts";
 import { Mark, Pair, SignIn } from "./SignIn.tsx";
 import { type Scope, scopePath, Sessions } from "./Sessions.tsx";
 import { Settings } from "./Settings.tsx";
@@ -72,6 +73,13 @@ export function App() {
   const scope = useMemo(() => scopeOf(scopeKey) ?? {}, [scopeKey]);
   const openChat = useCallback((id: string) => go(`/s/${encodeURIComponent(id)}`), [go]);
   const goScope = useCallback((s: Scope) => go(scopePath(s)), [go]);
+  // Opening the page connects as a matter of course: the banner says so
+  // only if the first snapshot is slow to come.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 1500);
+    return () => clearTimeout(t);
+  }, []);
   const toggleSettings = useCallback(() => go(settings ? before.current : "/settings"), [go, settings]);
   const wide = useWide();
 
@@ -104,12 +112,13 @@ export function App() {
   if (state.signedIn === undefined) return <Splash unreachable={state.unreachable} />;
   if (!state.signedIn) return <SignIn />;
   const session = chatId ? state.sessions.find((s) => s.id === chatId) : undefined;
+  const listing = whatListed(state);
   return (
     <Layout
       wide={wide}
-      banner={<Banner relay={state.relay.state} reason={state.relay.reason} stream={state.stream} />}
-      list={<Sessions key={list.current} sessions={state.sessions} pendingHosts={state.pendingHosts} scope={scope} open={openChat} go={goScope} selected={chatId} settings={toggleSettings} inSettings={settings} />}
-      chat={settings ? <Settings back={() => go(before.current)} wide={wide} devices={state.devices} connected={state.relay.state === "ready"} /> : chatId ? <Chat key={chatId} id={chatId} session={session} chat={state.chat} back={() => go(list.current)} wide={wide} open={(id) => go(`/s/${encodeURIComponent(id)}`)} /> : undefined}
+      banner={(state.loaded || slow) && <Banner relay={state.relay.state} reason={state.relay.reason} stream={state.stream} />}
+      list={<Sessions key={list.current} sessions={state.sessions} listing={listing} pendingHosts={state.pendingHosts} scope={scope} open={openChat} go={goScope} selected={chatId} settings={toggleSettings} inSettings={settings} />}
+      chat={settings ? <Settings back={() => go(before.current)} wide={wide} devices={state.devices} connected={state.relay.state === "ready"} /> : chatId ? <Chat key={chatId} id={chatId} session={session} chat={state.chat} loading={listing === "loading"} back={() => go(list.current)} wide={wide} open={(id) => go(`/s/${encodeURIComponent(id)}`)} /> : undefined}
     />
   );
 }

@@ -14,6 +14,9 @@ export interface State {
   // again.
   unreachable: boolean;
   relay: RelayView;
+  // A snapshot has come since signing in: until then, the sessions and the
+  // chat are not known, rather than none.
+  loaded: boolean;
   sessions: SessionView[];
   // Hosts asking to join, oldest first.
   pendingHosts: PendingHostView[];
@@ -74,7 +77,7 @@ export function kept(was: ChatView, now: ChatView): ChatView {
 }
 
 export class Live {
-  state: State = { signedIn: undefined, unreachable: false, relay: { state: "connecting" }, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed", older: { loading: false } };
+  state: State = { signedIn: undefined, unreachable: false, relay: { state: "connecting" }, loaded: false, sessions: [], pendingHosts: [], devices: [], chatId: undefined, chat: undefined, stream: "closed", older: { loading: false } };
   private listeners = new Set<Listener>();
   private source: EventSource | undefined;
   // The last event applied.
@@ -156,7 +159,7 @@ export class Live {
   signedOut(): void {
     this.close();
     this.replaced++;
-    this.set({ signedIn: false, sessions: [], pendingHosts: [], devices: [], chat: undefined, older: { loading: false } });
+    this.set({ signedIn: false, loaded: false, sessions: [], pendingHosts: [], devices: [], chat: undefined, older: { loading: false } });
   }
 
   // Watches a chat (or none): its snapshot, and a stream with its events.
@@ -180,7 +183,7 @@ export class Live {
       if (mine !== this.loading || chatId !== this.state.chatId) return;
       this.last = snap.id;
       this.replaced++;
-      this.set({ older: { loading: false }, relay: snap.relay, sessions: snap.sessions, pendingHosts: snap.pendingHosts ?? [], devices: snap.devices ?? [], chat: snap.chat ?? undefined });
+      this.set({ older: { loading: false }, loaded: true, relay: snap.relay, sessions: snap.sessions, pendingHosts: snap.pendingHosts ?? [], devices: snap.devices ?? [], chat: snap.chat ?? undefined });
       this.open();
     } catch (e) {
       if (mine === this.loading) this.failed(e);

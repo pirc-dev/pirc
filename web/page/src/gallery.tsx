@@ -341,11 +341,13 @@ function Gallery() {
   if (screen === "pair") return <Pair done={() => {}} />;
   if (screen === "splash") return <Splash />;
   if (screen === "unreachable") return <Splash unreachable />;
-  const list = <Sessions key={scopePath(scope)} sessions={screen === "empty" ? [] : sessions} pendingHosts={pendingHosts} scope={scope} open={(id) => { setSettings(false); setOpen(id); }} go={setScope} selected={open} settings={() => setSettings(!settings)} inSettings={settings} />;
+  const list = <Sessions key={scopePath(scope)} sessions={screen === "empty" || screen === "cold" ? [] : sessions} listing={screen === "cold" ? "loading" : "listed"} pendingHosts={pendingHosts} scope={scope} open={(id) => { setSettings(false); setOpen(id); }} go={setScope} selected={open} settings={() => setSettings(!settings)} inSettings={settings} />;
   const back = () => setOpen(undefined);
   let chat: React.ReactNode;
   if (settings) chat = <Settings back={() => setSettings(false)} wide={wide} devices={shownDevices} connected />;
   else if (screen === "loading") chat = <Chat id={relay.id} session={sessions[4]} chat={{ items: [], truncated: false, loading: true }} back={back} wide={wide} />;
+  // A chat opened by its link, before the first snapshot.
+  else if (screen === "cold") chat = <Chat id={relay.id} session={undefined} chat={undefined} loading back={back} wide={wide} />;
   else if (screen === "ended") chat = <Chat id="gone" session={undefined} chat={chatOf(finished)} back={back} wide={wide} />;
   else if (screen === "chat" || screen === "working" || screen === "asks" || open !== undefined) {
     const picked = sessions.find((s) => s.id === open) ?? relay;

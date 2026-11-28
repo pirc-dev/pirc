@@ -92,7 +92,9 @@ then open `http://127.0.0.1:5179/gallery.html?screen=<screen>`, where
 `<screen>` is `list` (the default), `empty`, `chat` (a finished reply),
 `working` (pi at work, every kind of item), `asks` (a question in the
 composer's place, `&ask=guard` (pi-automode's, the default), `select`,
-`confirm`, `input` or `editor`), `loading`, `ended`, `signin`, `pair`,
+`confirm`, `input` or `editor`), `loading`, `ended`, `cold` (a chat
+opened by its link before the first snapshot: grey where the list and
+the chat will be), `signin`, `pair`,
 `splash` or `unreachable` (the splash with the server out of reach); add `&banner=reconnecting`, `refused` or `connecting`
 for the connection line, and `&look=quiet`, `triage`, `native` or
 `cockpit` for the look (kept, as the switch in Settings keeps it);

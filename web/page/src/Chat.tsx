@@ -46,7 +46,9 @@ interface Notice {
   bad?: boolean;
 }
 
-export function Chat(p: { id: string; session: SessionView | undefined; chat: ChatView | undefined; back: () => void; wide?: boolean; open?: (id: string) => void }) {
+// [loading]: the sessions are not known yet (listing.ts), so a session
+// missing from them has not ended, only not come.
+export function Chat(p: { id: string; session: SessionView | undefined; chat: ChatView | undefined; loading?: boolean; back: () => void; wide?: boolean; open?: (id: string) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const markdown = useMarkdown();
   const menu = useLayer(menuOpen, () => setMenuOpen(false));
@@ -225,7 +227,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
                   </div>
                 )
                 : fold
-                ? <h1 className="min-w-0 flex-1 truncate font-read text-[17px] font-medium cards:font-ui cards:font-[650] native:font-semibold cockpit:font-mono cockpit:text-[15px] cockpit:font-bold">Session ended</h1>
+                ? <h1 className="min-w-0 flex-1 truncate font-read text-[17px] font-medium cards:font-ui cards:font-[650] native:font-semibold cockpit:font-mono cockpit:text-[15px] cockpit:font-bold">{p.loading ? <Unknown /> : "Session ended"}</h1>
                 : <span className="flex-1" />}
               {actions}
             </div>
@@ -239,7 +241,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
               <div className={`mx-auto w-full min-w-0 max-w-[40rem] ${p.wide ? "pt-1.5" : ""}`}>
                 <div className={`flex items-baseline gap-2 ${p.wide ? "" : "px-4"}`}>
                   {s && <Status on={s.working} compacting={s.compacting} asks={Boolean(s.questions?.length)} className="w-4 text-[17px]" />}
-                  <h1 className="min-w-0 flex-1 truncate font-read text-2xl font-medium tracking-[-0.01em] cards:text-xl cards:font-[650] native:text-lg native:font-semibold cockpit:font-mono cockpit:text-base cockpit:font-bold">{s ? title(s) : "Session ended"}</h1>
+                  <h1 className="min-w-0 flex-1 truncate font-read text-2xl font-medium tracking-[-0.01em] cards:text-xl cards:font-[650] native:text-lg native:font-semibold cockpit:font-mono cockpit:text-base cockpit:font-bold">{s ? title(s) : p.loading ? <Unknown /> : "Session ended"}</h1>
                 </div>
                 {s && <Meta session={s} spend={spend} wide={p.wide} />}
               </div>
@@ -277,6 +279,7 @@ export function Chat(p: { id: string; session: SessionView | undefined; chat: Ch
         <Waiting.Provider value={s?.questions?.length && last?.kind === "tool" && !last.result ? last.id : undefined as string | undefined}>
           <Items
             chat={p.chat}
+            loading={p.loading}
             working={Boolean(s?.working || s?.compacting)}
             compacting={Boolean(s?.compacting)}
             asking={Boolean(s?.questions?.length)}
@@ -382,6 +385,7 @@ const LOST_MS = 5000;
 
 function Items(p: {
   chat: ChatView | undefined;
+  loading?: boolean;
   working: boolean;
   compacting: boolean;
   asking: boolean;
@@ -512,7 +516,14 @@ function Items(p: {
     seen.observe(el);
     return () => seen.disconnect();
   }, [earlier, older, firstId]);
-  if (!p.chat) return <div className="flex-1" />;
+  if (!p.chat) {
+    if (!p.loading) return <div className="flex-1" />;
+    return (
+      <div className="min-h-0 flex-1 px-5 py-4 native:bg-card native:px-3.5 cockpit:px-3.5" style={p.top ? { paddingTop: p.top + 16 } : undefined}>
+        <div className="mx-auto flex max-w-[40rem] flex-col"><Loading /></div>
+      </div>
+    );
+  }
   return (
     <div className="relative flex min-h-0 flex-1 flex-col native:bg-card">
       <div
@@ -569,6 +580,11 @@ function Items(p: {
 
 function PartView(p: { part: Part }) {
   return "tools" in p.part ? <Folded tools={p.part.tools} /> : <Item item={p.part.item} />;
+}
+
+// A grey bar where the session's title will be, while the sessions come.
+function Unknown() {
+  return <span className="inline-block h-[0.8em] w-40 max-w-full rounded-[3px] bg-wash align-middle" aria-label="Loading" />;
 }
 
 // Grey lines where the conversation will be, while its history loads.

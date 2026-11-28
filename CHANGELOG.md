@@ -8,6 +8,10 @@ release that needs its parts upgraded together says so here.
 
 ## Unreleased
 
+- Web: opening the page, or a chat by its link, no longer shows "No pi
+  sessions are running" or "Session ended" for a moment before the
+  sessions come; grey rows stand in for them until they do, and the
+  "Connecting to the server…" line shows only if that takes a while.
 - Screen readers: VoiceOver and TalkBack (and a screen reader on the
   web) now say pi's reply when a turn ends, when it fails or asks
   something, an extension's warning or error, and a message that was not
