@@ -332,8 +332,8 @@ logs in, is given the newest version, and is then refused, so that it learns of 
   signs its first version.
 - App Attest (iOS) or Play Integrity (Android) runs when a phone makes an account or joins one,
   and the relay checks a subscription per account. An account is free while any of its phones
-  has a live subscription or trial, and the browsers on it are included. Accounts with no phone
-  pay later, by Stripe or a merchant of record. A joining phone's attestation is kept with the
+  has a live subscription or trial, and the browsers on it are included. There are no accounts
+  with no phone: a browser only joins a phone's account (`design.md`, step 14, decision 1). A joining phone's attestation is kept with the
   join and stored for its key only when the account's phone publishes a list version that has the
   key while the join is alive, so a join that fails leaves nothing behind. The relay passes at
   most 8 steps of the join, each at most 65,535 bytes, and keeps none of them.

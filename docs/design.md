@@ -1959,10 +1959,12 @@ built; steps 14 and 15 are not finished.
     **Decided**:
     1. **Price.** The hosted relay comes with the app's subscription: an
        account is free while any of its phones has a live subscription or
-       trial, and the browsers on it are included. An account with no
-       phone, only browsers, pays: a free trial, then a subscription on the
-       web, through Stripe or a merchant of record, with the hosted web
-       client. The app's price (step 15) is unchanged.
+       trial, and the browsers on it are included. The app's price
+       (step 15) is unchanged. 2026-11-28: there are no accounts with no
+       phone, so nothing is paid on the web: a browser only joins a
+       phone's account, by its QR code, at no extra cost. Before that, an
+       account with only browsers was to pay on the web, through Stripe or
+       a merchant of record.
     2. **Signing up and joining** are anonymous and one tap, with no email
        or password: a phone creates the account, and every other device
        joins with a QR code it shows, or the same value as text, which the
@@ -2834,9 +2836,9 @@ built; steps 14 and 15 are not finished.
        store listings and `pirc.dev` saying the hosted relay exists.
     9. **The hosted web client** (decision 7): the page, keys by WebCrypto
        in IndexedDB, joining by showing a QR code, served from Cloudflare
-       Pages, on `web/core` and stage 5's hosted client; then accounts
-       with no phone, paid on the web (decision 1). After the phones, since
-       an account's first device is a phone.
+       Pages, on `web/core` and stage 5's hosted client. A browser joins a
+       phone's account and never makes one (decision 1). After the phones,
+       since an account's first device is a phone.
 
     **Open**, before the stage that needs it: the relay's domain (stage 6),
     and who is invited to the beta (stage 7).
