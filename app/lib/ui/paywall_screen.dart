@@ -42,6 +42,7 @@ class PaywallScreen extends StatefulWidget {
     this.showTerms = true,
     this.manageWhenEnded = false,
     this.join,
+    this.hosted,
   });
 
   // What the store said: ended, a payment problem or never.
@@ -67,6 +68,10 @@ class PaywallScreen extends StatefulWidget {
   final bool manageWhenEnded;
   // The join screen, on a phone that has not joined; null once it has.
   final VoidCallback? join;
+  // Back to the hosted build's first screen, from a relay of one's own
+  // chosen there; null where the hosted relay is not offered or one is
+  // joined.
+  final VoidCallback? hosted;
 
   @override
   State<PaywallScreen> createState() => _PaywallScreenState();
@@ -269,6 +274,11 @@ class _PaywallScreenState extends State<PaywallScreen> with WidgetsBindingObserv
                   Press(
                     onPressed: _busy ? null : widget.join,
                     child: Text('Join with a link', style: look.text(color: look.accent)),
+                  ),
+                if (widget.hosted != null)
+                  Press(
+                    onPressed: _busy ? null : widget.hosted,
+                    child: Text("Use PiRC's relay instead", style: look.text(color: look.accent)),
                   ),
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   if (widget.showTerms) _Link(label: 'Terms of Use', url: termsUrl),

@@ -19,6 +19,7 @@ import 'package:sodium/sodium_sumo.dart' show KeyPair;
 import '../core/protocol.dart' show hex;
 import '../e2e/framed.dart';
 import '../e2e/list.dart';
+import '../gen/pirc/v1alpha1/common.pbenum.dart' show ErrorCode;
 import '../gen/pirc/v1alpha2/account.pb.dart';
 import '../gen/pirc/v1alpha2/relay.pb.dart';
 import '../ui/look.dart';
@@ -37,6 +38,10 @@ const _attestContext = 'pirc-attest-v1alpha2';
 
 const _attest = MethodChannel('dev.pirc.app/attest');
 const _store = MethodChannel('dev.pirc.app/store');
+
+/// The relay's refusal of a sign-up with no code while sign-ups are by
+/// invite.
+const inviteNeeded = 'sign-ups need an invite code';
 
 Uint8List _utf8(String s) => Uint8List.fromList(convert.utf8.encode(s));
 
@@ -125,6 +130,12 @@ Future<void> _signUp(String origin, void Function(String) log, E2e e2e, KeyPair 
         return;
       }
       if (f.hasError()) {
+        // Expected while sign-ups are by invite: the relay asks for the
+        // code before it looks at the attestation or the subscription.
+        if (f.error.code == ErrorCode.ERROR_CODE_TOKEN_INVALID && f.error.message == inviteNeeded) {
+          log('Sign-ups on this relay need an invite code, as expected while they are by invite. The relay asks for it first, so the attestation and the subscription were not checked.');
+          return;
+        }
         log('REFUSED (${f.error.code.name}): ${f.error.message}');
         return;
       }

@@ -256,6 +256,10 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
   late final PhoneCounter _counter = widget.counter ?? MemoryCounter();
   // A relay of one's own chosen at the hosted build's first screen.
   var _ownRelay = false;
+  // Who may sign up on the hosted relay, asked as its first screen shows;
+  // null until the relay answers.
+  SignUpMode? _signUpMode;
+  var _modeAsked = false;
   PircModel? _model;
   // The app's navigator, which is below this widget, not above it.
   final _nav = GlobalKey<NavigatorState>();
@@ -864,6 +868,18 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     await _hostedJoined(open);
   }
 
+  // Asks the hosted relay once who may sign up, for its first screen;
+  // unanswered, the screen offers both ways.
+  void _askMode() {
+    if (_modeAsked) return;
+    _modeAsked = true;
+    E2e.load().then((e2e) => checkInvite(e2e: e2e, origin: widget.hosted!)).then((c) {
+      if (mounted) setState(() => _signUpMode = c.mode);
+    }, onError: (Object e) {
+      debugPrint('hosted: sign-up mode not known: $e');
+    });
+  }
+
   // The invite code, typed; null when the person cancels.
   Future<String?> _askInvite() async {
     final context = _nav.currentState?.overlay?.context;
@@ -1230,7 +1246,15 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
     } else if (_hostedOffered && _relay == null && !_ownRelay) {
       // Before the paywall: a hosted account is gated by its own
       // subscription, which the relay checks.
-      home = HostedStartScreen(signUp: _signUp, signUpWithCode: () => _signUp(askCode: true), joinPhone: _joinPhone, ownRelay: () => setState(() => _ownRelay = true));
+      _askMode();
+      // While sign-ups need a code, one way in: "I have a code".
+      final byCode = _signUpMode == SignUpMode.SIGN_UP_MODE_INVITE;
+      home = HostedStartScreen(
+        signUp: byCode ? null : _signUp,
+        signUpWithCode: () => _signUp(askCode: true),
+        joinPhone: _joinPhone,
+        ownRelay: () => setState(() => _ownRelay = true),
+      );
     } else if (!_allowed && _relay == null && _joinFirst) {
       home = JoinScreen(join: _join, incoming: _incoming, scan: widget.scan ?? (widget.camera ? _scan : null), back: () => setState(() => _joinFirst = false));
     } else if (!_allowed) {
@@ -1251,6 +1275,7 @@ class _PircAppState extends State<PircApp> with WidgetsBindingObserver {
         manageWhenEnded: _play,
         // It joins one relay.
         join: _relay == null ? () => setState(() => _joinFirst = true) : null,
+        hosted: _hostedOffered && _relay == null && _ownRelay ? () => setState(() => _ownRelay = false) : null,
       );
     } else if (_relay == null) {
       home = JoinScreen(

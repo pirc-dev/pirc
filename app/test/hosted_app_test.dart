@@ -25,6 +25,7 @@ import 'package:pirc/hosted/setup.dart';
 import 'package:pirc/keys/key_store.dart';
 import 'package:pirc/ui/hosted_join_screens.dart' show ShowCodeScreen;
 import 'package:pirc/ui/hosted_start_screen.dart';
+import 'package:pirc/ui/paywall_screen.dart';
 import 'package:pirc/ui/join_screen.dart';
 import 'package:pirc/ui/sessions_screen.dart';
 import 'package:pirc/ui/adaptive.dart';
@@ -156,21 +157,25 @@ void main() {
     final prefs = MemoryPrefs();
     await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: prefs, protect: false, hosted: relay.origin, attest: testAttest, subscription: _NoSubscription()));
     await tester.pump();
-    await tester.tap(find.text('Sign up'));
+    // While sign-ups need a code, one way in.
+    await until(tester, () => find.text('Sign up').evaluate().isEmpty);
+    expect(find.text('Sign up'), findsNothing);
+    expect(find.text('I have a code'), findsOneWidget);
+    await tester.tap(find.text('I have a code'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
     // Cancelled: no account, said so.
     await tester.tap(find.text('Cancel'));
-    await until(tester, () => shown(tester).contains('needs an invite code'));
-    expect(shown(tester), contains('needs an invite code'));
+    await until(tester, () => shown(tester).contains('No code given'));
+    expect(shown(tester), contains('No code given'));
     // A wrong code, then the review code: signed up, nothing bought (the
     // phone's store would cancel a purchase).
-    await tester.tap(find.text('Sign up'));
+    await tester.tap(find.text('I have a code'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
     await tester.enterText(find.byType(EditableText), 'AAAA-BBBB-CCCC-DDDD');
     await tester.tap(find.text('Continue'));
     await until(tester, () => shown(tester).contains('not valid'));
     expect(shown(tester), contains('not valid'));
-    await tester.tap(find.text('Sign up'));
+    await tester.tap(find.text('I have a code'));
     await until(tester, () => find.text('Invite code').evaluate().isNotEmpty);
     await tester.enterText(find.byType(EditableText), code.toLowerCase());
     await tester.tap(find.text('Continue'));
@@ -205,6 +210,18 @@ void main() {
     await tester.tap(find.byType(BackLink));
     await tester.pumpAndSettle();
     expect(find.byType(HostedStartScreen), findsOneWidget);
+  });
+
+  testWidgets('a relay of one\'s own on a phone not subscribed: the paywall, and back to PiRC\'s relay from it', (tester) async {
+    await tester.pumpWidget(PircApp(store: MemoryKeyStore(), prefs: MemoryPrefs(), protect: false, hosted: 'ws://127.0.0.1:1', attest: testAttest, subscription: _NoSubscription()));
+    await tester.pump();
+    await tester.tap(find.text('I run my own relay'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PaywallScreen), findsOneWidget);
+    await tester.tap(find.text("Use PiRC's relay instead"));
+    await tester.pumpAndSettle();
+    expect(find.byType(HostedStartScreen), findsOneWidget);
+    expect(find.byType(PaywallScreen), findsNothing);
   });
 
   // Signed up in the app, connected; with links from outside when given.
@@ -390,6 +407,8 @@ void main() {
     await until(tester, () => find.byType(HostedStartScreen).evaluate().isNotEmpty, tries: 30);
     expect(find.byType(HostedStartScreen), findsOneWidget, reason: shown(tester));
     expect(await tester.runAsync(() => prefs.get(accountKey)), isNull);
+     // Past the first screen's question of who may sign up.
+    await tester.pump(const Duration(seconds: 20));
   });
 
   testWidgets('a build without the hosted relay never shows its screen', (tester) async {

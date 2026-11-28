@@ -2544,7 +2544,12 @@ built; steps 14 and 15 are not finished.
             sign up, "My account is on another phone" (the code shown for
             the account's phone to add), or "I run my own relay" (the join
             screen of every build). A build without `PIRC_HOSTED` never
-            shows it.
+            shows it. The screen asks the relay who may sign up: while
+            sign-ups need a code, "I have a code" is its one way in, since
+            "Sign up" would only ask for the code too; open, both show. The
+            subscription is needed with a relay of one's own as with
+            PiRC's, so "I run my own relay" on a phone not subscribed
+            leads to the paywall, which then offers PiRC's relay again.
           - **Sign-up in one tap**: new seeds, version 1 signed, the
             sign-up attested for its own login's nonce (App Attest or Play
             Integrity with the store's proof; a build with
